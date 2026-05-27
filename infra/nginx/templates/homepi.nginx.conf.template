@@ -54,4 +54,26 @@ server {
         proxy_set_header X-Request-ID $request_id;
         proxy_read_timeout 86400;
     }
+
+    # Legacy aliases for clients expecting /api/events and /api/ws
+    location /api/events {
+        proxy_pass http://homepi_backend/events;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+    }
+
+    location /api/ws {
+        proxy_pass http://homepi_backend/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_read_timeout 86400;
+    }
 }

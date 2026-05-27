@@ -71,3 +71,15 @@ Schemas define health reports, health checks, readiness, liveness, and aggregate
 # Final Rule
 
 `core/health` defines shared platform standards and reusable implementation primitives only.
+
+---
+
+# System Status Vertical Slice
+
+The first platform slice uses `createHealthReport` from `@homepi/core-health` for `GET /api/health` in `apps/backend`.
+
+- Example response: `core/health/examples/health-report.example.json`
+- Backend maps config/core readiness into health checks
+- Aggregate statuses: `healthy`, `degraded`, `failed`
+
+See `docs/system-status-vertical-slice-readme.md` for end-to-end flow and testing.

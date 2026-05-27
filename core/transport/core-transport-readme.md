@@ -451,3 +451,17 @@ All examples must be:
 Transport is not optional in HomePi.
 
 Every cross-process communication path MUST use documented HomePi transport standards, structured logging, deterministic lifecycle behavior, and schema-valid message contracts where applicable.
+
+---
+
+# System Status Vertical Slice
+
+`apps/backend` exposes a WebSocket shell at `GET /ws`:
+
+1. Upgrade via Node `ws` + `encodeNdjsonLine`
+2. Initial `type: "snapshot"` envelope on connect
+3. Client `{ "type": "ping" }` → server `type: "response"` / `payload.action: "pong"`
+
+Connection lifecycle is logged through `core/logging`.
+
+Example: `apps/backend/examples/ws-ping-pong.example.json`

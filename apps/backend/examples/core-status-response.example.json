@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "correlationId": "req-001",
+  "timestamp": "2026-05-27T16:00:00.000Z",
+  "data": {
+    "service": "homepi-backend",
+    "checkedAt": "2026-05-27T16:00:00.000Z",
+    "services": [
+      { "name": "config", "status": "loaded", "message": "Service configuration" },
+      { "name": "logging", "status": "active", "message": "Structured logging" },
+      { "name": "runtime", "status": "running", "message": "Process lifecycle" },
+      { "name": "transport", "status": "ready", "message": "SSE and WebSocket" },
+      { "name": "events", "status": "ready", "message": "Event envelopes" },
+      { "name": "state", "status": "ready", "message": "In-memory status store" },
+      { "name": "api", "status": "ready", "message": "HTTP API envelopes" }
+    ],
+    "system": {
+      "backend": "healthy",
+      "config": "loaded",
+      "logging": "active",
+      "runtime": "running",
+      "transport": "ready",
+      "events": "ready",
+      "state": "ready",
+      "api": "ready",
+      "uptimeMs": 120000,
+      "lastEventAt": "2026-05-27T16:00:00.000Z"
+    }
+  }
+}

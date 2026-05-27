@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "correlationId": "req-002",
+  "timestamp": "2026-05-27T16:00:00.000Z",
+  "data": {
+    "service": "homepi-backend",
+    "state": "running",
+    "pid": 1842,
+    "startedAt": "2026-05-27T15:58:00.000Z",
+    "uptimeMs": 120000,
+    "restartCount": 0,
+    "runtimePaths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    }
+  }
+}

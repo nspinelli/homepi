@@ -1,0 +1,18 @@
+{
+  "snapshotId": "snap-system-001",
+  "owner": "homepi-backend",
+  "topic": "system.status",
+  "createdAt": "2026-05-27T16:00:00.000Z",
+  "state": {
+    "backend": "healthy",
+    "config": "loaded",
+    "logging": "active",
+    "runtime": "running",
+    "transport": "ready",
+    "events": "ready",
+    "state": "ready",
+    "api": "ready",
+    "uptimeMs": 120000,
+    "lastEventAt": "2026-05-27T16:00:00.000Z"
+  }
+}

@@ -79,6 +79,20 @@ core/state/
 
 State must always be owned, observable, and synchronized through documented contracts.
 
+---
+
+# System Status Vertical Slice
+
+`apps/backend` keeps authoritative platform status in memory via `createSnapshot` (`owner: homepi-backend`, `topic: system.status`).
+
+Example snapshot: `core/state/examples/system-status-snapshot.example.json`
+
+The snapshot backs:
+
+- `GET /api/core/status` (`data.system`)
+- SSE `system_status_*` payloads
+- WebSocket initial `type: "snapshot"` envelopes
+
 
     ---
 

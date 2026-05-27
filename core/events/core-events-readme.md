@@ -191,3 +191,20 @@ Event systems MUST log:
 Events are not optional in HomePi.
 
 Any service/module that publishes runtime changes MUST use documented HomePi event standards.
+
+---
+
+# System Status Vertical Slice
+
+`apps/backend` publishes SSE frames at `GET /events` using `createEventEnvelope` from `@homepi/core-events`.
+
+| Event | Purpose |
+|-------|---------|
+| `system_status_snapshot` | Initial authoritative status after connect |
+| `system_status_delta` | Periodic status updates |
+| `heartbeat` | Keep-alive |
+
+Topic: `system.status`  
+Source: `homepi-backend`
+
+Example: `apps/backend/examples/sse-system-status-event.example.json`

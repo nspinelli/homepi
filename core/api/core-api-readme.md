@@ -72,3 +72,16 @@ Schemas define API response envelopes, error payloads, pagination payloads, and 
 # Final Rule
 
 `core/api` defines shared platform standards and reusable implementation primitives only.
+
+---
+
+# System Status Vertical Slice
+
+`apps/backend` returns all REST payloads through `createSuccessResponse` / `createErrorResponse` with a required `correlationId` from `getRequestCorrelationId` + `resolveCorrelationId`.
+
+Examples:
+
+- `core/api/examples/api-response.example.json`
+- `apps/backend/examples/core-status-response.example.json`
+
+Every status route (`/api/health`, `/api/runtime/status`, `/api/core/status`) uses the API response envelope.

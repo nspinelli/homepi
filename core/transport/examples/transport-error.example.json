@@ -1,0 +1,11 @@
+{
+  "code": "TRANSPORT_WRITE_FAILED",
+  "message": "Failed to write message to Unix socket client.",
+  "transport": "unix_socket",
+  "retryable": true,
+  "connectionId": "conn-001",
+  "correlationId": "cmd-001",
+  "data": {
+    "socketPath": "/run/homepi/hifi-serial.sock"
+  }
+}

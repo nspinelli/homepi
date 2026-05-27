@@ -1,0 +1,13 @@
+[Unit]
+Description=Avahi mDNS alias homepi.local
+After=avahi-daemon.service
+Requires=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c 'exec /usr/bin/avahi-publish-address -R -a homepi.local $(hostname -I | awk "{print \\$1}")'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

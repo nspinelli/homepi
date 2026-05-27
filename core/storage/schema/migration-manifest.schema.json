@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/migration-manifest.schema.json",
+  "title": "HomePi Migration Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "database",
+    "createdAt",
+    "description"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "database": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "description": {
+      "type": "string"
+    }
+  }
+}

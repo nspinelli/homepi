@@ -1,0 +1,8 @@
+{
+  "service": "homepi-hifi-serial",
+  "host": "homepi.local",
+  "socketPath": "/run/homepi/hifi-serial.sock",
+  "capabilities": [
+    "audio.hifi.serial"
+  ]
+}

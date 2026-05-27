@@ -1,0 +1,7 @@
+HOMEPI_ENV=production
+LOG_LEVEL=INFO
+PORT=3000
+SOCKET_PATH=/run/homepi/backend.sock
+WATCHDOG_TIMEOUT_MS=30000
+CONFIG_PATH=/opt/homepi/apps/backend/config/defaults.json
+OVERRIDES_PATH=/opt/homepi/runtime/overrides/backend.json

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/ndjson-frame.schema.json",
+  "title": "HomePi NDJSON Frame",
+  "description": "Schema for a parsed NDJSON frame containing a HomePi transport envelope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "line",
+    "parsed"
+  ],
+  "properties": {
+    "line": {
+      "type": "string",
+      "minLength": 2
+    },
+    "parsed": {
+      "$ref": "transport-envelope.schema.json"
+    }
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/connection-event.schema.json",
+  "title": "HomePi Transport Connection Event",
+  "description": "Connection lifecycle event payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event",
+    "transport",
+    "service",
+    "connectionId",
+    "timestamp"
+  ],
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": [
+        "connection_opening",
+        "connection_opened",
+        "connection_authenticated",
+        "connection_ready",
+        "connection_closing",
+        "connection_closed",
+        "connection_error",
+        "reconnect_scheduled",
+        "backpressure_detected"
+      ]
+    },
+    "transport": {
+      "type": "string",
+      "enum": [
+        "unix_socket",
+        "pipe",
+        "websocket",
+        "sse"
+      ]
+    },
+    "service": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "connectionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "remote": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

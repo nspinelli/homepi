@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/auth/permission.schema.json",
+  "title": "HomePi Permission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "resource",
+    "action"
+  ],
+  "properties": {
+    "resource": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "effect": {
+      "type": "string",
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "default": "allow"
+    }
+  }
+}

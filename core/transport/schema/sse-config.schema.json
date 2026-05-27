@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/sse-config.schema.json",
+  "title": "HomePi SSE Transport Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "heartbeatMs",
+    "retryMs"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "heartbeatMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 300000
+    },
+    "retryMs": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 60000
+    },
+    "eventPrefix": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    }
+  }
+}

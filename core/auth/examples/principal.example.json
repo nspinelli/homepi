@@ -1,0 +1,8 @@
+{
+  "id": "svc-homepi-backend",
+  "type": "service",
+  "displayName": "HomePi Backend",
+  "roles": [
+    "backend"
+  ]
+}

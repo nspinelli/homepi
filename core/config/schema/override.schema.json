@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/config/override.schema.json",
+  "title": "HomePi Runtime Override Configuration",
+  "description": "Schema for runtime overrides applied after defaults, runtime config, service config, module config, and environment variables.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "overrides"
+  ],
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Service or module target receiving the override.",
+      "pattern": "^(homepi-[a-z0-9-]+|modules\\.[a-z0-9_.-]+)$",
+      "examples": [
+        "homepi-backend",
+        "modules.audio.shairport-sync"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable explanation for why this override exists.",
+      "minLength": 1
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional expiration time for temporary overrides."
+    },
+    "overrides": {
+      "type": "object",
+      "description": "Override payload. Must be validated against the target service/module schema after merge.",
+      "additionalProperties": true
+    }
+  }
+}

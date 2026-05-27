@@ -1,0 +1,45 @@
+{
+  "service": "homepi-hifi-serial",
+  "displayName": "HomePi HiFi Serial",
+  "description": "Native C++ service for HiFi serial communication.",
+  "version": "1.0.0",
+  "type": "cpp",
+  "owner": "service",
+  "runtime": {
+    "execStart": "/opt/homepi/services/hifi-serial/bin/homepi-hifi-serial",
+    "workingDirectory": "/opt/homepi/services/hifi-serial",
+    "environmentFile": "/opt/homepi/services/hifi-serial/env/.env",
+    "runtimeDirectory": "homepi",
+    "socketPaths": [
+      "/run/homepi/hifi-serial.sock"
+    ]
+  },
+  "systemd": {
+    "unitName": "homepi-hifi-serial.service",
+    "after": [
+      "network.target",
+      "systemd-udevd.service"
+    ],
+    "wants": [],
+    "requires": [
+      "systemd-udevd.service"
+    ],
+    "restart": "on-failure",
+    "restartSec": 5,
+    "watchdogSec": 30,
+    "wantedBy": "multi-user.target"
+  },
+  "permissions": {
+    "user": "homepi",
+    "group": "homepi",
+    "supplementaryGroups": [
+      "dialout"
+    ],
+    "requiresRoot": false
+  },
+  "health": {
+    "enabled": true,
+    "mode": "internal",
+    "intervalMs": 30000
+  }
+}

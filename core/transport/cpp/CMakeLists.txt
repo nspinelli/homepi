@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(homepi_core_transport LANGUAGES CXX)
+
+add_library(homepi_core_transport INTERFACE)
+target_include_directories(homepi_core_transport INTERFACE include)
+target_compile_features(homepi_core_transport INTERFACE cxx_std_20)

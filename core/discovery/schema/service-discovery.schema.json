@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/discovery/service-discovery.schema.json",
+  "title": "HomePi Discoverable Service",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "host",
+    "capabilities"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "host": {
+      "type": "string"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "socketPath": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  }
+}

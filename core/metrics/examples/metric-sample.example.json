@@ -1,0 +1,9 @@
+{
+  "name": "transport.messages_sent",
+  "type": "counter",
+  "value": 42,
+  "timestamp": "2026-05-27T16:00:00.000Z",
+  "labels": {
+    "service": "homepi-backend"
+  }
+}

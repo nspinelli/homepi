@@ -1,0 +1,11 @@
+{
+  "target": "homepi-backend",
+  "reason": "Temporarily enable debug logging for startup diagnostics.",
+  "expiresAt": "2026-05-27T23:59:59Z",
+  "overrides": {
+    "logging": {
+      "level": "DEBUG",
+      "debugTrace": true
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "service": "homepi-backend",
+  "version": "1.0.0",
+  "environment": "production",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "cacheDir": "/opt/homepi/runtime/cache",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    },
+    "watchdog": {
+      "enabled": true,
+      "timeoutMs": 30000
+    },
+    "service": {
+      "restartPolicy": "on-failure",
+      "restartSec": 5
+    }
+  },
+  "modules": {
+    "audio": {
+      "enabled": true,
+      "configPath": "/opt/homepi/modules/audio/config/audio.json"
+    }
+  }
+}

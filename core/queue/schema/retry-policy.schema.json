@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/queue/retry-policy.schema.json",
+  "title": "HomePi Retry Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "maxAttempts",
+    "backoffMs"
+  ],
+  "properties": {
+    "maxAttempts": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "backoffMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "exponential"
+      ],
+      "default": "fixed"
+    }
+  }
+}

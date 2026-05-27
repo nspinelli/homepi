@@ -1,0 +1,13 @@
+{
+  "service": "homepi-hifi-serial",
+  "state": "running",
+  "pid": 1842,
+  "startedAt": "2026-05-27T15:58:00.000Z",
+  "uptimeMs": 120000,
+  "restartCount": 0,
+  "memoryRssBytes": 18522112,
+  "runtimePaths": {
+    "socket": "/run/homepi/hifi-serial.sock",
+    "state": "/opt/homepi/runtime/state/hifi-serial.json"
+  }
+}

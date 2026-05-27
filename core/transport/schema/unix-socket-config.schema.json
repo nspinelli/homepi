@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/unix-socket-config.schema.json",
+  "title": "HomePi Unix Socket Transport Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "socketPath",
+    "mode",
+    "framing"
+  ],
+  "properties": {
+    "socketPath": {
+      "type": "string",
+      "pattern": "^/run/homepi/[a-z0-9-]+\\.sock$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "server",
+        "client"
+      ]
+    },
+    "framing": {
+      "type": "string",
+      "enum": [
+        "ndjson"
+      ]
+    },
+    "maxClients": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1024,
+      "default": 32
+    },
+    "backpressure": {
+      "type": "string",
+      "enum": [
+        "queue_limit",
+        "drop_oldest",
+        "drop_newest",
+        "disconnect"
+      ],
+      "default": "queue_limit"
+    },
+    "queueLimit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 1000
+    }
+  }
+}

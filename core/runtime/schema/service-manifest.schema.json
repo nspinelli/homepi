@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/runtime/service-manifest.schema.json",
+  "title": "HomePi Runtime Service Manifest",
+  "description": "Describes a HomePi service's runtime identity, executable paths, systemd behavior, dependencies, watchdog settings, and health behavior.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "displayName",
+    "type",
+    "runtime",
+    "systemd"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "description": "HomePi systemd service name without the .service suffix.",
+      "pattern": "^homepi-[a-z0-9-]+$",
+      "examples": [
+        "homepi-backend",
+        "homepi-hifi-serial"
+      ]
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable service name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable service description."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Service implementation version."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "typescript",
+        "cpp",
+        "script",
+        "external"
+      ],
+      "description": "Primary service implementation type."
+    },
+    "owner": {
+      "type": "string",
+      "enum": [
+        "core",
+        "app",
+        "module",
+        "service"
+      ],
+      "description": "Logical owner of the service."
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "execStart",
+        "workingDirectory"
+      ],
+      "properties": {
+        "execStart": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Absolute executable path."
+        },
+        "workingDirectory": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Absolute working directory."
+        },
+        "environmentFile": {
+          "type": "string",
+          "pattern": "^/",
+          "description": "Absolute path to the systemd EnvironmentFile."
+        },
+        "runtimeDirectory": {
+          "type": "string",
+          "description": "RuntimeDirectory name for systemd when applicable.",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "socketPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/run/homepi/[a-z0-9-]+\\.sock$"
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      }
+    },
+    "systemd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "restart",
+        "restartSec"
+      ],
+      "properties": {
+        "unitName": {
+          "type": "string",
+          "pattern": "^homepi-[a-z0-9-]+\\.service$"
+        },
+        "after": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "wants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "restart": {
+          "type": "string",
+          "enum": [
+            "no",
+            "on-failure",
+            "always"
+          ]
+        },
+        "restartSec": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "watchdogSec": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300
+        },
+        "wantedBy": {
+          "type": "string",
+          "default": "multi-user.target"
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "user": {
+          "type": "string",
+          "default": "homepi"
+        },
+        "group": {
+          "type": "string",
+          "default": "homepi"
+        },
+        "supplementaryGroups": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "requiresRoot": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "internal",
+            "http",
+            "socket",
+            "systemd",
+            "none"
+          ],
+          "default": "internal"
+        },
+        "intervalMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000,
+          "default": 30000
+        }
+      }
+    }
+  }
+}

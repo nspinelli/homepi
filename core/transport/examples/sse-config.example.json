@@ -1,0 +1,6 @@
+{
+  "path": "/events",
+  "heartbeatMs": 30000,
+  "retryMs": 3000,
+  "eventPrefix": "homepi"
+}

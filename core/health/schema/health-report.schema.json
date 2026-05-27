@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/health/health-report.schema.json",
+  "title": "HomePi Health Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "status",
+    "checkedAt",
+    "checks"
+  ],
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "healthy",
+        "degraded",
+        "failed",
+        "starting",
+        "stopping"
+      ]
+    },
+    "checkedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "health-check.schema.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "service": "homepi-hifi-serial",
+  "event": "service_started",
+  "occurredAt": "2026-05-27T16:00:00.000Z",
+  "state": "running",
+  "correlationId": "startup-runtime",
+  "data": {
+    "pid": 1842,
+    "watchdogEnabled": true
+  }
+}

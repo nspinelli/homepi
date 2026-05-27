@@ -1,0 +1,76 @@
+# HomePi Global Cursor Rules
+
+## Purpose
+
+These rules define the global architectural standards for the HomePi platform.
+
+HomePi is a modular, event-driven home automation platform designed for:
+- Raspberry Pi
+- long-running daemon services
+- real-time communication
+- AI-assisted development
+- deterministic runtime behavior
+- production-grade reliability
+- git hub repository: https://github.com/nspinelli/homepi
+
+These rules MUST be followed by all generated code.
+
+---
+
+# Core Architectural Philosophy
+
+## Contracts First
+
+All systems MUST be driven by:
+- documented contracts
+- schemas
+- structured messages
+- deterministic runtime behavior
+
+Do not invent undocumented behavior.
+
+---
+
+## Event-Driven First
+
+HomePi prefers:
+- events
+- interrupts
+- subscriptions
+- snapshots + deltas
+
+Avoid polling whenever possible.
+
+Polling is only acceptable when:
+- hardware requires it
+- external systems require it
+- explicitly documented
+
+---
+
+## AI-Readable Architecture
+
+The codebase must remain:
+- predictable
+- traceable
+- observable
+- schema-driven
+- highly structured
+
+AI agents must be able to:
+- reconstruct runtime behavior
+- trace failures
+- identify ownership
+- follow message flow
+- determine authoritative state
+
+---
+
+# Folder Structure Rules
+
+## Core Modules
+
+Shared architectural systems belong in:
+
+```text
+core/

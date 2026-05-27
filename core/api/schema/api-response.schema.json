@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/api/api-response.schema.json",
+  "title": "HomePi API Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "correlationId",
+    "timestamp"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object"
+    },
+    "error": {
+      "$ref": "api-error.schema.json"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/metrics/metric-snapshot.schema.json",
+  "title": "HomePi Metric Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "createdAt",
+    "metrics"
+  ],
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "metric-sample.schema.json"
+      }
+    }
+  }
+}

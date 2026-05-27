@@ -1,0 +1,8 @@
+{
+  "socketPath": "/run/homepi/hifi-serial.sock",
+  "mode": "server",
+  "framing": "ndjson",
+  "maxClients": 32,
+  "backpressure": "queue_limit",
+  "queueLimit": 1000
+}

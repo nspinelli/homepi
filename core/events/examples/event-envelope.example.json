@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "evt-001",
+  "source": "homepi-hifi-serial",
+  "topic": "modules.audio.zone",
+  "event": "zone_power_changed",
+  "correlationId": "cmd-001",
+  "timestamp": "2026-05-27T16:00:00.000Z",
+  "payload": {
+    "zone": 4,
+    "power": true
+  }
+}

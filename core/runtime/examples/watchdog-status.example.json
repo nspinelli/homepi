@@ -1,0 +1,9 @@
+{
+  "service": "homepi-hifi-serial",
+  "enabled": true,
+  "healthy": true,
+  "lastPingAt": "2026-05-27T16:00:00.000Z",
+  "timeoutMs": 30000,
+  "missedPings": 0,
+  "nextDeadlineAt": "2026-05-27T16:00:30.000Z"
+}

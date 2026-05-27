@@ -1,0 +1,16 @@
+{
+    "levels": {
+        "DEBUG": {
+            "description": "Detailed runtime trace information for debugging and AI-assisted diagnostics."
+        },
+        "INFO": {
+            "description": "Normal lifecycle and operational events."
+        },
+        "WARN": {
+            "description": "Recoverable or unexpected conditions that do not stop the service."
+        },
+        "ERROR": {
+            "description": "Failures requiring attention, recovery, restart, or investigation."
+        }
+    }
+}

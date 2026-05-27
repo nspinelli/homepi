@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/pipe-config.schema.json",
+  "title": "HomePi Named Pipe Transport Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "direction",
+    "framing"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write"
+      ]
+    },
+    "framing": {
+      "type": "string",
+      "enum": [
+        "line",
+        "ndjson",
+        "raw"
+      ]
+    },
+    "createIfMissing": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

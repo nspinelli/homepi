@@ -1,0 +1,18 @@
+{
+  "name": "homepi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HomePi modular Raspberry Pi home automation platform",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r exec rm -rf dist"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

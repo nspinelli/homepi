@@ -1,0 +1,20 @@
+{
+  "service": "homepi-backend",
+  "version": "0.1.0",
+  "environment": "development",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "cacheDir": "/opt/homepi/runtime/cache",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/transport-error.schema.json",
+  "title": "HomePi Transport Error",
+  "description": "Structured transport error payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "message",
+    "transport",
+    "retryable"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9_]+$"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "transport": {
+      "type": "string",
+      "enum": [
+        "unix_socket",
+        "pipe",
+        "websocket",
+        "sse",
+        "ndjson"
+      ]
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "connectionId": {
+      "type": "string"
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

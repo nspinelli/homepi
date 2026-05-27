@@ -1,0 +1,20 @@
+[Unit]
+Description=HomePi Backend API
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/home/homepi/homepi/apps/backend
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /home/homepi/homepi/apps/backend/dist/index.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homepi-backend
+
+[Install]
+WantedBy=multi-user.target

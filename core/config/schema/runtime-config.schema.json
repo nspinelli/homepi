@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/config/runtime-config.schema.json",
+  "title": "HomePi Runtime Configuration",
+  "description": "Shared runtime configuration used by HomePi services and modules.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "paths"
+  ],
+  "properties": {
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "homepiRoot",
+        "runtimeDir",
+        "generatedDir",
+        "socketDir"
+      ],
+      "properties": {
+        "homepiRoot": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/opt/homepi"
+        },
+        "runtimeDir": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/opt/homepi/runtime"
+        },
+        "generatedDir": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/opt/homepi/runtime/generated"
+        },
+        "cacheDir": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/opt/homepi/runtime/cache"
+        },
+        "stateDir": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/opt/homepi/runtime/state"
+        },
+        "socketDir": {
+          "type": "string",
+          "pattern": "^/",
+          "default": "/run/homepi"
+        }
+      }
+    },
+    "watchdog": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000,
+          "default": 30000
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "restartPolicy": {
+          "type": "string",
+          "enum": [
+            "no",
+            "on-failure",
+            "always"
+          ],
+          "default": "on-failure"
+        },
+        "restartSec": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 300,
+          "default": 5
+        }
+      }
+    }
+  }
+}

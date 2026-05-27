@@ -1,0 +1,23 @@
+{
+  "name": "@homepi/core-logging",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "HomePi structured JSON logging framework",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@homepi/tooling-schema-validation": "workspace:*",
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}

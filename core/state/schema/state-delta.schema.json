@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/state/state-delta.schema.json",
+  "title": "HomePi State Delta",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deltaId",
+    "owner",
+    "topic",
+    "timestamp",
+    "changes"
+  ],
+  "properties": {
+    "deltaId": {
+      "type": "string"
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "topic": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "op"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "set",
+              "remove",
+              "replace"
+            ]
+          },
+          "value": {}
+        }
+      }
+    }
+  }
+}

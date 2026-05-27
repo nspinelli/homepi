@@ -1,0 +1,13 @@
+{
+  "deltaId": "delta-001",
+  "owner": "homepi-hifi-serial",
+  "topic": "modules.audio.zone",
+  "timestamp": "2026-05-27T16:00:01.000Z",
+  "changes": [
+    {
+      "path": "/zones/4/power",
+      "op": "replace",
+      "value": true
+    }
+  ]
+}

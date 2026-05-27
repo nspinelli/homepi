@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/runtime/watchdog-status.schema.json",
+  "title": "HomePi Runtime Watchdog Status",
+  "description": "Watchdog telemetry payload for a HomePi service.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "enabled",
+    "healthy",
+    "lastPingAt",
+    "timeoutMs"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "healthy": {
+      "type": "boolean"
+    },
+    "lastPingAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 300000
+    },
+    "missedPings": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "nextDeadlineAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

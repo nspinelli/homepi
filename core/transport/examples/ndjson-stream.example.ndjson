@@ -1,0 +1,2 @@
+{"version":1,"id":"msg-001","type":"snapshot","source":"homepi-hifi-serial","target":"broadcast","topic":"modules.audio.snapshot","correlationId":"client-connect-001","timestamp":"2026-05-27T16:00:00.000Z","payload":{"zones":[]}}
+{"version":1,"id":"msg-002","type":"event","source":"homepi-hifi-serial","target":"broadcast","topic":"modules.audio.zone","correlationId":"cmd-001","timestamp":"2026-05-27T16:00:01.000Z","payload":{"zone":4,"power":true}}

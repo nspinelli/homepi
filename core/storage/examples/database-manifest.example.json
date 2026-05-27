@@ -1,0 +1,6 @@
+{
+  "name": "homepi-main",
+  "engine": "sqlite",
+  "path": "/opt/homepi/runtime/state/homepi.sqlite",
+  "owner": "homepi-backend"
+}

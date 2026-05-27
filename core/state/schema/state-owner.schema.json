@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/state/state-owner.schema.json",
+  "title": "HomePi State Owner",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "owner",
+    "topics"
+  ],
+  "properties": {
+    "owner": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

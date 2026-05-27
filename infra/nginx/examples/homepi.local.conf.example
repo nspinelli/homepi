@@ -1,0 +1,45 @@
+# Example NGINX site for homepi.local (development)
+# Copy to /etc/nginx/sites-available/homepi.local and enable.
+
+upstream homepi_backend {
+    server 127.0.0.1:3000;
+    keepalive 8;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name homepi.local;
+
+    root /opt/homepi/apps/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://homepi_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    location /api/events {
+        proxy_pass http://homepi_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_set_header X-Request-ID $request_id;
+    }
+
+    location /api/ws {
+        proxy_pass http://homepi_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header X-Request-ID $request_id;
+    }
+}

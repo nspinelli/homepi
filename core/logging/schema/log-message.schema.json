@@ -1,0 +1,55 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://homepi.local/schema/core/logging/log-message.schema.json",
+    "title": "HomePi Log Message",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "ts",
+        "service",
+        "module",
+        "level",
+        "event",
+        "correlationId",
+        "message",
+        "data"
+    ],
+    "properties": {
+        "ts": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "service": {
+            "type": "string",
+            "pattern": "^homepi-[a-z0-9-]+$"
+        },
+        "module": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$"
+        },
+        "level": {
+            "type": "string",
+            "enum": [
+                "DEBUG",
+                "INFO",
+                "WARN",
+                "ERROR"
+            ]
+        },
+        "event": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "correlationId": {
+            "type": "string",
+            "minLength": 1
+        },
+        "message": {
+            "type": "string",
+            "minLength": 1
+        },
+        "data": {
+            "type": "object"
+        }
+    }
+}

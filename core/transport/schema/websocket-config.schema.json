@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/websocket-config.schema.json",
+  "title": "HomePi WebSocket Transport Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "path",
+    "heartbeatMs",
+    "maxPayloadBytes"
+  ],
+  "properties": {
+    "path": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "heartbeatMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 300000
+    },
+    "maxPayloadBytes": {
+      "type": "integer",
+      "minimum": 1024,
+      "maximum": 10485760
+    },
+    "requireEnvelope": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

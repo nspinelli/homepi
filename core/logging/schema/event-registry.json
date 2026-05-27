@@ -1,0 +1,52 @@
+{
+    "events": {
+        "service_started": {
+            "level": "INFO",
+            "description": "Service completed startup and is ready to operate."
+        },
+        "service_stopping": {
+            "level": "INFO",
+            "description": "Service shutdown has started."
+        },
+        "config_loaded": {
+            "level": "INFO",
+            "description": "Service configuration loaded successfully."
+        },
+        "config_invalid": {
+            "level": "ERROR",
+            "description": "Service configuration failed validation."
+        },
+        "client_connected": {
+            "level": "INFO",
+            "description": "A client connection was established."
+        },
+        "client_disconnected": {
+            "level": "INFO",
+            "description": "A client connection was closed."
+        },
+        "message_received": {
+            "level": "DEBUG",
+            "description": "A message was received by the service."
+        },
+        "message_parsed": {
+            "level": "DEBUG",
+            "description": "A message was parsed successfully."
+        },
+        "message_parse_failed": {
+            "level": "WARN",
+            "description": "A received message could not be parsed."
+        },
+        "watchdog_ping": {
+            "level": "DEBUG",
+            "description": "Service sent or recorded a watchdog heartbeat."
+        },
+        "watchdog_timeout": {
+            "level": "ERROR",
+            "description": "Watchdog timeout detected."
+        },
+        "internal_error": {
+            "level": "ERROR",
+            "description": "Unexpected internal service error."
+        }
+    }
+}

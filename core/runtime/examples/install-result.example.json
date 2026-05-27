@@ -1,0 +1,34 @@
+{
+  "service": "homepi-hifi-serial",
+  "action": "install",
+  "status": "success",
+  "startedAt": "2026-05-27T15:55:00.000Z",
+  "finishedAt": "2026-05-27T15:55:12.000Z",
+  "durationMs": 12000,
+  "steps": [
+    {
+      "name": "create_directories",
+      "status": "success",
+      "message": "Runtime directories created.",
+      "durationMs": 100
+    },
+    {
+      "name": "install_binary",
+      "status": "success",
+      "message": "Service binary installed.",
+      "durationMs": 300
+    },
+    {
+      "name": "install_systemd_unit",
+      "status": "success",
+      "message": "systemd unit installed.",
+      "durationMs": 150
+    },
+    {
+      "name": "enable_service",
+      "status": "success",
+      "message": "Service enabled.",
+      "durationMs": 250
+    }
+  ]
+}

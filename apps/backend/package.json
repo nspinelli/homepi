@@ -1,0 +1,23 @@
+{
+  "name": "@homepi/app-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "HomePi backend API gateway",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch dist/index.js"
+  },
+  "dependencies": {
+    "@homepi/core-api": "workspace:*",
+    "@homepi/core-config": "workspace:*",
+    "@homepi/core-health": "workspace:*",
+    "@homepi/core-logging": "workspace:*",
+    "@homepi/core-transport": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3"
+  }
+}

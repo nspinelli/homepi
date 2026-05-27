@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/config/service-config.schema.json",
+  "title": "HomePi Service Configuration",
+  "description": "Base schema for HomePi service-level configuration. Service-specific schemas may extend this contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "environment",
+    "logging",
+    "runtime"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "description": "Systemd service identifier without the .service suffix.",
+      "pattern": "^homepi-[a-z0-9-]+$",
+      "examples": [
+        "homepi-backend",
+        "homepi-hifi-serial"
+      ]
+    },
+    "version": {
+      "type": "string",
+      "description": "Optional service configuration version.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "examples": [
+        "1.0.0"
+      ]
+    },
+    "environment": {
+      "type": "string",
+      "description": "Runtime environment name.",
+      "enum": [
+        "development",
+        "staging",
+        "production",
+        "test"
+      ]
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Whether this service is enabled.",
+      "default": true
+    },
+    "logging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR"
+          ]
+        },
+        "debugTrace": {
+          "type": "boolean",
+          "description": "Enable verbose debug tracing.",
+          "default": false
+        }
+      }
+    },
+    "runtime": {
+      "$ref": "runtime-config.schema.json"
+    },
+    "modules": {
+      "type": "object",
+      "description": "Optional module configuration references consumed by this service.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "configPath"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "configPath": {
+            "type": "string",
+            "description": "Absolute path to the module-owned configuration file.",
+            "pattern": "^/"
+          }
+        }
+      }
+    }
+  }
+}

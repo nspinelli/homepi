@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/runtime/runtime-status.schema.json",
+  "title": "HomePi Runtime Status",
+  "description": "Current process/runtime status for a HomePi service.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "state",
+    "pid",
+    "startedAt",
+    "uptimeMs"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "starting",
+        "running",
+        "stopping",
+        "stopped",
+        "failed",
+        "restarting"
+      ]
+    },
+    "pid": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "uptimeMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "restartCount": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "memoryRssBytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "runtimePaths": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^/"
+      }
+    }
+  }
+}

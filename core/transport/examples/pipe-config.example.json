@@ -1,0 +1,6 @@
+{
+  "path": "/tmp/shairport-sync-1-pipe",
+  "direction": "read",
+  "framing": "line",
+  "createIfMissing": false
+}

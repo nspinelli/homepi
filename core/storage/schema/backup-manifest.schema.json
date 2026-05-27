@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/backup-manifest.schema.json",
+  "title": "HomePi Backup Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "backupId",
+    "database",
+    "createdAt",
+    "path"
+  ],
+  "properties": {
+    "backupId": {
+      "type": "string"
+    },
+    "database": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^/"
+    }
+  }
+}

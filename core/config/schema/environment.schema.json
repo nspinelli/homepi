@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/config/environment.schema.json",
+  "title": "HomePi Environment Configuration",
+  "description": "Shared environment variable schema for HomePi services. Values are raw environment strings before normalization.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "HOMEPI_ENV": {
+      "type": "string",
+      "enum": [
+        "development",
+        "staging",
+        "production",
+        "test"
+      ]
+    },
+    "LOG_LEVEL": {
+      "type": "string",
+      "enum": [
+        "DEBUG",
+        "INFO",
+        "WARN",
+        "ERROR"
+      ]
+    },
+    "PORT": {
+      "type": "string",
+      "pattern": "^[0-9]{1,5}$"
+    },
+    "SOCKET_PATH": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "WATCHDOG_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "CONFIG_PATH": {
+      "type": "string",
+      "pattern": "^/"
+    },
+    "OVERRIDES_PATH": {
+      "type": "string",
+      "pattern": "^/"
+    }
+  }
+}

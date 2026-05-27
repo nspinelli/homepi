@@ -1,0 +1,11 @@
+{
+  "event": "connection_opened",
+  "transport": "unix_socket",
+  "service": "homepi-hifi-serial",
+  "connectionId": "conn-001",
+  "timestamp": "2026-05-27T16:00:00.000Z",
+  "remote": "local",
+  "data": {
+    "socketPath": "/run/homepi/hifi-serial.sock"
+  }
+}

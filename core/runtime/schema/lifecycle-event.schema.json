@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/runtime/lifecycle-event.schema.json",
+  "title": "HomePi Runtime Lifecycle Event",
+  "description": "Structured lifecycle event emitted by HomePi runtime components.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service",
+    "event",
+    "occurredAt",
+    "state"
+  ],
+  "properties": {
+    "service": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "service_starting",
+        "service_started",
+        "service_stopping",
+        "service_stopped",
+        "service_failed",
+        "service_restarting",
+        "dependency_ready",
+        "dependency_failed"
+      ]
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "starting",
+        "running",
+        "stopping",
+        "stopped",
+        "failed",
+        "restarting"
+      ]
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

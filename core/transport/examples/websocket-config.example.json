@@ -1,0 +1,6 @@
+{
+  "path": "/ws",
+  "heartbeatMs": 30000,
+  "maxPayloadBytes": 1048576,
+  "requireEnvelope": true
+}

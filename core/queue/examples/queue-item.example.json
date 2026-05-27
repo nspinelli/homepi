@@ -1,0 +1,10 @@
+{
+  "id": "queue-001",
+  "type": "serial_command",
+  "priority": 50,
+  "createdAt": "2026-05-27T16:00:00.000Z",
+  "correlationId": "cmd-001",
+  "payload": {
+    "command": "example"
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=HomePi HiFi Serial Service
+After=network.target systemd-udevd.service
+Requires=systemd-udevd.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/homepi/services/hifi-serial
+ExecStart=/opt/homepi/services/hifi-serial/bin/homepi-hifi-serial
+EnvironmentFile=/opt/homepi/services/hifi-serial/env/.env
+Restart=on-failure
+RestartSec=5
+WatchdogSec=30
+RuntimeDirectory=homepi
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

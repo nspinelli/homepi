@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/transport/transport-envelope.schema.json",
+  "title": "HomePi Transport Envelope",
+  "description": "Shared transport envelope for HomePi cross-process messages.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "id",
+    "type",
+    "source",
+    "topic",
+    "correlationId",
+    "timestamp",
+    "payload"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "command",
+        "event",
+        "request",
+        "response",
+        "error",
+        "snapshot",
+        "heartbeat"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^homepi-[a-z0-9-]+$"
+    },
+    "target": {
+      "type": "string",
+      "pattern": "^(homepi-[a-z0-9-]+|broadcast)$"
+    },
+    "topic": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)*$"
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

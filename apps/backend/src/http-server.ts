@@ -20,6 +20,9 @@ import { buildCoreStatusPayload } from "./core-status-builder.js";
 import { buildRuntimeStatusPayload } from "./runtime-status-builder.js";
 import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
+import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
+import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
+import { JournalLogBridge } from "./logging/journal-log-bridge.js";
 
 /**
  * HTTP server configuration for the backend vertical slice.
@@ -39,6 +42,10 @@ export interface HttpServerOptions {
   port: number;
   /** Optional USB devices REST proxy routes. */
   usbRoutes?: UsbDevicesRoutes;
+  /** Optional HiFi serial REST proxy routes. */
+  hifiRoutes?: HifiSerialRoutes;
+  /** Unix socket path for HiFi event bridge; omit to disable. */
+  hifiSerialSocketPath?: string;
 }
 
 /**
@@ -47,14 +54,31 @@ export interface HttpServerOptions {
  * @returns Node HTTP server instance.
  */
 export function createHttpServer(options: HttpServerOptions): Server {
-  const { config, logger, statusStore, startedAt, host, port, usbRoutes } = options;
+  const { config, logger, statusStore, startedAt, host, port, usbRoutes, hifiRoutes, hifiSerialSocketPath } =
+    options;
   const broadcaster = new EventBroadcaster(logger, () => statusStore.getStatus());
   const sseHandler = new SseHandler(logger, broadcaster);
   const wsHandler = new WsHandler(logger, () => statusStore.getStatus());
 
+  const hifiEventBridge = hifiSerialSocketPath
+    ? new HifiSerialEventBridge({
+        socketPath: hifiSerialSocketPath,
+        logger,
+        broadcaster,
+        onEvent: (timestamp) => {
+          statusStore.patchStatus({ lastEventAt: timestamp });
+        },
+      })
+    : undefined;
+
   broadcaster.start((timestamp) => {
     statusStore.patchStatus({ lastEventAt: timestamp });
   });
+
+  hifiEventBridge?.start();
+
+  const journalLogBridge = new JournalLogBridge({ logger, broadcaster });
+  journalLogBridge.start();
 
   const server = createServer((req, res) => {
     handleRequest(req, res);
@@ -85,6 +109,8 @@ export function createHttpServer(options: HttpServerOptions): Server {
   });
 
   server.on("close", () => {
+    journalLogBridge.stop();
+    hifiEventBridge?.stop();
     broadcaster.stop();
     wsHandler.close();
   });
@@ -102,6 +128,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
     if (usbRoutes?.matches(url.pathname)) {
       void usbRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
+
+    if (hifiRoutes?.matches(url.pathname)) {
+      void hifiRoutes.handle(req, res, url.pathname, correlationId);
       return;
     }
 

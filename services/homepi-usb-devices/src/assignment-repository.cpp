@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <filesystem>
 #include <optional>
 #include <set>
 #include <sqlite3.h>
@@ -25,6 +26,56 @@ std::string utc_now() {
   char buffer[32];
   std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &tm);
   return buffer;
+}
+
+/**
+ * Mirrors USB serial assignment into hifi_controller for homepi-hifi-serial.
+ * @param db SQLite connection.
+ * @param assignments Saved assignments.
+ * @param devices Current device list.
+ */
+void sync_hifi_controller_serial(sqlite3* db, const UsbAssignments& assignments,
+                                 const std::vector<UsbDevice>& devices) {
+  const std::string now = utc_now();
+  std::string device_id;
+  std::string devpath;
+
+  if (assignments.serial && !assignments.serial->empty()) {
+    device_id = *assignments.serial;
+    for (const UsbDevice& device : devices) {
+      if (device.device_id == device_id) {
+        devpath = device.devpath;
+        break;
+      }
+    }
+  }
+
+  const std::string virtual_port = "/dev/vHifi";
+  std::string serial_path = virtual_port;
+  if (!std::filesystem::exists(virtual_port) && !devpath.empty()) {
+    serial_path = devpath;
+  }
+
+  const char* sql =
+      "UPDATE hifi_controller SET serial_device_id = ?, serial_path = ?, updated_at = ? "
+      "WHERE id = 1";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return;
+  }
+  if (device_id.empty()) {
+    sqlite3_bind_null(stmt, 1);
+  } else {
+    sqlite3_bind_text(stmt, 1, device_id.c_str(), -1, SQLITE_TRANSIENT);
+  }
+  if (serial_path.empty()) {
+    sqlite3_bind_null(stmt, 2);
+  } else {
+    sqlite3_bind_text(stmt, 2, serial_path.c_str(), -1, SQLITE_TRANSIENT);
+  }
+  sqlite3_bind_text(stmt, 3, now.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
 }
 
 DeviceKind parse_kind(const std::string& kind) {
@@ -248,6 +299,8 @@ bool AssignmentRepository::set_assignments(const UsbAssignments& assignments,
     error_out = "Failed to persist assignments";
     return false;
   }
+
+  sync_hifi_controller_serial(db, assignments, devices);
   return true;
 }
 

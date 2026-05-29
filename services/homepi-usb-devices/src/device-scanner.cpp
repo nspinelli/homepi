@@ -237,7 +237,8 @@ std::vector<UsbDevice> scan_usb_serial_devices(udev* udev_ctx, std::set<std::str
     record.id_vendor = vendor;
     record.id_product = product;
     record.serial = serial;
-    record.devpath = devpath;
+    const char* devnode = udev_device_get_devnode(dev);
+    record.devpath = devnode != nullptr ? devnode : devpath;
 
     const std::string vendor_name = udev_prop(usb_dev, "ID_VENDOR");
     const std::string model_name = udev_prop(usb_dev, "ID_MODEL");

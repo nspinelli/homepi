@@ -42,17 +42,21 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now homepi-usb-devices.service
 ```
 
-## udev rules activation
+## Automatic deploy after save
 
-After assignments are saved, install generated rules:
+Saving USB role assignments in the UI runs `post-assignment-hook.sh` automatically (udev deploy + `homepi-hifi-serial` restart). Requires the install script’s sudoers drop-in under `/etc/sudoers.d/homepi-usb-post-assignment`.
+
+## udev rules activation (manual)
+
+`install.sh` deploys rules automatically when generated rules exist. After changing the serial assignment in the UI, run:
 
 ```bash
-sudo cp /opt/homepi/runtime/generated/udev/99-homepi-usb-devices.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+sudo bash /opt/homepi/services/usb-devices/scripts/deploy-udev-rules.sh
 ```
 
-Verify serial symlink: `ls -l /dev/vHifi`
+Or from the repo: `sudo bash services/homepi-usb-devices/scripts/deploy-udev-rules.sh`
+
+Verify serial symlink: `ls -l /dev/vHifi` (should point at your FTDI `ttyUSB` device)
 
 ## ALSA aliases
 

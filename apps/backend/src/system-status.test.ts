@@ -94,6 +94,7 @@ describe("system status vertical slice", () => {
       state: "ready",
       api: "ready",
       usbDevices: "offline",
+      hifiSerial: "offline",
       uptimeMs: 0,
       lastEventAt: null,
     });
@@ -124,12 +125,13 @@ describe("system status vertical slice", () => {
       state: "ready",
       api: "ready",
       usbDevices: "healthy",
+      hifiSerial: "healthy",
       uptimeMs: 42,
       lastEventAt: "2026-05-27T16:00:00.000Z",
     });
 
     const payload = buildCoreStatusPayload(testConfig, store.getStatus());
-    expect(payload.services).toHaveLength(8);
+    expect(payload.services).toHaveLength(9);
     expect(payload.system.uptimeMs).toBe(42);
   });
 });

@@ -1,0 +1,9 @@
+{
+  "service": "homepi-hifi-serial",
+  "migrations": [
+    {
+      "id": "002-hifi-serial",
+      "file": "migrations/002-hifi-serial.sql"
+    }
+  ]
+}

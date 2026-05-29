@@ -1,0 +1,20 @@
+{
+  "service": "homepi-hifi-serial",
+  "logging": {
+    "level": "INFO"
+  },
+  "runtime": {
+    "paths": {
+      "stateDir": "/opt/homepi/runtime/state",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "socketDir": "/run/homepi",
+      "databasePath": "/opt/homepi/runtime/state/homepi.sqlite"
+    }
+  },
+  "hifiSerial": {
+    "socketPath": "/run/homepi/hifi-serial.sock",
+    "virtualPort": "/dev/vHifi",
+    "baudRate": 9600,
+    "commandIntervalMs": 50
+  }
+}

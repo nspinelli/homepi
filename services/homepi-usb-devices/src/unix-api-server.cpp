@@ -4,8 +4,10 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <thread>
 
 #include "homepi/usb-devices/artifact-writer.hpp"
 #include "homepi/usb-devices/assignment-repository.hpp"
@@ -14,6 +16,24 @@
 namespace fs = std::filesystem;
 
 namespace homepi::usb_devices {
+
+namespace {
+
+constexpr const char* kPostAssignmentHook =
+    "/opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh";
+
+/**
+ * Deploys udev rules and restarts HiFi serial after assignment changes (non-blocking).
+ */
+void run_post_assignment_hook_async() {
+  std::thread([]() {
+    std::system(
+        "sudo -n /opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh "
+        ">>/opt/homepi/runtime/cache/post-assignment-hook.log 2>&1");
+  }).detach();
+}
+
+}  // namespace
 
 UnixApiServer::UnixApiServer(ApiContext context) : context_(std::move(context)) {}
 
@@ -186,6 +206,9 @@ std::string UnixApiServer::handle_request(const std::string& line) const {
     }
     if (context_.artifacts != nullptr) {
       context_.artifacts->regenerate(assignments, devices);
+    }
+    if (fs::exists(kPostAssignmentHook)) {
+      run_post_assignment_hook_async();
     }
     if (context_.on_devices_changed) {
       context_.on_devices_changed();

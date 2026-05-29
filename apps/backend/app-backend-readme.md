@@ -23,8 +23,16 @@ Listens on `http://127.0.0.1:3000` by default. Configuration is loaded from `con
 | `GET /api/health` | Health report envelope |
 | `GET /api/runtime/status` | Runtime status payload |
 | `GET /api/core/status` | Aggregated core platform status |
-| `GET /events` | SSE system status stream |
+| `GET /events` | SSE system status + HiFi audio events |
 | `GET /ws` | WebSocket upgrade (426 on plain HTTP GET) |
+| `GET /api/hifi-serial/health` | HiFi serial native health proxy |
+| `POST /api/hifi-serial/sync` | Full controller sync |
+| `GET /api/hifi-serial/snapshot` | Cached controller/zones/sources/groups |
+| `GET /api/hifi-serial/zones` | Zone list |
+| `GET /api/hifi-serial/zones/:n` | Single zone |
+| `GET /api/hifi-serial/sources` | Source list |
+| `GET /api/hifi-serial/groups` | Group list |
+| `POST /api/hifi-serial/commands` | Queue raw `*...` protocol command |
 
 Aliases: `/api/events`, `/api/ws`.
 

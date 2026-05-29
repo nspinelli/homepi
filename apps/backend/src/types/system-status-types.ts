@@ -19,6 +19,11 @@ export type CoreReadyStatus = "ready" | "degraded" | "failed";
 export type UsbDevicesStatus = "healthy" | "degraded" | "offline";
 
 /**
+ * HiFi serial service status for the system dashboard.
+ */
+export type HifiSerialStatus = "healthy" | "degraded" | "offline";
+
+/**
  * Runtime lifecycle status exposed on the dashboard.
  */
 export type RuntimeDashboardStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
@@ -45,6 +50,8 @@ export interface SystemStatusSnapshot {
   api: CoreReadyStatus;
   /** USB devices daemon status. */
   usbDevices: UsbDevicesStatus;
+  /** HiFi serial daemon status. */
+  hifiSerial: HifiSerialStatus;
   /** Process uptime in milliseconds. */
   uptimeMs: number;
   /** ISO8601 timestamp of the last emitted system event. */
@@ -62,6 +69,7 @@ export interface CoreServiceStatusEntry {
     | CoreReadyStatus
     | ConfigStatus
     | UsbDevicesStatus
+    | HifiSerialStatus
     | "active"
     | "inactive"
     | RuntimeDashboardStatus;

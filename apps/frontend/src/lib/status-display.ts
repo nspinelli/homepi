@@ -46,7 +46,14 @@ const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = 
   { key: "state", name: "State" },
   { key: "api", name: "API" },
   { key: "usbDevices", name: "USB Devices" },
+  { key: "hifiSerial", name: "HiFi Serial" },
 ];
+
+const EVENT_SOURCE_LABELS: Record<string, string> = {
+  "homepi-hifi-serial": "HiFi Serial",
+  "homepi-backend": "Backend",
+  "homepi-usb-devices": "USB Devices",
+};
 
 const ONLINE_STATES = new Set([
   "healthy",
@@ -96,6 +103,19 @@ export function mapToVisualStatus(value: string | undefined): ServiceVisualStatu
  * @param connections - Live transport connection states.
  * @returns Service card models for the status grid.
  */
+/**
+ * Returns display labels for live log service filters.
+ * @param snapshot - Current system status.
+ * @returns Unique service filter labels.
+ */
+export function buildLogServiceFilters(snapshot: SystemStatusSnapshot | null): string[] {
+  const names = CORE_SERVICES.map((service) => service.name);
+  if (snapshot?.hifiSerial) {
+    names.push("HiFi Serial");
+  }
+  return [...new Set(names)];
+}
+
 export function buildServiceCards(
   snapshot: SystemStatusSnapshot | null,
   connections: { sse: ConnectionState; ws: ConnectionState }
@@ -145,7 +165,7 @@ export function buildLogEntries(events: EventEnvelope[]): StatusLogEntry[] {
     id: event.id,
     timestamp: event.timestamp,
     level: mapEventToLogLevel(event),
-    service: event.source || event.topic,
+    service: EVENT_SOURCE_LABELS[event.source] ?? event.source ?? event.topic,
     message: formatEventMessage(event),
   }));
 }
@@ -189,6 +209,22 @@ export function formatLogTime(iso: string): string {
 }
 
 function mapEventToLogLevel(event: EventEnvelope): LogLevel {
+  if (event.event === "log_record") {
+    const level = String(
+      (event.payload as { level?: string }).level ?? "INFO"
+    ).toLowerCase();
+    if (level === "error") {
+      return "error";
+    }
+    if (level === "warn") {
+      return "warning";
+    }
+    if (level === "debug") {
+      return "debug";
+    }
+    return "info";
+  }
+
   const haystack = `${event.event} ${event.topic}`.toLowerCase();
   if (haystack.includes("error") || haystack.includes("failed")) {
     return "error";
@@ -203,11 +239,44 @@ function mapEventToLogLevel(event: EventEnvelope): LogLevel {
 }
 
 function formatEventMessage(event: EventEnvelope): string {
+  if (event.event === "log_record") {
+    const payload = event.payload as {
+      message?: string;
+      event?: string;
+      module?: string;
+    };
+    const summary = payload.message ?? payload.event ?? "log";
+    return payload.module ? `${payload.module}: ${summary}` : summary;
+  }
   if (event.event === "system_status_snapshot" || event.event === "system_status_delta") {
     return `${event.event} received`;
   }
   if (event.event === "heartbeat") {
     return "Heartbeat";
+  }
+  if (event.topic.startsWith("modules.audio.")) {
+    const payload = event.payload as Record<string, unknown>;
+    if (event.event === "zone_volume_changed" && typeof payload.zone === "number") {
+      return `Zone ${payload.zone} volume → ${String(payload.volume ?? "?")}`;
+    }
+    if (event.event === "zone_power_changed" && typeof payload.zone === "number") {
+      return `Zone ${payload.zone} power → ${String(payload.power ?? "?")}`;
+    }
+    if (event.event === "zone_name_changed" && typeof payload.zone === "number") {
+      return `Zone ${payload.zone} renamed → ${String(payload.name ?? "")}`;
+    }
+    if (event.event === "zone_source_changed" && typeof payload.zone === "number") {
+      return `Zone ${payload.zone} source → ${String(payload.source ?? "?")}`;
+    }
+    if (event.event === "source_name_changed" && typeof payload.source === "number") {
+      return `Source ${payload.source} renamed → ${String(payload.name ?? "")}`;
+    }
+    if (event.event === "audio_state_snapshot") {
+      return "Audio state snapshot";
+    }
+    if (event.event === "language_strings_synced") {
+      return "Language strings synced";
+    }
   }
   return `${event.event} on ${event.topic}`;
 }

@@ -6,7 +6,10 @@ import { createHttpServer } from "./http-server.js";
 import { SystemStatusStore } from "./system-status-store.js";
 import { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
 import { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
-import type { UsbDevicesStatus } from "./types/system-status-types.js";
+import type { HifiSerialStatus, UsbDevicesStatus } from "./types/system-status-types.js";
+import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
+import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
+import type { HifiSerialHealth } from "./hifi-serial/hifi-serial-types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, "..", "config", "service-config.json");
@@ -40,6 +43,7 @@ const statusStore = new SystemStatusStore({
   state: "ready",
   api: "ready",
   usbDevices: "offline",
+  hifiSerial: "offline",
   uptimeMs: 0,
   lastEventAt: null,
 });
@@ -47,6 +51,10 @@ const statusStore = new SystemStatusStore({
 const usbSocketPath = `${serviceConfig.runtime.paths.socketDir}/usb-devices.sock`;
 const usbDevicesClient = new UsbDevicesClient({ socketPath: usbSocketPath });
 const usbRoutes = new UsbDevicesRoutes({ client: usbDevicesClient, logger });
+
+const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.sock`;
+const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
+const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 
 const host = "127.0.0.1";
 const port = 3000;
@@ -67,6 +75,8 @@ const server = createHttpServer({
   host,
   port,
   usbRoutes,
+  hifiRoutes,
+  hifiSerialSocketPath: hifiSocketPath,
 });
 
 /**
@@ -97,9 +107,43 @@ async function pollUsbDevicesHealth(): Promise<void> {
   }
 }
 
+/**
+ * Maps native HiFi health to dashboard status.
+ * @param health - Native health snapshot.
+ * @returns Dashboard hifiSerial status.
+ */
+function mapHifiSerialStatus(health: HifiSerialHealth): HifiSerialStatus {
+  if (!health.connected) {
+    return "offline";
+  }
+  if (health.degraded || health.syncInProgress) {
+    return "degraded";
+  }
+  return "healthy";
+}
+
+/**
+ * Polls the native HiFi serial service and updates the system status store.
+ */
+async function pollHifiSerialHealth(): Promise<void> {
+  const correlationId = createCorrelationId("hifi-health");
+  try {
+    const health = await hifiSerialClient.getHealth(correlationId);
+    statusStore.patchStatus({
+      hifiSerial: mapHifiSerialStatus(health),
+    });
+  } catch {
+    statusStore.patchStatus({ hifiSerial: "offline" });
+  }
+}
+
 void pollUsbDevicesHealth();
+void pollHifiSerialHealth();
 setInterval(() => {
   void pollUsbDevicesHealth();
+}, 10_000);
+setInterval(() => {
+  void pollHifiSerialHealth();
 }, 10_000);
 
 setInterval(() => {

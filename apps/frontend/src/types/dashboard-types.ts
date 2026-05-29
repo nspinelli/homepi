@@ -40,6 +40,7 @@ export interface SystemStatusSnapshot {
   state: "ready" | "degraded" | "failed";
   api: "ready" | "degraded" | "failed";
   usbDevices: "healthy" | "degraded" | "offline";
+  hifiSerial: "healthy" | "degraded" | "offline";
   uptimeMs: number;
   lastEventAt: string | null;
 }

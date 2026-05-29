@@ -1,0 +1,19 @@
+[Unit]
+Description=HomePi HiFi Serial Service
+After=network.target systemd-udevd.service homepi-usb-devices.service
+Wants=homepi-usb-devices.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+SupplementaryGroups=dialout
+WorkingDirectory=/opt/homepi/services/hifi-serial
+ExecStart=/opt/homepi/services/hifi-serial/bin/homepi-hifi-serial /opt/homepi/services/hifi-serial/config/service-config.json
+EnvironmentFile=-/opt/homepi/services/hifi-serial/env/.env
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

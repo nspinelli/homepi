@@ -12,7 +12,9 @@
       { "name": "transport", "status": "ready", "message": "SSE and WebSocket" },
       { "name": "events", "status": "ready", "message": "Event envelopes" },
       { "name": "state", "status": "ready", "message": "In-memory status store" },
-      { "name": "api", "status": "ready", "message": "HTTP API envelopes" }
+      { "name": "api", "status": "ready", "message": "HTTP API envelopes" },
+      { "name": "usb-devices", "status": "healthy", "message": "USB device assignments and hotplug" },
+      { "name": "hifi-serial", "status": "offline", "message": "Hi-Fi2 serial controller" }
     ],
     "system": {
       "backend": "healthy",
@@ -23,6 +25,8 @@
       "events": "ready",
       "state": "ready",
       "api": "ready",
+      "usbDevices": "healthy",
+      "hifiSerial": "offline",
       "uptimeMs": 120000,
       "lastEventAt": "2026-05-27T16:00:00.000Z"
     }

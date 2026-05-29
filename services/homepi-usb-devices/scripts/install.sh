@@ -62,11 +62,22 @@ install_files() {
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/001-usb-devices.sql" \
     "${INSTALL_ROOT}/storage/migrations/001-usb-devices.sql"
+  install -m 0755 "${SERVICE_ROOT}/scripts/deploy-udev-rules.sh" \
+    "${INSTALL_ROOT}/scripts/deploy-udev-rules.sh"
+  install -m 0755 "${SERVICE_ROOT}/scripts/post-assignment-hook.sh" \
+    "${INSTALL_ROOT}/scripts/post-assignment-hook.sh"
 
   install -d -m 0755 "${RUNTIME_ROOT}/state"
   install -d -m 0755 "${RUNTIME_ROOT}/generated"
   install -d -m 0755 "${RUNTIME_ROOT}/cache"
   install -d -m 0755 "${RUNTIME_ROOT}/config"
+}
+
+install_sudoers() {
+  log "Installing sudoers for post-assignment hook"
+  install -m 0440 "${SERVICE_ROOT}/scripts/post-assignment.sudoers" \
+    /etc/sudoers.d/homepi-usb-post-assignment
+  visudo -c -f /etc/sudoers.d/homepi-usb-post-assignment
 }
 
 install_systemd() {
@@ -75,6 +86,18 @@ install_systemd() {
   systemctl daemon-reload
   systemctl enable "${SERVICE_NAME}.service"
   systemctl restart "${SERVICE_NAME}.service"
+}
+
+deploy_udev_rules() {
+  local rules_src="${RUNTIME_ROOT}/generated/udev/99-homepi-usb-devices.rules"
+  if [[ -f "${rules_src}" ]]; then
+    log "Installing udev rules for /dev/vHifi"
+    install -m 0644 "${rules_src}" /etc/udev/rules.d/99-homepi-usb-devices.rules
+    udevadm control --reload-rules
+    udevadm trigger --subsystem-match=tty --action=add || true
+  else
+    log "Skipping udev deploy (no generated rules yet; save serial assignment in UI)"
+  fi
 }
 
 restart_backend() {
@@ -132,7 +155,9 @@ main() {
   build_binary
   install_files
   chown -R homepi:homepi /opt/homepi
+  install_sudoers
   install_systemd
+  deploy_udev_rules
   restart_backend
   verify_install
 

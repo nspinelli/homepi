@@ -175,5 +175,5 @@ export interface ServerResponseLike {
  * @returns SSE formatted string.
  */
 export function formatSseMessage(envelope: EventEnvelope): string {
-  return `event: ${envelope.event}\ndata: ${JSON.stringify(envelope)}\n\n`;
+  return `event: envelope\ndata: ${JSON.stringify(envelope)}\n\n`;
 }

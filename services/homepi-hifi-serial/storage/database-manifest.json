@@ -1,0 +1,12 @@
+{
+  "service": "homepi-hifi-serial",
+  "database": "homepi",
+  "path": "/opt/homepi/runtime/state/homepi.sqlite",
+  "tables": [
+    "hifi_controller",
+    "hifi_zones",
+    "hifi_sources",
+    "hifi_groups",
+    "hifi_language_strings"
+  ]
+}

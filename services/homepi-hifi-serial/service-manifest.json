@@ -1,0 +1,19 @@
+{
+  "service": "homepi-hifi-serial",
+  "displayName": "HomePi HiFi Serial",
+  "description": "Hi-Fi2 RS-232 protocol, state sync, and event publishing.",
+  "version": "0.1.0",
+  "language": "cpp",
+  "runtime": {
+    "execStart": "/opt/homepi/services/hifi-serial/bin/homepi-hifi-serial",
+    "workingDirectory": "/opt/homepi/services/hifi-serial",
+    "environmentFile": "/opt/homepi/services/hifi-serial/env/.env",
+    "socketPaths": ["/run/homepi/hifi-serial.sock"]
+  },
+  "systemd": {
+    "unitName": "homepi-hifi-serial.service",
+    "after": ["network.target", "systemd-udevd.service", "homepi-usb-devices.service"],
+    "requires": ["systemd-udevd.service"],
+    "restart": "on-failure"
+  }
+}

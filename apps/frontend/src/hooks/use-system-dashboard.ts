@@ -24,7 +24,8 @@ export interface SystemDashboardState {
   loading: boolean;
 }
 
-const MAX_RECENT_EVENTS = 50;
+const MAX_RECENT_EVENTS = 200;
+const WS_RECONNECT_MS = 3_000;
 
 const initialState: SystemDashboardState = {
   health: null,
@@ -60,6 +61,8 @@ export function useSystemDashboard(): {
   const eventSourceRef = useRef<EventSource | null>(null);
   const webSocketRef = useRef<WebSocket | null>(null);
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsGenerationRef = useRef(0);
+  const wsReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const applyEvent = useCallback((envelope: EventEnvelope) => {
     const snapshot =
@@ -138,21 +141,26 @@ export function useSystemDashboard(): {
       }
     };
 
-    source.addEventListener("system_status_snapshot", handleEnvelope);
-    source.addEventListener("system_status_delta", handleEnvelope);
-    source.addEventListener("heartbeat", handleEnvelope);
+    source.addEventListener("envelope", handleEnvelope);
   }, [applyEvent]);
 
   const connectWebSocket = useCallback(() => {
     const config = getAppConfig();
+    const generation = ++wsGenerationRef.current;
     setState((current) => ({ ...current, wsState: "connecting" }));
 
     const socket = new WebSocket(config.wsUrl);
     webSocketRef.current = socket;
 
     socket.onopen = () => {
+      if (generation !== wsGenerationRef.current) {
+        return;
+      }
       setState((current) => ({ ...current, wsState: "connected", error: null }));
 
+      if (pingTimerRef.current) {
+        clearInterval(pingTimerRef.current);
+      }
       pingTimerRef.current = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(JSON.stringify({ type: "ping" }));
@@ -161,11 +169,29 @@ export function useSystemDashboard(): {
     };
 
     socket.onerror = () => {
+      if (generation !== wsGenerationRef.current) {
+        return;
+      }
       setState((current) => ({ ...current, wsState: "error" }));
     };
 
     socket.onclose = () => {
+      if (generation !== wsGenerationRef.current) {
+        return;
+      }
+      if (pingTimerRef.current) {
+        clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
       setState((current) => ({ ...current, wsState: "disconnected" }));
+      if (wsReconnectTimerRef.current) {
+        clearTimeout(wsReconnectTimerRef.current);
+      }
+      wsReconnectTimerRef.current = setTimeout(() => {
+        if (generation === wsGenerationRef.current) {
+          connectWebSocket();
+        }
+      }, WS_RECONNECT_MS);
     };
 
     socket.onmessage = (message) => {
@@ -196,10 +222,16 @@ export function useSystemDashboard(): {
     connectWebSocket();
 
     return () => {
+      wsGenerationRef.current += 1;
       eventSourceRef.current?.close();
       webSocketRef.current?.close();
       if (pingTimerRef.current) {
         clearInterval(pingTimerRef.current);
+        pingTimerRef.current = null;
+      }
+      if (wsReconnectTimerRef.current) {
+        clearTimeout(wsReconnectTimerRef.current);
+        wsReconnectTimerRef.current = null;
       }
     };
   }, [connectSse, connectWebSocket, fetchRest]);

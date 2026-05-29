@@ -1,0 +1,3 @@
+# Allow homepi service user to run post-assignment hook without a password.
+Defaults:homepi !requiretty
+homepi ALL=(ALL) NOPASSWD: /opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh

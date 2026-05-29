@@ -28,6 +28,11 @@ export function buildCoreStatusPayload(
       status: system.usbDevices,
       message: "USB device assignments and hotplug",
     },
+    {
+      name: "hifi-serial",
+      status: system.hifiSerial,
+      message: "Hi-Fi2 serial controller",
+    },
   ];
 
   return {

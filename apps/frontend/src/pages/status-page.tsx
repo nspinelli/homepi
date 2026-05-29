@@ -1,15 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.js";
 import { Input } from "@/components/ui/input.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import {
@@ -42,8 +36,20 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
 export function StatusPage(): React.JSX.Element {
   const { state, refresh } = useSystemDashboard();
   const [selectedLevel, setSelectedLevel] = useState<LogLevel | "all">("all");
-  const [selectedService, setSelectedService] = useState<string>("all");
+  const [selectedServices, setSelectedServices] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
+
+  const toggleServiceFilter = useCallback((serviceName: string) => {
+    setSelectedServices((current) => {
+      const next = new Set(current);
+      if (next.has(serviceName)) {
+        next.delete(serviceName);
+      } else {
+        next.add(serviceName);
+      }
+      return next;
+    });
+  }, []);
 
   const services = useMemo(
     () =>
@@ -58,7 +64,8 @@ export function StatusPage(): React.JSX.Element {
 
   const filteredLogs = logs.filter((log) => {
     const matchesLevel = selectedLevel === "all" || log.level === selectedLevel;
-    const matchesService = selectedService === "all" || log.service === selectedService;
+    const matchesService =
+      selectedServices.size === 0 || selectedServices.has(log.service);
     const matchesSearch =
       searchQuery === "" ||
       log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -134,64 +141,53 @@ export function StatusPage(): React.JSX.Element {
       </div>
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {services.map((service) => (
-          <div key={service.key} className="rounded-lg border border-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="font-medium text-card-foreground">{service.name}</span>
-              <div className="flex items-center gap-2">
-                <div className={`size-2 rounded-full ${STATUS_COLORS[service.status]}`} />
-                <span className="text-xs capitalize text-muted-foreground">{service.status}</span>
+        {services.map((service) => {
+          const isFilterActive = selectedServices.has(service.name);
+          return (
+            <button
+              key={service.key}
+              type="button"
+              aria-pressed={isFilterActive}
+              onClick={() => toggleServiceFilter(service.name)}
+              className={`rounded-lg border bg-card p-4 text-left transition-colors ${isFilterActive
+                  ? "border-primary ring-2 ring-primary/40"
+                  : "border-border hover:border-muted-foreground/40"
+                }`}
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="font-medium text-card-foreground">{service.name}</span>
+                <div className="flex items-center gap-2">
+                  <div className={`size-2 rounded-full ${STATUS_COLORS[service.status]}`} />
+                  <span className="text-xs capitalize text-muted-foreground">{service.status}</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-6 text-sm">
-              <div>
-                <span className="text-muted-foreground">State</span>
-                <p className="font-mono text-foreground">{service.state}</p>
+              <div className="flex items-center gap-6 text-sm">
+                <div>
+                  <span className="text-muted-foreground">State</span>
+                  <p className="font-mono text-foreground">{service.state}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">{service.metricLabel}</span>
+                  <p className="font-mono text-foreground">{service.metricValue}</p>
+                </div>
               </div>
-              <div>
-                <span className="text-muted-foreground">{service.metricLabel}</span>
-                <p className="font-mono text-foreground">{service.metricValue}</p>
-              </div>
-            </div>
-          </div>
-        ))}
+            </button>
+          );
+        })}
       </div>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="border-b border-border p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <h2 className="font-medium text-card-foreground">Live events</h2>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search events..."
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  className="h-8 w-48 border-0 bg-secondary pl-9"
-                />
-              </div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="secondary" size="sm" className="h-8 gap-2">
-                    {selectedService === "all" ? "All Services" : selectedService}
-                    <ChevronDown className="size-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSelectedService("all")}>
-                    All Services
-                  </DropdownMenuItem>
-                  {services.map((service) => (
-                    <DropdownMenuItem
-                      key={service.key}
-                      onClick={() => setSelectedService(service.name)}
-                    >
-                      {service.name}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            <div className="relative">
+              <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search events..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="h-8 w-48 border-0 bg-secondary pl-9"
+              />
             </div>
           </div>
 
@@ -201,11 +197,10 @@ export function StatusPage(): React.JSX.Element {
                 key={level}
                 type="button"
                 onClick={() => setSelectedLevel(level)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  selectedLevel === level
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedLevel === level
                     ? "bg-foreground text-background"
                     : "bg-secondary text-muted-foreground hover:text-foreground"
-                }`}
+                  }`}
               >
                 {level === "all" ? "All" : level.charAt(0).toUpperCase() + level.slice(1)}
               </button>

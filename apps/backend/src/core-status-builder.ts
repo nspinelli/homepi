@@ -33,6 +33,16 @@ export function buildCoreStatusPayload(
       status: system.hifiSerial,
       message: "Hi-Fi2 serial controller",
     },
+    {
+      name: "nqptp",
+      status: system.nqptp,
+      message: "AirPlay 2 PTP timing (nqptp)",
+    },
+    {
+      name: "metadata",
+      status: system.metadata,
+      message: "Shairport Sync metadata reader",
+    },
   ];
 
   return {

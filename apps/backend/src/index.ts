@@ -6,7 +6,13 @@ import { createHttpServer } from "./http-server.js";
 import { SystemStatusStore } from "./system-status-store.js";
 import { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
 import { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
-import type { HifiSerialStatus, UsbDevicesStatus } from "./types/system-status-types.js";
+import type {
+  HifiSerialStatus,
+  MetadataStatus,
+  NqptpStatus,
+  UsbDevicesStatus,
+} from "./types/system-status-types.js";
+import { getSystemdUnitActiveState } from "./runtime/check-systemd-unit.js";
 import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import type { HifiSerialHealth } from "./hifi-serial/hifi-serial-types.js";
@@ -44,6 +50,8 @@ const statusStore = new SystemStatusStore({
   api: "ready",
   usbDevices: "offline",
   hifiSerial: "offline",
+  nqptp: "offline",
+  metadata: "offline",
   uptimeMs: 0,
   lastEventAt: null,
 });
@@ -123,6 +131,45 @@ function mapHifiSerialStatus(health: HifiSerialHealth): HifiSerialStatus {
 }
 
 /**
+ * Maps systemd active state to dashboard external service status.
+ * @param state - systemctl is-active output.
+ * @returns Dashboard healthy / degraded / offline.
+ */
+function mapSystemdServiceStatus(state: string): NqptpStatus | MetadataStatus {
+  if (state === "active") {
+    return "healthy";
+  }
+  if (state === "activating" || state === "reloading") {
+    return "degraded";
+  }
+  return "offline";
+}
+
+/**
+ * Polls homepi-nqptp via systemd and updates the system status store.
+ */
+async function pollNqptpHealth(): Promise<void> {
+  try {
+    const state = await getSystemdUnitActiveState("homepi-nqptp");
+    statusStore.patchStatus({ nqptp: mapSystemdServiceStatus(state) });
+  } catch {
+    statusStore.patchStatus({ nqptp: "offline" });
+  }
+}
+
+/**
+ * Polls homepi-metadata via systemd and updates the system status store.
+ */
+async function pollMetadataHealth(): Promise<void> {
+  try {
+    const state = await getSystemdUnitActiveState("homepi-metadata");
+    statusStore.patchStatus({ metadata: mapSystemdServiceStatus(state) });
+  } catch {
+    statusStore.patchStatus({ metadata: "offline" });
+  }
+}
+
+/**
  * Polls the native HiFi serial service and updates the system status store.
  */
 async function pollHifiSerialHealth(): Promise<void> {
@@ -139,11 +186,19 @@ async function pollHifiSerialHealth(): Promise<void> {
 
 void pollUsbDevicesHealth();
 void pollHifiSerialHealth();
+void pollNqptpHealth();
+void pollMetadataHealth();
 setInterval(() => {
   void pollUsbDevicesHealth();
 }, 10_000);
 setInterval(() => {
   void pollHifiSerialHealth();
+}, 10_000);
+setInterval(() => {
+  void pollNqptpHealth();
+}, 10_000);
+setInterval(() => {
+  void pollMetadataHealth();
 }, 10_000);
 
 setInterval(() => {

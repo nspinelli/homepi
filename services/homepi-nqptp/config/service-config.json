@@ -1,0 +1,24 @@
+{
+  "service": "homepi-nqptp",
+  "version": "1.0.0",
+  "environment": "production",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "cacheDir": "/opt/homepi/runtime/cache",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    }
+  },
+  "nqptp": {
+    "upstreamVersion": "1.2.8",
+    "controlPort": 9000
+  }
+}

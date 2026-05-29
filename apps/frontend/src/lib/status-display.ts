@@ -47,12 +47,16 @@ const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = 
   { key: "api", name: "API" },
   { key: "usbDevices", name: "USB Devices" },
   { key: "hifiSerial", name: "HiFi Serial" },
+  { key: "nqptp", name: "NQPTP" },
+  { key: "metadata", name: "Metadata" },
 ];
 
 const EVENT_SOURCE_LABELS: Record<string, string> = {
   "homepi-hifi-serial": "HiFi Serial",
   "homepi-backend": "Backend",
   "homepi-usb-devices": "USB Devices",
+  "homepi-nqptp": "NQPTP",
+  "homepi-metadata": "Metadata",
 };
 
 const ONLINE_STATES = new Set([
@@ -103,19 +107,6 @@ export function mapToVisualStatus(value: string | undefined): ServiceVisualStatu
  * @param connections - Live transport connection states.
  * @returns Service card models for the status grid.
  */
-/**
- * Returns display labels for live log service filters.
- * @param snapshot - Current system status.
- * @returns Unique service filter labels.
- */
-export function buildLogServiceFilters(snapshot: SystemStatusSnapshot | null): string[] {
-  const names = CORE_SERVICES.map((service) => service.name);
-  if (snapshot?.hifiSerial) {
-    names.push("HiFi Serial");
-  }
-  return [...new Set(names)];
-}
-
 export function buildServiceCards(
   snapshot: SystemStatusSnapshot | null,
   connections: { sse: ConnectionState; ws: ConnectionState }

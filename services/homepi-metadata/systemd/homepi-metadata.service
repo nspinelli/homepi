@@ -1,0 +1,18 @@
+[Unit]
+Description=HomePi Shairport Sync Metadata Reader
+Wants=network-online.target
+After=network.target network-online.target homepi-nqptp.service
+Before=shairport-sync.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/opt/homepi/services/metadata
+ExecStart=/opt/homepi/services/metadata/bin/run-metadata-reader.sh
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-/opt/homepi/services/metadata/env/.env
+
+[Install]
+WantedBy=multi-user.target

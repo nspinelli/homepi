@@ -14,7 +14,9 @@
       { "name": "state", "status": "ready", "message": "In-memory status store" },
       { "name": "api", "status": "ready", "message": "HTTP API envelopes" },
       { "name": "usb-devices", "status": "healthy", "message": "USB device assignments and hotplug" },
-      { "name": "hifi-serial", "status": "offline", "message": "Hi-Fi2 serial controller" }
+      { "name": "hifi-serial", "status": "offline", "message": "Hi-Fi2 serial controller" },
+      { "name": "nqptp", "status": "healthy", "message": "AirPlay 2 PTP timing (nqptp)" },
+      { "name": "metadata", "status": "healthy", "message": "Shairport Sync metadata reader" }
     ],
     "system": {
       "backend": "healthy",
@@ -27,6 +29,8 @@
       "api": "ready",
       "usbDevices": "healthy",
       "hifiSerial": "offline",
+      "nqptp": "healthy",
+      "metadata": "healthy",
       "uptimeMs": 120000,
       "lastEventAt": "2026-05-27T16:00:00.000Z"
     }

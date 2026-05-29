@@ -12,6 +12,9 @@ else
   npx pnpm run build
 fi
 
+echo "==> Installing HomePi native services"
+sudo bash "${REPO_ROOT}/scripts/install-services.sh"
+
 echo "==> Installing NGINX site"
 HOMEPI_ROOT="${REPO_ROOT}" bash "${REPO_ROOT}/infra/nginx/install/install-nginx-config.sh"
 

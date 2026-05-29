@@ -24,6 +24,16 @@ export type UsbDevicesStatus = "healthy" | "degraded" | "offline";
 export type HifiSerialStatus = "healthy" | "degraded" | "offline";
 
 /**
+ * NQPTP (external) service status for the system dashboard.
+ */
+export type NqptpStatus = "healthy" | "degraded" | "offline";
+
+/**
+ * Metadata reader (external) service status for the system dashboard.
+ */
+export type MetadataStatus = "healthy" | "degraded" | "offline";
+
+/**
  * Runtime lifecycle status exposed on the dashboard.
  */
 export type RuntimeDashboardStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
@@ -52,6 +62,10 @@ export interface SystemStatusSnapshot {
   usbDevices: UsbDevicesStatus;
   /** HiFi serial daemon status. */
   hifiSerial: HifiSerialStatus;
+  /** NQPTP timing daemon status (systemd). */
+  nqptp: NqptpStatus;
+  /** Shairport metadata reader status (systemd). */
+  metadata: MetadataStatus;
   /** Process uptime in milliseconds. */
   uptimeMs: number;
   /** ISO8601 timestamp of the last emitted system event. */
@@ -70,6 +84,8 @@ export interface CoreServiceStatusEntry {
     | ConfigStatus
     | UsbDevicesStatus
     | HifiSerialStatus
+    | NqptpStatus
+    | MetadataStatus
     | "active"
     | "inactive"
     | RuntimeDashboardStatus;

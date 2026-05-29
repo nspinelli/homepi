@@ -1,0 +1,21 @@
+[Unit]
+Description=HomePi NQPTP (Not Quite PTP)
+Wants=network-online.target
+After=network.target network-online.target
+Before=shairport-sync.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/opt/homepi/services/nqptp
+ExecStart=/opt/homepi/services/nqptp/bin/nqptp
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+LimitRTPRIO=6
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-/opt/homepi/services/nqptp/env/.env
+
+[Install]
+WantedBy=multi-user.target

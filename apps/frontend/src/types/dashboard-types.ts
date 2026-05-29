@@ -41,6 +41,8 @@ export interface SystemStatusSnapshot {
   api: "ready" | "degraded" | "failed";
   usbDevices: "healthy" | "degraded" | "offline";
   hifiSerial: "healthy" | "degraded" | "offline";
+  nqptp: "healthy" | "degraded" | "offline";
+  metadata: "healthy" | "degraded" | "offline";
   uptimeMs: number;
   lastEventAt: string | null;
 }

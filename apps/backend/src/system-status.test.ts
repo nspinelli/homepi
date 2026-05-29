@@ -95,6 +95,8 @@ describe("system status vertical slice", () => {
       api: "ready",
       usbDevices: "offline",
       hifiSerial: "offline",
+      nqptp: "offline",
+      metadata: "offline",
       uptimeMs: 0,
       lastEventAt: null,
     });
@@ -126,12 +128,14 @@ describe("system status vertical slice", () => {
       api: "ready",
       usbDevices: "healthy",
       hifiSerial: "healthy",
+      nqptp: "healthy",
+      metadata: "healthy",
       uptimeMs: 42,
       lastEventAt: "2026-05-27T16:00:00.000Z",
     });
 
     const payload = buildCoreStatusPayload(testConfig, store.getStatus());
-    expect(payload.services).toHaveLength(9);
+    expect(payload.services).toHaveLength(11);
     expect(payload.system.uptimeMs).toBe(42);
   });
 });

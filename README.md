@@ -23,6 +23,14 @@ pnpm run build
 pnpm run test
 ```
 
+## Operational install (Pi)
+
+Installs the web stack, backend, mDNS, and all native services (`homepi-usb-devices`, `homepi-nqptp`, `homepi-metadata`, `homepi-hifi-serial`):
+
+```bash
+sudo bash scripts/install-operational.sh
+```
+
 ## Development
 
 - Backend: `pnpm --filter @homepi/app-backend start`

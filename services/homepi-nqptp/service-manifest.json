@@ -1,0 +1,38 @@
+{
+  "service": "homepi-nqptp",
+  "displayName": "HomePi NQPTP",
+  "description": "AirPlay 2 PTP timing daemon (upstream nqptp wrapper).",
+  "version": "1.0.0",
+  "type": "external",
+  "owner": "service",
+  "runtime": {
+    "execStart": "/opt/homepi/services/nqptp/bin/nqptp",
+    "workingDirectory": "/opt/homepi/services/nqptp",
+    "environmentFile": "/opt/homepi/services/nqptp/env/.env",
+    "socketPaths": []
+  },
+  "systemd": {
+    "unitName": "homepi-nqptp.service",
+    "after": [
+      "network-online.target"
+    ],
+    "wants": [
+      "network-online.target"
+    ],
+    "requires": [],
+    "restart": "on-failure",
+    "restartSec": 5,
+    "wantedBy": "multi-user.target"
+  },
+  "permissions": {
+    "user": "homepi",
+    "group": "homepi",
+    "supplementaryGroups": [],
+    "requiresRoot": false
+  },
+  "health": {
+    "enabled": true,
+    "mode": "systemd",
+    "intervalMs": 30000
+  }
+}

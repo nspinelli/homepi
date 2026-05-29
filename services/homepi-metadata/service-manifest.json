@@ -1,0 +1,38 @@
+{
+  "service": "homepi-metadata",
+  "displayName": "HomePi Metadata Reader",
+  "description": "Shairport Sync metadata pipe reader (upstream shairport-sync-metadata-reader wrapper).",
+  "version": "1.0.0",
+  "type": "external",
+  "owner": "service",
+  "runtime": {
+    "execStart": "/opt/homepi/services/metadata/bin/run-metadata-reader.sh",
+    "workingDirectory": "/opt/homepi/services/metadata",
+    "environmentFile": "/opt/homepi/services/metadata/env/.env",
+    "socketPaths": []
+  },
+  "systemd": {
+    "unitName": "homepi-metadata.service",
+    "after": [
+      "network-online.target"
+    ],
+    "wants": [
+      "network-online.target"
+    ],
+    "requires": [],
+    "restart": "on-failure",
+    "restartSec": 5,
+    "wantedBy": "multi-user.target"
+  },
+  "permissions": {
+    "user": "homepi",
+    "group": "homepi",
+    "supplementaryGroups": [],
+    "requiresRoot": false
+  },
+  "health": {
+    "enabled": true,
+    "mode": "systemd",
+    "intervalMs": 30000
+  }
+}

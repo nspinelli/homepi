@@ -69,6 +69,23 @@ List PCM devices: `aplay -L | grep -E 'AudioOut|AudioPaging'`
 
 Set `ALSA_CONFIG_PATH` to include the generated `alsa` directory for consumer services.
 
+Primary audio uses stable card id `HomePiPrimaryAudio` (`plug:AudioOut` → `hw:HomePiPrimaryAudio,0`).
+
+Modprobe fragment (deployed on assignment save):
+
+```bash
+sudo bash /opt/homepi/services/usb-devices/scripts/deploy-audio-modprobe.sh
+```
+
+When **Primary Audio Output** changes, the post-assignment hook automatically:
+
+1. Deploys updated modprobe options
+2. Rebinds the assigned USB DAC to apply `HomePiPrimaryAudio`
+3. Reboots the Pi if the stable name is still missing
+4. Restarts `homepi-pcm-router` and `homepi-hifi-serial`
+
+Manual replug is no longer required in the common case; reboot is automatic only when USB rebind cannot apply the ALSA name.
+
 ## API (via backend proxy)
 
 | Method | Path |

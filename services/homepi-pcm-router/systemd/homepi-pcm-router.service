@@ -1,0 +1,19 @@
+[Unit]
+Description=HomePi PCM Router
+After=network-online.target sound.target mosquitto.service homepi-usb-devices.service
+Wants=network-online.target mosquitto.service
+Requires=mosquitto.service
+
+[Service]
+Type=simple
+User=homepi
+Group=audio
+SupplementaryGroups=audio
+EnvironmentFile=/opt/homepi/services/pcm-router/env/.env
+ExecStart=/opt/homepi/services/pcm-router/bin/homepi-pcm-router
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

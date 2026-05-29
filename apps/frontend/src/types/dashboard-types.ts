@@ -43,6 +43,7 @@ export interface SystemStatusSnapshot {
   hifiSerial: "healthy" | "degraded" | "offline";
   nqptp: "healthy" | "degraded" | "offline";
   metadata: "healthy" | "degraded" | "offline";
+  pcmRouter: "healthy" | "degraded" | "offline";
   uptimeMs: number;
   lastEventAt: string | null;
 }

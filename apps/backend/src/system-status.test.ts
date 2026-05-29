@@ -97,6 +97,7 @@ describe("system status vertical slice", () => {
       hifiSerial: "offline",
       nqptp: "offline",
       metadata: "offline",
+      pcmRouter: "offline",
       uptimeMs: 0,
       lastEventAt: null,
     });
@@ -130,12 +131,13 @@ describe("system status vertical slice", () => {
       hifiSerial: "healthy",
       nqptp: "healthy",
       metadata: "healthy",
+      pcmRouter: "healthy",
       uptimeMs: 42,
       lastEventAt: "2026-05-27T16:00:00.000Z",
     });
 
     const payload = buildCoreStatusPayload(testConfig, store.getStatus());
-    expect(payload.services).toHaveLength(11);
+    expect(payload.services).toHaveLength(12);
     expect(payload.system.uptimeMs).toBe(42);
   });
 });

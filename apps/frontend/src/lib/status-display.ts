@@ -49,6 +49,7 @@ const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = 
   { key: "hifiSerial", name: "HiFi Serial" },
   { key: "nqptp", name: "NQPTP" },
   { key: "metadata", name: "Metadata" },
+  { key: "pcmRouter", name: "PCM Router" },
 ];
 
 const EVENT_SOURCE_LABELS: Record<string, string> = {
@@ -57,6 +58,7 @@ const EVENT_SOURCE_LABELS: Record<string, string> = {
   "homepi-usb-devices": "USB Devices",
   "homepi-nqptp": "NQPTP",
   "homepi-metadata": "Metadata",
+  "homepi-pcm-router": "PCM Router",
 };
 
 const ONLINE_STATES = new Set([
@@ -267,6 +269,21 @@ function formatEventMessage(event: EventEnvelope): string {
     }
     if (event.event === "language_strings_synced") {
       return "Language strings synced";
+    }
+  }
+  if (event.topic.startsWith("modules.pcm")) {
+    const payload = event.payload as Record<string, unknown>;
+    if (event.event === "owner_changed") {
+      return `PCM owner → zone ${String(payload.ownerZoneId ?? "?")}`;
+    }
+    if (event.event === "owner_cleared") {
+      return "PCM owner cleared";
+    }
+    if (event.event === "dac_state") {
+      return `DAC ${String(payload.state ?? "?")}`;
+    }
+    if (event.event === "pcm_router_snapshot") {
+      return "PCM router snapshot";
     }
   }
   return `${event.event} on ${event.topic}`;

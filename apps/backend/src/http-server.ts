@@ -22,6 +22,7 @@ import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
+import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
 import { JournalLogBridge } from "./logging/journal-log-bridge.js";
 
 /**
@@ -46,6 +47,8 @@ export interface HttpServerOptions {
   hifiRoutes?: HifiSerialRoutes;
   /** Unix socket path for HiFi event bridge; omit to disable. */
   hifiSerialSocketPath?: string;
+  /** Unix socket path for PCM router event bridge; omit to disable. */
+  pcmRouterSocketPath?: string;
 }
 
 /**
@@ -54,8 +57,18 @@ export interface HttpServerOptions {
  * @returns Node HTTP server instance.
  */
 export function createHttpServer(options: HttpServerOptions): Server {
-  const { config, logger, statusStore, startedAt, host, port, usbRoutes, hifiRoutes, hifiSerialSocketPath } =
-    options;
+  const {
+    config,
+    logger,
+    statusStore,
+    startedAt,
+    host,
+    port,
+    usbRoutes,
+    hifiRoutes,
+    hifiSerialSocketPath,
+    pcmRouterSocketPath,
+  } = options;
   const broadcaster = new EventBroadcaster(logger, () => statusStore.getStatus());
   const sseHandler = new SseHandler(logger, broadcaster);
   const wsHandler = new WsHandler(logger, () => statusStore.getStatus());
@@ -71,11 +84,23 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
+  const pcmEventBridge = pcmRouterSocketPath
+    ? new PcmRouterEventBridge({
+        socketPath: pcmRouterSocketPath,
+        logger,
+        broadcaster,
+        onEvent: (timestamp) => {
+          statusStore.patchStatus({ lastEventAt: timestamp });
+        },
+      })
+    : undefined;
+
   broadcaster.start((timestamp) => {
     statusStore.patchStatus({ lastEventAt: timestamp });
   });
 
   hifiEventBridge?.start();
+  pcmEventBridge?.start();
 
   const journalLogBridge = new JournalLogBridge({ logger, broadcaster });
   journalLogBridge.start();
@@ -111,6 +136,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
   server.on("close", () => {
     journalLogBridge.stop();
     hifiEventBridge?.stop();
+    pcmEventBridge?.stop();
     broadcaster.stop();
     wsHandler.close();
   });

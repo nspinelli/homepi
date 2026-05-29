@@ -1,0 +1,15 @@
+{
+  "service": "homepi-pcm-router",
+  "displayName": "HomePi PCM Router",
+  "type": "cpp",
+  "runtime": {
+    "execStart": "/opt/homepi/services/pcm-router/bin/homepi-pcm-router",
+    "workingDirectory": "/opt/homepi/services/pcm-router",
+    "environmentFile": "/opt/homepi/services/pcm-router/env/.env"
+  },
+  "systemd": {
+    "unitName": "homepi-pcm-router.service",
+    "restart": "on-failure",
+    "restartSec": 2
+  }
+}

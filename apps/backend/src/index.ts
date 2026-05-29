@@ -10,6 +10,7 @@ import type {
   HifiSerialStatus,
   MetadataStatus,
   NqptpStatus,
+  PcmRouterStatus,
   UsbDevicesStatus,
 } from "./types/system-status-types.js";
 import { getSystemdUnitActiveState } from "./runtime/check-systemd-unit.js";
@@ -52,6 +53,7 @@ const statusStore = new SystemStatusStore({
   hifiSerial: "offline",
   nqptp: "offline",
   metadata: "offline",
+  pcmRouter: "offline",
   uptimeMs: 0,
   lastEventAt: null,
 });
@@ -61,6 +63,7 @@ const usbDevicesClient = new UsbDevicesClient({ socketPath: usbSocketPath });
 const usbRoutes = new UsbDevicesRoutes({ client: usbDevicesClient, logger });
 
 const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.sock`;
+const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 
@@ -85,6 +88,7 @@ const server = createHttpServer({
   usbRoutes,
   hifiRoutes,
   hifiSerialSocketPath: hifiSocketPath,
+  pcmRouterSocketPath,
 });
 
 /**
@@ -135,7 +139,7 @@ function mapHifiSerialStatus(health: HifiSerialHealth): HifiSerialStatus {
  * @param state - systemctl is-active output.
  * @returns Dashboard healthy / degraded / offline.
  */
-function mapSystemdServiceStatus(state: string): NqptpStatus | MetadataStatus {
+function mapSystemdServiceStatus(state: string): NqptpStatus | MetadataStatus | PcmRouterStatus {
   if (state === "active") {
     return "healthy";
   }
@@ -170,6 +174,18 @@ async function pollMetadataHealth(): Promise<void> {
 }
 
 /**
+ * Polls homepi-pcm-router via systemd and updates the system status store.
+ */
+async function pollPcmRouterHealth(): Promise<void> {
+  try {
+    const state = await getSystemdUnitActiveState("homepi-pcm-router");
+    statusStore.patchStatus({ pcmRouter: mapSystemdServiceStatus(state) });
+  } catch {
+    statusStore.patchStatus({ pcmRouter: "offline" });
+  }
+}
+
+/**
  * Polls the native HiFi serial service and updates the system status store.
  */
 async function pollHifiSerialHealth(): Promise<void> {
@@ -188,6 +204,7 @@ void pollUsbDevicesHealth();
 void pollHifiSerialHealth();
 void pollNqptpHealth();
 void pollMetadataHealth();
+void pollPcmRouterHealth();
 setInterval(() => {
   void pollUsbDevicesHealth();
 }, 10_000);
@@ -199,6 +216,9 @@ setInterval(() => {
 }, 10_000);
 setInterval(() => {
   void pollMetadataHealth();
+}, 10_000);
+setInterval(() => {
+  void pollPcmRouterHealth();
 }, 10_000);
 
 setInterval(() => {

@@ -13,6 +13,7 @@ const JOURNAL_UNITS = [
   "homepi-backend.service",
   "homepi-usb-devices.service",
   "homepi-hifi-serial.service",
+  "homepi-pcm-router.service",
   "homepi-nqptp.service",
   "homepi-metadata.service",
 ] as const;

@@ -64,6 +64,10 @@ install_files() {
     "${INSTALL_ROOT}/storage/migrations/001-usb-devices.sql"
   install -m 0755 "${SERVICE_ROOT}/scripts/deploy-udev-rules.sh" \
     "${INSTALL_ROOT}/scripts/deploy-udev-rules.sh"
+  install -m 0755 "${SERVICE_ROOT}/scripts/deploy-audio-modprobe.sh" \
+    "${INSTALL_ROOT}/scripts/deploy-audio-modprobe.sh"
+  install -m 0755 "${SERVICE_ROOT}/scripts/apply-primary-audio-alsa.sh" \
+    "${INSTALL_ROOT}/scripts/apply-primary-audio-alsa.sh"
   install -m 0755 "${SERVICE_ROOT}/scripts/post-assignment-hook.sh" \
     "${INSTALL_ROOT}/scripts/post-assignment-hook.sh"
 

@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVICE_DIRS=(
   "homepi-usb-devices"
   "homepi-nqptp"
+  "homepi-pcm-router"
   "homepi-metadata"
   "homepi-hifi-serial"
 )

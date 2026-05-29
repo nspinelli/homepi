@@ -43,6 +43,11 @@ export function buildCoreStatusPayload(
       status: system.metadata,
       message: "Shairport Sync metadata reader",
     },
+    {
+      name: "pcm-router",
+      status: system.pcmRouter,
+      message: "16-zone PCM routing to primary DAC",
+    },
   ];
 
   return {

@@ -34,6 +34,11 @@ export type NqptpStatus = "healthy" | "degraded" | "offline";
 export type MetadataStatus = "healthy" | "degraded" | "offline";
 
 /**
+ * PCM router service status for the system dashboard.
+ */
+export type PcmRouterStatus = "healthy" | "degraded" | "offline";
+
+/**
  * Runtime lifecycle status exposed on the dashboard.
  */
 export type RuntimeDashboardStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
@@ -66,6 +71,8 @@ export interface SystemStatusSnapshot {
   nqptp: NqptpStatus;
   /** Shairport metadata reader status (systemd). */
   metadata: MetadataStatus;
+  /** PCM router daemon status (systemd). */
+  pcmRouter: PcmRouterStatus;
   /** Process uptime in milliseconds. */
   uptimeMs: number;
   /** ISO8601 timestamp of the last emitted system event. */
@@ -86,6 +93,7 @@ export interface CoreServiceStatusEntry {
     | HifiSerialStatus
     | NqptpStatus
     | MetadataStatus
+    | PcmRouterStatus
     | "active"
     | "inactive"
     | RuntimeDashboardStatus;

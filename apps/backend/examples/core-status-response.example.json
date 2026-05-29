@@ -16,7 +16,8 @@
       { "name": "usb-devices", "status": "healthy", "message": "USB device assignments and hotplug" },
       { "name": "hifi-serial", "status": "offline", "message": "Hi-Fi2 serial controller" },
       { "name": "nqptp", "status": "healthy", "message": "AirPlay 2 PTP timing (nqptp)" },
-      { "name": "metadata", "status": "healthy", "message": "Shairport Sync metadata reader" }
+      { "name": "metadata", "status": "healthy", "message": "Shairport Sync metadata reader" },
+      { "name": "pcm-router", "status": "offline", "message": "16-zone PCM routing to primary DAC" }
     ],
     "system": {
       "backend": "healthy",
@@ -31,6 +32,7 @@
       "hifiSerial": "offline",
       "nqptp": "healthy",
       "metadata": "healthy",
+      "pcmRouter": "offline",
       "uptimeMs": 120000,
       "lastEventAt": "2026-05-27T16:00:00.000Z"
     }

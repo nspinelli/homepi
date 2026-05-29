@@ -1,0 +1,26 @@
+{
+  "service": "homepi-usb-devices",
+  "version": "0.1.0",
+  "environment": "development",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "cacheDir": "/opt/homepi/runtime/cache",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    }
+  },
+  "usbDevices": {
+    "databasePath": "/opt/homepi/runtime/state/homepi.sqlite",
+    "socketPath": "/run/homepi/usb-devices.sock",
+    "serialSymlink": "vHifi",
+    "udevRulesFile": "udev/99-homepi-usb-devices.rules"
+  }
+}

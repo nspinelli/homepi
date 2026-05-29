@@ -1,0 +1,20 @@
+[Unit]
+Description=HomePi USB Devices Service
+After=network.target systemd-udevd.service
+Requires=systemd-udevd.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+SupplementaryGroups=dialout audio
+WorkingDirectory=/opt/homepi/services/usb-devices
+ExecStart=/opt/homepi/services/usb-devices/bin/homepi-usb-devices /opt/homepi/services/usb-devices/config/service-config.json
+EnvironmentFile=-/opt/homepi/services/usb-devices/env/.env
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=homepi
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

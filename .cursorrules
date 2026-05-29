@@ -41,6 +41,9 @@ HomePi prefers:
 
 Avoid polling whenever possible.
 
+- All services should have an install and uninstall script
+- The entire program should be able to be built based on one command
+
 Polling is only acceptable when:
 - hardware requires it
 - external systems require it

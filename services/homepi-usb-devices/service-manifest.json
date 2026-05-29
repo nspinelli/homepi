@@ -1,0 +1,25 @@
+{
+  "service": "homepi-usb-devices",
+  "displayName": "HomePi USB Devices",
+  "description": "USB device discovery, role assignments, udev rules, and ALSA aliases.",
+  "version": "0.1.0",
+  "language": "cpp",
+  "runtime": {
+    "execStart": "/opt/homepi/services/usb-devices/bin/homepi-usb-devices",
+    "workingDirectory": "/opt/homepi/services/usb-devices",
+    "environmentFile": "/opt/homepi/services/usb-devices/env/.env",
+    "socketPaths": [
+      "/run/homepi/usb-devices.sock"
+    ]
+  },
+  "systemd": {
+    "unitName": "homepi-usb-devices.service",
+    "after": [
+      "systemd-udevd.service"
+    ],
+    "requires": [
+      "systemd-udevd.service"
+    ],
+    "restart": "on-failure"
+  }
+}

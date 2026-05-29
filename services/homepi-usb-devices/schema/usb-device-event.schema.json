@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/usb-devices/usb-device-event.schema.json",
+  "title": "HomePi USB Device Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event", "deviceId", "timestamp"],
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": ["attached", "detached"]
+    },
+    "deviceId": {
+      "type": "string",
+      "pattern": "^usb:"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

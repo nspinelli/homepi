@@ -45,6 +45,7 @@ const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = 
   { key: "events", name: "Events" },
   { key: "state", name: "State" },
   { key: "api", name: "API" },
+  { key: "usbDevices", name: "USB Devices" },
 ];
 
 const ONLINE_STATES = new Set([
@@ -56,6 +57,8 @@ const ONLINE_STATES = new Set([
   "connected",
   "present",
 ]);
+
+const OFFLINE_STATES = new Set(["offline", "stopped", "failed"]);
 
 const WARNING_STATES = new Set([
   "degraded",
@@ -78,8 +81,11 @@ export function mapToVisualStatus(value: string | undefined): ServiceVisualStatu
   if (ONLINE_STATES.has(value)) {
     return "online";
   }
-  if (WARNING_STATES.has(value)) {
+  if (WARNING_STATES.has(value) || value === "degraded") {
     return "warning";
+  }
+  if (OFFLINE_STATES.has(value)) {
+    return "offline";
   }
   return "offline";
 }

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/usb-devices/usb-socket-request.schema.json",
+  "title": "HomePi USB Devices Socket Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["method"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "enum": ["listDevices", "getAssignments", "setAssignments", "getHealth"]
+    },
+    "correlationId": {
+      "type": "string"
+    },
+    "assignments": {
+      "$ref": "usb-assignments.schema.json"
+    }
+  }
+}

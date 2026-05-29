@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/usb-devices/usb-device.schema.json",
+  "title": "HomePi USB Device",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "deviceId",
+    "displayName",
+    "kind",
+    "present"
+  ],
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "pattern": "^usb:",
+      "description": "Stable identifier not based on tty port index."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["serial", "audio"]
+    },
+    "present": {
+      "type": "boolean"
+    },
+    "idVendor": {
+      "type": "string"
+    },
+    "idProduct": {
+      "type": "string"
+    },
+    "serial": {
+      "type": "string"
+    },
+    "devpath": {
+      "type": "string"
+    },
+    "alsaCard": {
+      "type": "string",
+      "description": "ALSA card name or index when kind is audio."
+    },
+    "resolvedAlsaName": {
+      "type": "string",
+      "description": "Resolved hw:N,0 for assigned audio devices."
+    }
+  }
+}

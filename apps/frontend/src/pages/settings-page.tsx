@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Check, Monitor, Moon, Sun } from "lucide-react";
 
+import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
 import { Button } from "@/components/ui/button.js";
 import { useUserSettings } from "@/hooks/use-user-settings.js";
 import type { ThemePreference } from "@/types/user-settings-types.js";
@@ -56,6 +57,10 @@ export function SettingsPage(): React.JSX.Element {
         </Button>
         <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
         <p className="mt-1 text-sm text-muted-foreground">Manage your HomePi preferences</p>
+      </div>
+
+      <div className="mb-6">
+        <AudioConfigurationCard />
       </div>
 
       <div className="rounded-lg border border-border bg-card">

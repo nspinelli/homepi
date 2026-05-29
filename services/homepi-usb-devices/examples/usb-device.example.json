@@ -1,0 +1,10 @@
+{
+  "deviceId": "usb:0403:6001:FT123456",
+  "displayName": "FTDI USB Serial (FT123456)",
+  "kind": "serial",
+  "present": true,
+  "idVendor": "0403",
+  "idProduct": "6001",
+  "serial": "FT123456",
+  "devpath": "/devices/pci0000:00/0000:00:14.0/usb1/1-1/1-1:1.0"
+}

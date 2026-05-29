@@ -1,0 +1,5 @@
+{
+  "serial": "usb:0403:6001:FT123456",
+  "audioPrimary": "usb:0d8c:0014:DACPRIMARY01",
+  "paging": "usb:0d8c:0014:DACPAGING01"
+}

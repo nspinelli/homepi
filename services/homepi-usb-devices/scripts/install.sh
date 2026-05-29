@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# Installs homepi-usb-devices: build, /opt layout, systemd, and restarts backend.
+set -euo pipefail
+
+SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+SERVICE_NAME="homepi-usb-devices"
+INSTALL_ROOT="/opt/homepi/services/usb-devices"
+RUNTIME_ROOT="/opt/homepi/runtime"
+BUILD_DIR="${SERVICE_ROOT}/build"
+UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}.service"
+UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+
+log() {
+  echo "==> $*"
+}
+
+require_root() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    echo "Re-run with sudo: sudo bash ${SERVICE_ROOT}/scripts/install.sh" >&2
+    exit 1
+  fi
+}
+
+ensure_build_deps() {
+  local missing=()
+  for cmd in cmake g++ pkg-config; do
+    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
+  done
+  if ! pkg-config --exists libudev 2>/dev/null; then
+    missing+=("libudev-dev")
+  fi
+  if ! pkg-config --exists sqlite3 2>/dev/null; then
+    missing+=("libsqlite3-dev")
+  fi
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    log "Installing build dependencies: ${missing[*]}"
+    apt-get update -qq
+    apt-get install -y cmake g++ pkg-config libudev-dev libsqlite3-dev
+  fi
+}
+
+build_binary() {
+  log "Building ${SERVICE_NAME}"
+  mkdir -p "${BUILD_DIR}"
+  cmake -S "${SERVICE_ROOT}" -B "${BUILD_DIR}"
+  cmake --build "${BUILD_DIR}" --parallel "$(nproc 2>/dev/null || echo 2)"
+  if [[ ! -x "${BUILD_DIR}/homepi-usb-devices" ]]; then
+    echo "Build failed: ${BUILD_DIR}/homepi-usb-devices not found" >&2
+    exit 1
+  fi
+}
+
+install_files() {
+  log "Installing to ${INSTALL_ROOT}"
+  install -d -m 0755 "${INSTALL_ROOT}/bin"
+  install -d -m 0755 "${INSTALL_ROOT}/config"
+  install -d -m 0755 "${INSTALL_ROOT}/storage/migrations"
+  install -d -m 0755 "${INSTALL_ROOT}/env"
+
+  install -m 0755 "${BUILD_DIR}/homepi-usb-devices" "${INSTALL_ROOT}/bin/homepi-usb-devices"
+  install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"
+  install -m 0644 "${SERVICE_ROOT}/storage/migrations/001-usb-devices.sql" \
+    "${INSTALL_ROOT}/storage/migrations/001-usb-devices.sql"
+
+  install -d -m 0755 "${RUNTIME_ROOT}/state"
+  install -d -m 0755 "${RUNTIME_ROOT}/generated"
+  install -d -m 0755 "${RUNTIME_ROOT}/cache"
+  install -d -m 0755 "${RUNTIME_ROOT}/config"
+}
+
+install_systemd() {
+  log "Installing systemd unit"
+  install -m 0644 "${UNIT_SRC}" "${UNIT_DEST}"
+  systemctl daemon-reload
+  systemctl enable "${SERVICE_NAME}.service"
+  systemctl restart "${SERVICE_NAME}.service"
+}
+
+restart_backend() {
+  if systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
+    :
+  fi
+  if systemctl is-enabled homepi-backend >/dev/null 2>&1; then
+    log "Restarting homepi-backend to connect to USB socket"
+    systemctl restart homepi-backend
+  else
+    log "homepi-backend not installed; skip backend restart"
+  fi
+}
+
+verify_install() {
+  log "Verifying installation"
+  sleep 2
+  systemctl is-active "${SERVICE_NAME}.service"
+
+  if [[ ! -S /run/homepi/usb-devices.sock ]]; then
+    echo "Socket missing: /run/homepi/usb-devices.sock" >&2
+    journalctl -u "${SERVICE_NAME}.service" -n 30 --no-pager >&2 || true
+    exit 1
+  fi
+
+  local health
+  health=$(printf '%s\n' '{"method":"getHealth","correlationId":"install-verify"}' \
+    | nc -U /run/homepi/usb-devices.sock 2>/dev/null || true)
+  if [[ "${health}" != *'"ok":true'* ]]; then
+    echo "Health check failed via Unix socket" >&2
+    echo "${health}" >&2
+    exit 1
+  fi
+  echo "  OK  ${SERVICE_NAME} active, socket healthy"
+
+  if systemctl is-active homepi-backend >/dev/null 2>&1; then
+    local code
+    code=$(curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/usb-devices/health 2>/dev/null || echo "000")
+    if [[ "${code}" == "200" ]]; then
+      echo "  OK  backend proxy /api/usb-devices/health (${code})"
+    else
+      code=$(curl -sf -o /dev/null -w "%{http_code}" http://127.0.0.1/api/usb-devices/health 2>/dev/null || echo "000")
+      if [[ "${code}" == "200" ]]; then
+        echo "  OK  backend proxy via nginx (${code})"
+      else
+        echo "  WARN backend USB health returned ${code} (UI may show offline until backend restarts)"
+      fi
+    fi
+  fi
+}
+
+main() {
+  require_root
+  ensure_build_deps
+  build_binary
+  install_files
+  chown -R homepi:homepi /opt/homepi
+  install_systemd
+  restart_backend
+  verify_install
+
+  echo ""
+  echo "${SERVICE_NAME} is installed and running."
+  echo "  Socket: /run/homepi/usb-devices.sock"
+  echo "  Logs:   journalctl -u ${SERVICE_NAME}.service -f"
+  echo ""
+  echo "Ready to test in the UI:"
+  echo "  Settings → Audio Configuration"
+  echo "  Status   → USB Devices card"
+  echo "  http://homepi.local/settings"
+}
+
+main "$@"

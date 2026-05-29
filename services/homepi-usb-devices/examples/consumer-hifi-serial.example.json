@@ -1,0 +1,7 @@
+{
+  "enabled": true,
+  "device": "/dev/ttyUSB0",
+  "baudRate": 9600,
+  "timeoutMs": 50,
+  "virtualPort": "/dev/vHifi"
+}

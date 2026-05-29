@@ -19,6 +19,7 @@ import { WsHandler } from "./ws-handler.js";
 import { buildCoreStatusPayload } from "./core-status-builder.js";
 import { buildRuntimeStatusPayload } from "./runtime-status-builder.js";
 import type { SystemStatusStore } from "./system-status-store.js";
+import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 
 /**
  * HTTP server configuration for the backend vertical slice.
@@ -36,6 +37,8 @@ export interface HttpServerOptions {
   host: string;
   /** Listen port. */
   port: number;
+  /** Optional USB devices REST proxy routes. */
+  usbRoutes?: UsbDevicesRoutes;
 }
 
 /**
@@ -44,7 +47,7 @@ export interface HttpServerOptions {
  * @returns Node HTTP server instance.
  */
 export function createHttpServer(options: HttpServerOptions): Server {
-  const { config, logger, statusStore, startedAt, host, port } = options;
+  const { config, logger, statusStore, startedAt, host, port, usbRoutes } = options;
   const broadcaster = new EventBroadcaster(logger, () => statusStore.getStatus());
   const sseHandler = new SseHandler(logger, broadcaster);
   const wsHandler = new WsHandler(logger, () => statusStore.getStatus());
@@ -96,6 +99,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
       getRequestCorrelationId(req.headers)
     );
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+
+    if (usbRoutes?.matches(url.pathname)) {
+      void usbRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
 
     if (req.method === "GET" && url.pathname === "/api/health") {
       handleHealth(res, correlationId);

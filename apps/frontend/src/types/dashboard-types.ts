@@ -39,8 +39,28 @@ export interface SystemStatusSnapshot {
   events: "ready" | "degraded" | "failed";
   state: "ready" | "degraded" | "failed";
   api: "ready" | "degraded" | "failed";
+  usbDevices: "healthy" | "degraded" | "offline";
   uptimeMs: number;
   lastEventAt: string | null;
+}
+
+/**
+ * USB device record from GET /api/usb-devices.
+ */
+export interface UsbDevice {
+  deviceId: string;
+  displayName: string;
+  kind: "serial" | "audio";
+  present: boolean;
+}
+
+/**
+ * USB role assignments from GET /api/usb-devices/assignments.
+ */
+export interface UsbAssignments {
+  serial: string | null;
+  audioPrimary: string | null;
+  paging: string | null;
 }
 
 /**

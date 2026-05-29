@@ -23,6 +23,11 @@ export function buildCoreStatusPayload(
     { name: "events", status: system.events, message: "Event envelopes" },
     { name: "state", status: system.state, message: "In-memory status store" },
     { name: "api", status: system.api, message: "HTTP API envelopes" },
+    {
+      name: "usb-devices",
+      status: system.usbDevices,
+      message: "USB device assignments and hotplug",
+    },
   ];
 
   return {

@@ -14,6 +14,11 @@ export type ConfigStatus = "loaded" | "invalid";
 export type CoreReadyStatus = "ready" | "degraded" | "failed";
 
 /**
+ * USB devices service status for the system dashboard.
+ */
+export type UsbDevicesStatus = "healthy" | "degraded" | "offline";
+
+/**
  * Runtime lifecycle status exposed on the dashboard.
  */
 export type RuntimeDashboardStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
@@ -38,6 +43,8 @@ export interface SystemStatusSnapshot {
   state: CoreReadyStatus;
   /** API layer readiness. */
   api: CoreReadyStatus;
+  /** USB devices daemon status. */
+  usbDevices: UsbDevicesStatus;
   /** Process uptime in milliseconds. */
   uptimeMs: number;
   /** ISO8601 timestamp of the last emitted system event. */
@@ -54,6 +61,7 @@ export interface CoreServiceStatusEntry {
   status:
     | CoreReadyStatus
     | ConfigStatus
+    | UsbDevicesStatus
     | "active"
     | "inactive"
     | RuntimeDashboardStatus;

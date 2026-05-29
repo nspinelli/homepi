@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/usb-devices/usb-assignments.schema.json",
+  "title": "HomePi USB Role Assignments",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "serial": {
+      "type": ["string", "null"],
+      "description": "deviceId for Primary Serial Connection."
+    },
+    "audioPrimary": {
+      "type": ["string", "null"],
+      "description": "deviceId for Primary Audio Output."
+    },
+    "paging": {
+      "type": ["string", "null"],
+      "description": "deviceId for Primary Paging Output."
+    }
+  }
+}

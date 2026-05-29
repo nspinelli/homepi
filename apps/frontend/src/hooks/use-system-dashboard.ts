@@ -17,22 +17,36 @@ export interface SystemDashboardState {
   coreStatus: CoreStatusPayload | null;
   systemStatus: SystemStatusSnapshot | null;
   lastEvent: EventEnvelope | null;
+  recentEvents: EventEnvelope[];
   sseState: ConnectionState;
   wsState: ConnectionState;
   error: string | null;
   loading: boolean;
 }
 
+const MAX_RECENT_EVENTS = 50;
+
 const initialState: SystemDashboardState = {
   health: null,
   coreStatus: null,
   systemStatus: null,
   lastEvent: null,
+  recentEvents: [],
   sseState: "disconnected",
   wsState: "disconnected",
   error: null,
   loading: true,
 };
+
+/**
+ * Prepends an event to the rolling recent-events buffer.
+ * @param events - Current recent events.
+ * @param envelope - New event envelope.
+ * @returns Updated recent events list.
+ */
+function prependRecentEvent(events: EventEnvelope[], envelope: EventEnvelope): EventEnvelope[] {
+  return [envelope, ...events.filter((item) => item.id !== envelope.id)].slice(0, MAX_RECENT_EVENTS);
+}
 
 /**
  * Loads REST status and maintains SSE/WebSocket live connections.
@@ -58,6 +72,7 @@ export function useSystemDashboard(): {
     setState((current) => ({
       ...current,
       lastEvent: envelope,
+      recentEvents: prependRecentEvent(current.recentEvents, envelope),
       systemStatus: snapshot ?? current.systemStatus,
     }));
   }, []);

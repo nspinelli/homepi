@@ -1,0 +1,207 @@
+import type { ConnectionState, EventEnvelope, SystemStatusSnapshot } from "../types/dashboard-types.js";
+
+/** Visual health indicator for a service card. */
+export type ServiceVisualStatus = "online" | "warning" | "offline";
+
+/** Log severity used by the status page filters. */
+export type LogLevel = "info" | "warning" | "error" | "debug";
+
+/** Core service row shown on the status page. */
+export interface ServiceCardModel {
+  /** Stable service key. */
+  key: string;
+  /** Display name. */
+  name: string;
+  /** Mapped visual status. */
+  status: ServiceVisualStatus;
+  /** Raw status string from the snapshot. */
+  state: string;
+  /** Secondary metric label. */
+  metricLabel: string;
+  /** Secondary metric value. */
+  metricValue: string;
+}
+
+/** Event row shown in the live log panel. */
+export interface StatusLogEntry {
+  /** Unique row id. */
+  id: string;
+  /** ISO timestamp. */
+  timestamp: string;
+  /** Mapped log level. */
+  level: LogLevel;
+  /** Service or source label. */
+  service: string;
+  /** Human-readable message. */
+  message: string;
+}
+
+const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = [
+  { key: "backend", name: "Backend" },
+  { key: "config", name: "Config" },
+  { key: "logging", name: "Logging" },
+  { key: "runtime", name: "Runtime" },
+  { key: "transport", name: "Transport" },
+  { key: "events", name: "Events" },
+  { key: "state", name: "State" },
+  { key: "api", name: "API" },
+];
+
+const ONLINE_STATES = new Set([
+  "healthy",
+  "loaded",
+  "active",
+  "running",
+  "ready",
+  "connected",
+  "present",
+]);
+
+const WARNING_STATES = new Set([
+  "degraded",
+  "starting",
+  "stopping",
+  "connecting",
+  "pending",
+  "disconnected",
+]);
+
+/**
+ * Maps a raw platform status string to a visual indicator.
+ * @param value - Raw status value.
+ * @returns Visual status for cards.
+ */
+export function mapToVisualStatus(value: string | undefined): ServiceVisualStatus {
+  if (!value) {
+    return "offline";
+  }
+  if (ONLINE_STATES.has(value)) {
+    return "online";
+  }
+  if (WARNING_STATES.has(value)) {
+    return "warning";
+  }
+  return "offline";
+}
+
+/**
+ * Builds service cards from the authoritative system status snapshot.
+ * @param snapshot - Live system status snapshot.
+ * @param connections - Live transport connection states.
+ * @returns Service card models for the status grid.
+ */
+export function buildServiceCards(
+  snapshot: SystemStatusSnapshot | null,
+  connections: { sse: ConnectionState; ws: ConnectionState }
+): ServiceCardModel[] {
+  const coreCards = CORE_SERVICES.map(({ key, name }) => {
+    const state = snapshot?.[key];
+    const stateLabel = state === undefined ? "unknown" : String(state);
+
+    return {
+      key,
+      name,
+      status: mapToVisualStatus(stateLabel),
+      state: stateLabel,
+      metricLabel: "State",
+      metricValue: stateLabel,
+    };
+  });
+
+  return [
+    ...coreCards,
+    {
+      key: "sse",
+      name: "SSE /events",
+      status: mapToVisualStatus(connections.sse),
+      state: connections.sse,
+      metricLabel: "Transport",
+      metricValue: "Server-sent events",
+    },
+    {
+      key: "ws",
+      name: "WebSocket /ws",
+      status: mapToVisualStatus(connections.ws),
+      state: connections.ws,
+      metricLabel: "Transport",
+      metricValue: "WebSocket",
+    },
+  ];
+}
+
+/**
+ * Converts SSE envelopes into log rows for the status page.
+ * @param events - Recent event envelopes.
+ * @returns Log entries newest-first.
+ */
+export function buildLogEntries(events: EventEnvelope[]): StatusLogEntry[] {
+  return events.map((event) => ({
+    id: event.id,
+    timestamp: event.timestamp,
+    level: mapEventToLogLevel(event),
+    service: event.source || event.topic,
+    message: formatEventMessage(event),
+  }));
+}
+
+/**
+ * Formats uptime milliseconds for display.
+ * @param uptimeMs - Uptime in milliseconds.
+ * @returns Human-readable uptime string.
+ */
+export function formatUptime(uptimeMs: number | undefined): string {
+  if (uptimeMs === undefined) {
+    return "—";
+  }
+  const totalSeconds = Math.floor(uptimeMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}h ${minutes}m ${seconds}s`;
+}
+
+/**
+ * Formats an ISO timestamp for display.
+ * @param value - ISO8601 timestamp.
+ * @returns Locale formatted timestamp.
+ */
+export function formatTimestamp(value: string): string {
+  return new Date(value).toLocaleString();
+}
+
+/**
+ * Formats a time-only value for log rows.
+ * @param iso - ISO timestamp.
+ * @returns Locale time string.
+ */
+export function formatLogTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function mapEventToLogLevel(event: EventEnvelope): LogLevel {
+  const haystack = `${event.event} ${event.topic}`.toLowerCase();
+  if (haystack.includes("error") || haystack.includes("failed")) {
+    return "error";
+  }
+  if (haystack.includes("warn") || haystack.includes("degraded")) {
+    return "warning";
+  }
+  if (haystack.includes("debug") || haystack.includes("heartbeat")) {
+    return "debug";
+  }
+  return "info";
+}
+
+function formatEventMessage(event: EventEnvelope): string {
+  if (event.event === "system_status_snapshot" || event.event === "system_status_delta") {
+    return `${event.event} received`;
+  }
+  if (event.event === "heartbeat") {
+    return "Heartbeat";
+  }
+  return `${event.event} on ${event.topic}`;
+}

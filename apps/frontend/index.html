@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HomePi</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/homepi-logo.png" />
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem("homepi:user-settings");
+          var settings = raw ? JSON.parse(raw) : null;
+          var theme = settings && settings.appearance ? settings.appearance.theme : "system";
+          var dark =
+            theme === "dark" ||
+            (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (error) {
+          /* ignore invalid stored settings */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

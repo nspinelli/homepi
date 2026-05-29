@@ -1,10 +1,10 @@
 # HomePi Frontend Application
 
-React + Vite + TypeScript shell for the HomePi system status dashboard.
+React + Vite + TypeScript shell for the HomePi web app, based on the `homepi-app-design` reference.
 
 ## Purpose
 
-Provides a minimal Apple-inspired dashboard that validates REST, SSE, and WebSocket connectivity to the backend vertical slice.
+Provides a routed HomePi UI with an empty home page, a live system status page, and a settings placeholder. Validates REST, SSE, and WebSocket connectivity to the backend vertical slice.
 
 ## Development
 
@@ -23,7 +23,27 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api`, `/events`, and `/ws` to the b
 | `VITE_EVENTS_URL` | SSE endpoint (default: `{base}/events`) |
 | `VITE_WS_URL` | WebSocket endpoint (default: `{ws-base}/ws`) |
 
-## Dashboard Behavior
+## User Settings
+
+Appearance preferences are stored in `localStorage` under `homepi:user-settings`:
+
+```json
+{
+  "appearance": {
+    "theme": "light" | "dark" | "system"
+  }
+}
+```
+
+## Routes
+
+| Path | Description |
+|------|-------------|
+| `/` | Empty home page (reserved for future modules) |
+| `/status` | System status dashboard |
+| `/settings` | User preferences (appearance theme) |
+
+## Status Page Behavior
 
 Displays:
 
@@ -31,7 +51,7 @@ Displays:
 - Core service statuses from `GET /api/core/status` and live SSE deltas
 - Uptime and last event timestamp
 - SSE and WebSocket connection state
-- Last received event envelope (JSON)
+- Rolling live event log from SSE envelopes
 
 ## Tests
 
@@ -48,4 +68,4 @@ pnpm --filter @homepi/app-frontend typecheck
 
 ## Not Included Yet
 
-Module UIs, authentication flows, routing beyond the system dashboard, and production asset hardening beyond the Vite build.
+Module UIs on the home page, authentication flows, and production asset hardening beyond the Vite build.

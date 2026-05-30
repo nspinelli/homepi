@@ -1,0 +1,32 @@
+{
+  "service": "homepi-shairport-supervisor",
+  "displayName": "HomePi Shairport Sync Supervisor",
+  "description": "Builds upstream Shairport Sync, generates per-zone configs from HiFi state, and manages homepi-shairport@N instances.",
+  "version": "0.1.0",
+  "language": "cpp",
+  "runtime": {
+    "execStart": "/opt/homepi/services/shairport/bin/homepi-shairport-supervisor",
+    "workingDirectory": "/opt/homepi/services/shairport",
+    "environmentFile": "/opt/homepi/services/shairport/env/.env",
+    "socketPaths": ["/run/homepi/shairport-supervisor.sock"]
+  },
+  "systemd": {
+    "unitName": "homepi-shairport-supervisor.service",
+    "after": [
+      "network-online.target",
+      "homepi-nqptp.service",
+      "homepi-pcm-router.service",
+      "homepi-hifi-serial.service"
+    ],
+    "wants": ["mosquitto.service", "network-online.target"],
+    "requires": [],
+    "restart": "on-failure",
+    "restartSec": 5,
+    "wantedBy": "multi-user.target"
+  },
+  "health": {
+    "enabled": true,
+    "mode": "socket",
+    "intervalMs": 30000
+  }
+}

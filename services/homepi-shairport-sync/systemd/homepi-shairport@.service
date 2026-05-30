@@ -1,0 +1,16 @@
+[Unit]
+Description=HomePi Shairport Sync Zone %i
+PartOf=homepi-shairport-supervisor.service
+After=homepi-nqptp.service
+Requires=homepi-nqptp.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+ExecStart=/opt/homepi/services/shairport/bin/shairport-sync -c /opt/homepi/services/shairport/config/zones/zone-%i.conf
+Restart=no
+EnvironmentFile=-/opt/homepi/services/shairport/env/.env
+
+[Install]
+WantedBy=homepi-shairport-supervisor.service

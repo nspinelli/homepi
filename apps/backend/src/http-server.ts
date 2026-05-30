@@ -21,6 +21,7 @@ import { buildRuntimeStatusPayload } from "./runtime-status-builder.js";
 import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
+import type { AudioRoutes } from "./audio/audio-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
 import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
 import { JournalLogBridge } from "./logging/journal-log-bridge.js";
@@ -45,6 +46,8 @@ export interface HttpServerOptions {
   usbRoutes?: UsbDevicesRoutes;
   /** Optional HiFi serial REST proxy routes. */
   hifiRoutes?: HifiSerialRoutes;
+  /** Optional audio configuration REST routes. */
+  audioRoutes?: AudioRoutes;
   /** Unix socket path for HiFi event bridge; omit to disable. */
   hifiSerialSocketPath?: string;
   /** Unix socket path for PCM router event bridge; omit to disable. */
@@ -66,6 +69,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     port,
     usbRoutes,
     hifiRoutes,
+    audioRoutes,
     hifiSerialSocketPath,
     pcmRouterSocketPath,
   } = options;
@@ -159,6 +163,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
     if (hifiRoutes?.matches(url.pathname)) {
       void hifiRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
+
+    if (audioRoutes?.matches(url.pathname)) {
+      void audioRoutes.handle(req, res, url.pathname, correlationId);
       return;
     }
 

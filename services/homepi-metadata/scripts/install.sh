@@ -7,8 +7,9 @@ SERVICE_NAME="homepi-metadata"
 INSTALL_ROOT="/opt/homepi/services/metadata"
 BUILD_DIR="${SERVICE_ROOT}/build"
 SRC_DIR="${BUILD_DIR}/metadata-reader-src"
-UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}.service"
-UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}@.service"
+UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}@.service"
+LEGACY_UNIT="${SERVICE_NAME}.service"
 WRAPPER_SRC="${SERVICE_ROOT}/scripts/run-metadata-reader.sh"
 UPSTREAM_REPO="https://github.com/mikebrady/shairport-sync-metadata-reader.git"
 UPSTREAM_VERSION="1.0.3"
@@ -41,6 +42,29 @@ fetch_upstream() {
   rm -rf "${SRC_DIR}"
   mkdir -p "${BUILD_DIR}"
   git clone --depth 1 "${UPSTREAM_REPO}" "${SRC_DIR}"
+  log "Applying HomePi FIFO busy-wait fix"
+  python3 - "${SRC_DIR}/shairport-sync-metadata-reader.c" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+anchor = "      fflush(stdout);\n    }\n  }\n  return 0;"
+replacement = (
+    "      fflush(stdout);\n"
+    "    } else {\n"
+    "      if (feof(stdin)) {\n"
+    "        clearerr(stdin);\n"
+    "      }\n"
+    "      usleep(100000);\n"
+    "    }\n"
+    "  }\n"
+    "  return 0;"
+)
+if anchor not in text:
+    raise SystemExit("metadata reader busy-wait anchor not found")
+path.write_text(text.replace(anchor, replacement, 1))
+PY
 }
 
 build_metadata_reader() {
@@ -63,14 +87,19 @@ install_homepi_files() {
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" \
     "${INSTALL_ROOT}/config/service-config.json"
   install -m 0755 "${WRAPPER_SRC}" "${INSTALL_ROOT}/bin/run-metadata-reader.sh"
+  install -m 0755 "${SERVICE_ROOT}/scripts/metadata-zone-handler.py" \
+    "${INSTALL_ROOT}/bin/metadata-zone-handler.py"
 }
 
 install_systemd() {
-  log "Installing systemd unit"
+  log "Installing systemd template unit"
+  if systemctl list-unit-files "${LEGACY_UNIT}" >/dev/null 2>&1; then
+    systemctl stop "${LEGACY_UNIT}" 2>/dev/null || true
+    systemctl disable "${LEGACY_UNIT}" 2>/dev/null || true
+    rm -f "/etc/systemd/system/${LEGACY_UNIT}"
+  fi
   install -m 0644 "${UNIT_SRC}" "${UNIT_DEST}"
   systemctl daemon-reload
-  systemctl enable "${SERVICE_NAME}.service"
-  systemctl restart "${SERVICE_NAME}.service"
 }
 
 restart_backend() {
@@ -84,17 +113,11 @@ restart_backend() {
 
 verify_install() {
   log "Verifying installation"
-  sleep 2
-  if ! systemctl is-active "${SERVICE_NAME}.service" >/dev/null 2>&1; then
-    echo "Service not active: ${SERVICE_NAME}" >&2
-    journalctl -u "${SERVICE_NAME}.service" -n 30 --no-pager >&2 || true
-    exit 1
-  fi
   if [[ ! -x "${INSTALL_ROOT}/bin/shairport-sync-metadata-reader" ]]; then
     echo "Binary missing after install" >&2
     exit 1
   fi
-  echo "  OK  ${SERVICE_NAME} active (upstream ${UPSTREAM_VERSION})"
+  echo "  OK  ${SERVICE_NAME}@.service template installed (instances started by shairport supervisor)"
 }
 
 main() {
@@ -116,8 +139,8 @@ main() {
   echo "  Wrapper: ${INSTALL_ROOT}/bin/run-metadata-reader.sh"
   echo "  Logs:    journalctl -u ${SERVICE_NAME}.service -f"
   echo ""
-  echo "Configure Shairport Sync metadata pipe to match:"
-  echo "  /tmp/shairport-sync-metadata (or HOMEPPI_METADATA_PIPE in env/.env)"
+  echo "Configure Shairport Sync metadata pipe per zone:"
+  echo "  /tmp/homepi-metadata-zone-<1-16>"
 }
 
 main "$@"

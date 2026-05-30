@@ -57,6 +57,7 @@ install_files() {
   install -d -m 0755 "${INSTALL_ROOT}/config"
   install -d -m 0755 "${INSTALL_ROOT}/storage/migrations"
   install -d -m 0755 "${INSTALL_ROOT}/env"
+  install -d -m 0755 "${INSTALL_ROOT}/scripts"
 
   install -m 0755 "${BUILD_DIR}/homepi-usb-devices" "${INSTALL_ROOT}/bin/homepi-usb-devices"
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"

@@ -45,7 +45,7 @@ bool config_load(HomepiConfig* out) {
   copy_env_str(out->event_socket_path, sizeof(out->event_socket_path), "HOMEPI_EVENT_SOCKET",
                "/run/homepi/pcm-router.sock");
   copy_env_str(out->primary_alsa_card, sizeof(out->primary_alsa_card), "HOMEPI_PRIMARY_ALSA_CARD",
-               "HomePiPrimaryAudio");
+               "HomePiPrimary");
   copy_env_str(out->loopback_card_a, sizeof(out->loopback_card_a), "ALSA_LOOPBACK_CARDS",
                "HomePiZonesA");
   {
@@ -67,9 +67,11 @@ bool config_load(HomepiConfig* out) {
     }
   }
 
-  out->audio_rate = env_uint("HOMEPI_AUDIO_RATE", 48000);
+  out->audio_rate = env_uint("HOMEPI_AUDIO_RATE", 44100);
   out->audio_channels = env_uint("HOMEPI_AUDIO_CHANNELS", 2);
   copy_env_str(out->audio_format, sizeof(out->audio_format), "HOMEPI_AUDIO_FORMAT", "S32_LE");
+  out->dac_rate = env_uint("HOMEPI_DAC_RATE", 48000);
+  copy_env_str(out->dac_format, sizeof(out->dac_format), "HOMEPI_DAC_FORMAT", "S16_LE");
   out->period_frames = env_uint("PERIOD_FRAMES", 256);
   out->buffer_frames = env_uint("BUFFER_FRAMES", 1024);
   out->fade_ms = env_uint("FADE_MS", 10);

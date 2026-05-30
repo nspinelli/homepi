@@ -2,7 +2,7 @@
 Description=HomePi NQPTP (Not Quite PTP)
 Wants=network-online.target
 After=network.target network-online.target
-Before=shairport-sync.service
+Before=homepi-shairport@.service
 
 [Service]
 Type=simple

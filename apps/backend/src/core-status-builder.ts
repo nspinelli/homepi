@@ -48,6 +48,11 @@ export function buildCoreStatusPayload(
       status: system.pcmRouter,
       message: "16-zone PCM routing to primary DAC",
     },
+    {
+      name: "shairport",
+      status: system.shairport,
+      message: "Shairport Sync supervisor and AirPlay zones",
+    },
   ];
 
   return {

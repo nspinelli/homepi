@@ -137,6 +137,17 @@ void update_controller_int(sqlite3* db, const char* column, int value, const std
   sqlite3_exec(db, sql.c_str(), nullptr, nullptr, nullptr);
 }
 
+void apply_migration_sqlite(sqlite3* db, const std::string& migration_sql) {
+  char* err = nullptr;
+  if (sqlite3_exec(db, migration_sql.c_str(), nullptr, nullptr, &err) != SQLITE_OK) {
+    const std::string message = err != nullptr ? err : "migration failed";
+    sqlite3_free(err);
+    if (message.find("duplicate column name") == std::string::npos) {
+      throw std::runtime_error(message);
+    }
+  }
+}
+
 }  // namespace
 
 StateRepository::StateRepository(const std::string& database_path,
@@ -146,13 +157,11 @@ StateRepository::StateRepository(const std::string& database_path,
     throw std::runtime_error("Failed to open database: " + database_path);
   }
   db_ = raw;
-  char* err = nullptr;
-  if (sqlite3_exec(static_cast<sqlite3*>(db_), migration_sql.c_str(), nullptr, nullptr, &err) !=
-      SQLITE_OK) {
-    std::string message = err != nullptr ? err : "migration failed";
-    sqlite3_free(err);
-    throw std::runtime_error(message);
-  }
+  apply_migration(migration_sql);
+}
+
+void StateRepository::apply_migration(const std::string& migration_sql) {
+  apply_migration_sqlite(static_cast<sqlite3*>(db_), migration_sql);
 }
 
 StateRepository::~StateRepository() {
@@ -369,7 +378,7 @@ std::vector<SourceState> StateRepository::get_sources() const {
   std::vector<SourceState> sources;
   sqlite3_stmt* stmt = nullptr;
   const char* sql =
-      "SELECT source_number,name,enabled,input_gain,display_line,updated_at FROM hifi_sources "
+      "SELECT source_number,name,enabled,input_gain,display_line,is_airplay,updated_at FROM hifi_sources "
       "ORDER BY source_number";
   auto* db = static_cast<sqlite3*>(db_);
   if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
@@ -386,6 +395,12 @@ std::vector<SourceState> StateRepository::get_sources() const {
     }
     if (sqlite3_column_type(stmt, 3) != SQLITE_NULL) {
       s.input_gain = sqlite3_column_int(stmt, 3);
+    }
+    if (sqlite3_column_type(stmt, 4) != SQLITE_NULL) {
+      s.display_line = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+    }
+    if (sqlite3_column_type(stmt, 5) != SQLITE_NULL) {
+      s.is_airplay = sqlite3_column_int(stmt, 5);
     }
     sources.push_back(s);
   }
@@ -479,6 +494,9 @@ std::string StateRepository::sources_json() const {
     if (sources[i].input_gain) {
       out << ",\"inputGain\":" << *sources[i].input_gain;
     }
+    if (sources[i].is_airplay) {
+      out << ",\"isAirplay\":" << *sources[i].is_airplay;
+    }
     out << "}";
   }
   out << "]";
@@ -563,6 +581,40 @@ std::string StateRepository::snapshot_json() const {
   out << "{\"controller\":" << controller_json() << ",\"zones\":" << zones_json()
       << ",\"sources\":" << sources_json() << ",\"groups\":" << groups_json() << "}";
   return out.str();
+}
+
+std::optional<int> StateRepository::airplay_source_number() const {
+  sqlite3_stmt* stmt = nullptr;
+  const char* sql = "SELECT source_number FROM hifi_sources WHERE is_airplay = 1 LIMIT 2";
+  auto* db = static_cast<sqlite3*>(db_);
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return std::nullopt;
+  }
+  std::optional<int> source;
+  int count = 0;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    source = sqlite3_column_int(stmt, 0);
+    ++count;
+  }
+  sqlite3_finalize(stmt);
+  if (count != 1) {
+    return std::nullopt;
+  }
+  return source;
+}
+
+void StateRepository::set_airplay_source(int source_number) {
+  if (source_number < 1 || source_number > 8) {
+    return;
+  }
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  sqlite3_exec(db, "UPDATE hifi_sources SET is_airplay = 0", nullptr, nullptr, nullptr);
+  const std::string sql =
+      "INSERT INTO hifi_sources(source_number,is_airplay,updated_at) VALUES(" +
+      std::to_string(source_number) + ",1,'" + now +
+      "') ON CONFLICT(source_number) DO UPDATE SET is_airplay=1,updated_at=excluded.updated_at";
+  sqlite3_exec(db, sql.c_str(), nullptr, nullptr, nullptr);
 }
 
 }  // namespace homepi::hifi_serial

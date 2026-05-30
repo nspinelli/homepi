@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdbool.h>
 
 #include "config.h"
@@ -19,11 +20,14 @@ bool audio_router_start(const HomepiConfig* cfg, const DacAssignment* assignment
 void audio_router_stop(void);
 
 /**
- * Notifies router that owner zone changed (for fade).
- * @param new_owner New owner zone (0 = none).
- * @param previous_owner Previous owner.
+ * Applies stack-aware capture modes and selects the playback owner.
+ * Stack zones with audio data are buffered; other stack zones and all
+ * non-stack zones are drained (read and discarded) to keep loopback healthy.
+ * @param preferred_owner Hook-selected owner from the active stack top.
+ * @param stack Ordered active zone ids (index 0 = highest priority).
+ * @param stack_count Number of entries in stack.
  */
-void audio_router_on_owner_changed(int new_owner, int previous_owner);
+void audio_router_apply_routing(int preferred_owner, const int* stack, size_t stack_count);
 
 /**
  * Notifies router that DAC should enter idle keepalive mode.

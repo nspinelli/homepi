@@ -66,6 +66,24 @@ void zone_state_on_active_start(ZoneState* state, int zone_id);
 bool zone_state_on_active_end(ZoneState* state, int zone_id);
 
 /**
+ * Ends routing for a zone when it stops playback.
+ * Only the current DAC owner is removed; non-owner play_end is ignored so
+ * fallback zones remain in the active stack.
+ * @param state State object.
+ * @param zone_id Zone 1–16.
+ * @return True when owner was cleared (stack empty).
+ */
+bool zone_state_on_route_end(ZoneState* state, int zone_id);
+
+/**
+ * Joins a zone to the active stack without taking DAC ownership.
+ * Used when playback resumes on a zone that is not the current owner.
+ * @param state State object.
+ * @param zone_id Zone 1–16.
+ */
+void zone_state_on_route_join(ZoneState* state, int zone_id);
+
+/**
  * Updates metadata field for a zone.
  * @param state State object.
  * @param zone_id Zone id.
@@ -89,3 +107,13 @@ int zone_state_get_owner(const ZoneState* state);
  * @return Number of entries copied.
  */
 size_t zone_state_copy_stack(const ZoneState* state, int* out, size_t max_len);
+
+/**
+ * Gets the last known AirPlay client IP for a zone.
+ * @param state State object.
+ * @param zone_id Zone 1–16.
+ * @param out Output buffer.
+ * @param out_len Buffer size.
+ * @return True when a non-empty IP was copied.
+ */
+bool zone_state_get_client_ip(const ZoneState* state, int zone_id, char* out, size_t out_len);

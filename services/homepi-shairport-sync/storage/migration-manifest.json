@@ -1,0 +1,9 @@
+{
+  "service": "homepi-shairport-sync",
+  "migrations": [
+    {
+      "id": "003-shairport-sync",
+      "file": "migrations/003-shairport-sync.sql"
+    }
+  ]
+}

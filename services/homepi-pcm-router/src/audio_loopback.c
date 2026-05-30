@@ -84,17 +84,10 @@ bool audio_loopback_validate_all(const HomepiConfig* cfg) {
   bool ok = true;
   for (int zone = 1; zone <= cfg->zone_count; ++zone) {
     char capture[128];
-    char playback[128];
     if (!audio_loopback_capture_device(zone, cfg, capture, sizeof(capture))) {
       return false;
     }
-    if (!audio_loopback_playback_device(zone, cfg, playback, sizeof(playback))) {
-      return false;
-    }
     if (!try_open_device(capture, cfg, SND_PCM_STREAM_CAPTURE)) {
-      ok = false;
-    }
-    if (!try_open_device(playback, cfg, SND_PCM_STREAM_PLAYBACK)) {
       ok = false;
     }
   }

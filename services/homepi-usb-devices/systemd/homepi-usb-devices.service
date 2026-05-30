@@ -15,7 +15,6 @@ Restart=on-failure
 RestartSec=5
 RuntimeDirectory=homepi
 RuntimeDirectoryPreserve=yes
-NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

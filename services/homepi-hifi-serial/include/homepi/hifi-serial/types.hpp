@@ -76,6 +76,7 @@ struct SourceState {
   std::optional<int> enabled;
   std::optional<int> input_gain;
   std::optional<std::string> display_line;
+  std::optional<int> is_airplay;
   std::string updated_at;
 };
 

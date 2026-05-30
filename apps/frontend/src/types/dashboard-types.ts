@@ -44,7 +44,9 @@ export interface SystemStatusSnapshot {
   nqptp: "healthy" | "degraded" | "offline";
   metadata: "healthy" | "degraded" | "offline";
   pcmRouter: "healthy" | "degraded" | "offline";
+  shairport: "healthy" | "degraded" | "offline";
   uptimeMs: number;
+  cpuTempC: number | null;
   lastEventAt: string | null;
 }
 

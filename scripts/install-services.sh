@@ -11,6 +11,7 @@ SERVICE_DIRS=(
   "homepi-pcm-router"
   "homepi-metadata"
   "homepi-hifi-serial"
+  "homepi-shairport-sync"
 )
 
 log() {

@@ -13,6 +13,7 @@
 #include "json_events.h"
 #include "log.h"
 #include "mqtt_client.h"
+#include "nqptp_refresh.h"
 #include "unix_socket_server.h"
 #include "zone_state.h"
 
@@ -28,16 +29,51 @@ static void on_signal(int signo) {
   g_stop = 1;
 }
 
+static void sync_audio_routing(void) {
+  if (!g_audio_router_active) {
+    return;
+  }
+  int stack[HOMEPI_PCM_MAX_ZONES];
+  const size_t count = zone_state_copy_stack(&g_zone_state, stack, HOMEPI_PCM_MAX_ZONES);
+  const int owner = zone_state_get_owner(&g_zone_state);
+  audio_router_apply_routing(owner, stack, count);
+}
+
 static void on_zone_event(const char* event_name, int owner, int previous, void* user) {
   (void)user;
   if (!g_audio_router_active) {
     return;
   }
+  if (strcmp(event_name, "owner_changed") == 0 && owner > 0 && previous > 0 && owner != previous) {
+    char client_ip[64];
+    zone_state_get_client_ip(&g_zone_state, owner, client_ip, sizeof(client_ip));
+    nqptp_schedule_owner_handoff_refresh(owner, client_ip, 750);
+  }
   if (strcmp(event_name, "owner_cleared") == 0) {
-    audio_router_on_owner_cleared();
+    mqtt_client_rebuild_routing_stack(&g_zone_state);
+  }
+  sync_audio_routing();
+}
+
+static void on_socket_command(const char* method, int zone_id, void* user) {
+  ZoneState* state = (ZoneState*)user;
+  if (!state || zone_id < 1) {
     return;
   }
-  audio_router_on_owner_changed(owner, previous);
+  if (strcmp(method, "route_start") == 0) {
+    zone_state_on_active_start(state, zone_id);
+    return;
+  }
+  if (strcmp(method, "route_end") == 0) {
+    zone_state_on_active_end(state, zone_id);
+    if (zone_state_get_owner(state) == 0) {
+      mqtt_client_rebuild_routing_stack(state);
+    }
+    return;
+  }
+  if (strcmp(method, "route_join") == 0) {
+    zone_state_on_route_join(state, zone_id);
+  }
 }
 
 static const char* snapshot_json(void) {
@@ -89,7 +125,8 @@ static int run_daemon(void) {
   zone_state_init(&g_zone_state, &g_cfg);
   zone_state_set_callback(&g_zone_state, on_zone_event, NULL);
 
-  if (!unix_socket_server_start(g_cfg.event_socket_path, snapshot_json)) {
+  if (!unix_socket_server_start(g_cfg.event_socket_path, snapshot_json, on_socket_command,
+                                &g_zone_state)) {
     log_msg(LOG_LEVEL_ERROR, "main", "socket_start_failed", g_cfg.event_socket_path);
     return 1;
   }
@@ -108,12 +145,13 @@ static int run_daemon(void) {
     g_audio_router_active = true;
     g_dac_state_label = "DAC_OPEN";
     log_msg(LOG_LEVEL_INFO, "main", "started", assignment.dac_device);
+    sync_audio_routing();
   } else {
     g_dac_state_label = "DAC_UNAVAILABLE";
     log_msg(LOG_LEVEL_WARN, "main", "audio_router_degraded", assignment.dac_device);
     json_events_emit("modules.pcm", "dac_state", "startup",
                      "{\"state\":\"DAC_UNAVAILABLE\",\"reason\":\"dac_open_failed\","
-                     "\"device\":\"hw:HomePiPrimaryAudio,0\"}");
+                     "\"device\":\"plughw:HomePiPrimary,0\"}");
   }
 
   if (g_audio_router_active) {

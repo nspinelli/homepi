@@ -55,6 +55,8 @@ install_files() {
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/002-hifi-serial.sql" \
     "${INSTALL_ROOT}/storage/migrations/002-hifi-serial.sql"
+  install -m 0644 "${SERVICE_ROOT}/storage/migrations/003-shairport-sync.sql" \
+    "${INSTALL_ROOT}/storage/migrations/003-shairport-sync.sql"
 
   install -d -m 0755 "${RUNTIME_ROOT}/state"
   install -d -m 0755 "${RUNTIME_ROOT}/generated"

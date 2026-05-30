@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pthread.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -12,6 +13,7 @@ typedef struct PcmRingBuffer {
   size_t write_index;
   size_t read_index;
   size_t available_frames;
+  pthread_mutex_t mutex;
 } PcmRingBuffer;
 
 /**
@@ -45,3 +47,17 @@ size_t ringbuffer_read(PcmRingBuffer* rb, float* out, size_t frame_count);
 
 /** Clears all buffered frames. */
 void ringbuffer_clear(PcmRingBuffer* rb);
+
+/**
+ * Keeps only the newest frames, dropping older buffered audio.
+ * @param rb Ring buffer.
+ * @param keep_frames Number of newest frames to retain.
+ */
+void ringbuffer_sync_to_latest(PcmRingBuffer* rb, size_t keep_frames);
+
+/**
+ * Returns the number of frames currently available to read.
+ * @param rb Ring buffer.
+ * @return Available frame count.
+ */
+size_t ringbuffer_available(const PcmRingBuffer* rb);

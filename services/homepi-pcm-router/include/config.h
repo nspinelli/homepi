@@ -20,6 +20,8 @@ typedef struct HomepiConfig {
   unsigned int audio_rate;
   unsigned int audio_channels;
   char audio_format[32];
+  unsigned int dac_rate;
+  char dac_format[32];
   unsigned int period_frames;
   unsigned int buffer_frames;
   unsigned int fade_ms;

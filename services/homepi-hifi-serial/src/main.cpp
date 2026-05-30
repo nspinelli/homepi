@@ -80,6 +80,17 @@ int main(int argc, char* argv[]) {
 
   homepi::hifi_serial::StateRepository repository(config.database_path,
                                                   read_migration(migration_path));
+  {
+    const std::string shairport_migration = read_migration("storage/migrations/003-shairport-sync.sql");
+    if (!shairport_migration.empty()) {
+      try {
+        repository.apply_migration(shairport_migration);
+      } catch (const std::exception& ex) {
+        logger.log(homepi::logging::LogLevel::WARN, "hifi.serial", "shairport_migration_failed",
+                   "startup", ex.what());
+      }
+    }
+  }
   g_repository = &repository;
 
   const auto serial_resolution = homepi::hifi_serial::resolve_serial_path(
@@ -210,6 +221,36 @@ int main(int argc, char* argv[]) {
           }
           queue.enqueue(homepi::hifi_serial::cmd_raw(command));
           return ok("{\"queued\":true}");
+        }
+
+        if (method == "getAirplaySource") {
+          const auto source = repository.airplay_source_number();
+          if (!source.has_value()) {
+            return ok("{\"sourceNumber\":null}");
+          }
+          return ok("{\"sourceNumber\":" + std::to_string(*source) + "}");
+        }
+
+        if (method == "setAirplaySource") {
+          const auto colon = line.find("\"sourceNumber\"");
+          if (colon == std::string::npos) {
+            return err("sourceNumber required");
+          }
+          const auto value_colon = line.find(':', colon);
+          if (value_colon == std::string::npos) {
+            return err("sourceNumber required");
+          }
+          int source_number = 0;
+          try {
+            source_number = std::stoi(line.substr(value_colon + 1));
+          } catch (...) {
+            return err("sourceNumber must be an integer");
+          }
+          if (source_number < 1 || source_number > 8) {
+            return err("sourceNumber must be between 1 and 8");
+          }
+          repository.set_airplay_source(source_number);
+          return ok("{\"sourceNumber\":" + std::to_string(source_number) + "}");
         }
 
         if (method == "subscribe") {

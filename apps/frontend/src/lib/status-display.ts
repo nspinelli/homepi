@@ -48,6 +48,7 @@ const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = 
   { key: "usbDevices", name: "USB Devices" },
   { key: "hifiSerial", name: "HiFi Serial" },
   { key: "nqptp", name: "NQPTP" },
+  { key: "shairport", name: "Shairport Sync" },
   { key: "metadata", name: "Metadata" },
   { key: "pcmRouter", name: "PCM Router" },
 ];
@@ -57,6 +58,8 @@ const EVENT_SOURCE_LABELS: Record<string, string> = {
   "homepi-backend": "Backend",
   "homepi-usb-devices": "USB Devices",
   "homepi-nqptp": "NQPTP",
+  "homepi-shairport-supervisor": "Shairport Sync",
+  "homepi-shairport": "Shairport Sync",
   "homepi-metadata": "Metadata",
   "homepi-pcm-router": "PCM Router",
 };
@@ -177,6 +180,45 @@ export function formatUptime(uptimeMs: number | undefined): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return `${hours}h ${minutes}m ${seconds}s`;
+}
+
+/**
+ * Converts Celsius to Fahrenheit.
+ * @param celsius - Temperature in degrees Celsius.
+ * @returns Temperature in degrees Fahrenheit.
+ */
+function celsiusToFahrenheit(celsius: number): number {
+  return (celsius * 9) / 5 + 32;
+}
+
+/**
+ * Formats CPU temperature for display.
+ * @param cpuTempC - Temperature in degrees Celsius.
+ * @returns Human-readable temperature string in Fahrenheit.
+ */
+export function formatCpuTemp(cpuTempC: number | null | undefined): string {
+  if (cpuTempC === null || cpuTempC === undefined) {
+    return "—";
+  }
+  return `${celsiusToFahrenheit(cpuTempC).toFixed(1)}°F`;
+}
+
+/**
+ * Maps CPU temperature to a visual status for styling.
+ * @param cpuTempC - Temperature in degrees Celsius.
+ * @returns Visual status bucket.
+ */
+export function mapCpuTempStatus(cpuTempC: number | null | undefined): ServiceVisualStatus {
+  if (cpuTempC === null || cpuTempC === undefined) {
+    return "offline";
+  }
+  if (cpuTempC >= 75) {
+    return "offline";
+  }
+  if (cpuTempC >= 60) {
+    return "warning";
+  }
+  return "online";
 }
 
 /**

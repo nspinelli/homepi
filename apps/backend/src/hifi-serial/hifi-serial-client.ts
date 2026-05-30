@@ -111,6 +111,30 @@ export class HifiSerialClient {
   }
 
   /**
+   * Returns the configured AirPlay source number.
+   * @param correlationId - Request correlation id.
+   */
+  async getAirplaySource(
+    correlationId: string
+  ): Promise<{ sourceNumber: number | null }> {
+    return this.request<{ sourceNumber: number | null }>("getAirplaySource", correlationId);
+  }
+
+  /**
+   * Sets the AirPlay source designation.
+   * @param sourceNumber - Source slot 1-8.
+   * @param correlationId - Request correlation id.
+   */
+  async setAirplaySource(
+    sourceNumber: number,
+    correlationId: string
+  ): Promise<{ sourceNumber: number }> {
+    return this.request<{ sourceNumber: number }>("setAirplaySource", correlationId, {
+      sourceNumber,
+    });
+  }
+
+  /**
    * Sends a request to the Unix socket API.
    * @param method - Socket method name.
    * @param correlationId - Correlation id.

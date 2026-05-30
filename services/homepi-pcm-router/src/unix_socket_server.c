@@ -14,6 +14,8 @@ static pthread_t g_thread;
 static bool g_stop = false;
 static char g_socket_path[256];
 static const char* (*g_snapshot_fn)(void) = NULL;
+static UnixSocketCommandFn g_command_fn = NULL;
+static void* g_command_user = NULL;
 static int g_subscribers[32];
 static size_t g_subscriber_count = 0;
 static pthread_mutex_t g_clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -23,6 +25,35 @@ static void iso_timestamp(char* out, size_t out_len) {
   struct tm tm;
   gmtime_r(&now, &tm);
   strftime(out, out_len, "%Y-%m-%dT%H:%M:%S.000Z", &tm);
+}
+
+static int parse_zone_id(const char* line) {
+  const char* key = strstr(line, "\"zoneId\"");
+  if (!key) {
+    return 0;
+  }
+  const char* colon = strchr(key, ':');
+  if (!colon) {
+    return 0;
+  }
+  return atoi(colon + 1);
+}
+
+static void handle_command_line(const char* line) {
+  if (!g_command_fn || !line) {
+    return;
+  }
+  if (strstr(line, "\"route_start\"") != NULL) {
+    g_command_fn("route_start", parse_zone_id(line), g_command_user);
+    return;
+  }
+  if (strstr(line, "\"route_end\"") != NULL) {
+    g_command_fn("route_end", parse_zone_id(line), g_command_user);
+    return;
+  }
+  if (strstr(line, "\"route_join\"") != NULL) {
+    g_command_fn("route_join", parse_zone_id(line), g_command_user);
+  }
 }
 
 static void send_snapshot(int client_fd) {
@@ -93,6 +124,10 @@ static void* client_thread(void* arg) {
           pthread_mutex_unlock(&g_clients_mutex);
           send_snapshot(client_fd);
         }
+      } else if (strstr(buffer, "\"route_start\"") != NULL ||
+                 strstr(buffer, "\"route_end\"") != NULL ||
+                 strstr(buffer, "\"route_join\"") != NULL) {
+        handle_command_line(buffer);
       }
       buflen = 0;
       line = NULL;
@@ -129,8 +164,11 @@ static void* listen_thread(void* arg) {
   return NULL;
 }
 
-bool unix_socket_server_start(const char* socket_path, const char* (*snapshot_json_fn)(void)) {
+bool unix_socket_server_start(const char* socket_path, const char* (*snapshot_json_fn)(void),
+                              UnixSocketCommandFn command_fn, void* command_user) {
   g_snapshot_fn = snapshot_json_fn;
+  g_command_fn = command_fn;
+  g_command_user = command_user;
   snprintf(g_socket_path, sizeof(g_socket_path), "%s", socket_path);
   unlink(socket_path);
 

@@ -12,6 +12,8 @@ import {
   formatLogTime,
   formatTimestamp,
   formatUptime,
+  formatCpuTemp,
+  mapCpuTempStatus,
   type LogLevel,
   type ServiceVisualStatus,
 } from "@/lib/status-display.js";
@@ -111,12 +113,23 @@ export function StatusPage(): React.JSX.Element {
         <p className="mb-4 text-sm text-muted-foreground">Loading platform status…</p>
       ) : null}
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Platform uptime</p>
           <p className="mt-1 font-mono text-lg text-foreground">
             {formatUptime(state.systemStatus?.uptimeMs)}
           </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-sm text-muted-foreground">CPU temperature</p>
+          <div className="mt-1 flex items-center gap-2">
+            <div
+              className={`size-2 rounded-full ${STATUS_COLORS[mapCpuTempStatus(state.systemStatus?.cpuTempC)]}`}
+            />
+            <p className="font-mono text-lg text-foreground">
+              {formatCpuTemp(state.systemStatus?.cpuTempC)}
+            </p>
+          </div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Last event</p>
@@ -132,7 +145,7 @@ export function StatusPage(): React.JSX.Element {
             {state.health?.status ?? "unknown"}
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-lg border border-border bg-card p-4 sm:col-span-2 lg:col-span-1">
           <p className="text-sm text-muted-foreground">API correlation</p>
           <p className="mt-1 truncate font-mono text-sm text-foreground">
             {state.lastEvent?.correlationId ?? "—"}

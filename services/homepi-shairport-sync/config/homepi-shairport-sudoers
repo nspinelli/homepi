@@ -1,0 +1,7 @@
+# Allow homepi supervisor to manage Shairport zone instances without a password.
+homepi ALL=(root) NOPASSWD: /bin/systemctl start homepi-shairport@*.service
+homepi ALL=(root) NOPASSWD: /bin/systemctl stop homepi-shairport@*.service
+homepi ALL=(root) NOPASSWD: /bin/systemctl restart homepi-shairport@*.service
+homepi ALL=(root) NOPASSWD: /bin/systemctl start homepi-metadata@*.service
+homepi ALL=(root) NOPASSWD: /bin/systemctl stop homepi-metadata@*.service
+homepi ALL=(root) NOPASSWD: /bin/systemctl restart homepi-metadata@*.service

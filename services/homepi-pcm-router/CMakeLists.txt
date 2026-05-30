@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ALSA REQUIRED alsa)
 pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
+pkg_check_modules(SOXR REQUIRED soxr)
 find_package(SQLite3 REQUIRED)
 find_package(Threads REQUIRED)
 
@@ -22,6 +23,7 @@ set(SOURCES
   src/json_events.c
   src/unix_socket_server.c
   src/mqtt_client.c
+  src/nqptp_refresh.c
   src/log.c
 )
 
@@ -30,13 +32,14 @@ target_include_directories(homepi-pcm-router PRIVATE include)
 target_link_libraries(homepi-pcm-router PRIVATE
   ${ALSA_LIBRARIES}
   ${MOSQUITTO_LIBRARIES}
+  ${SOXR_LIBRARIES}
   SQLite::SQLite3
   Threads::Threads
   m
 )
 target_compile_options(homepi-pcm-router PRIVATE -Wall -Wextra -Wpedantic)
-target_link_directories(homepi-pcm-router PRIVATE ${ALSA_LIBRARY_DIRS} ${MOSQUITTO_LIBRARY_DIRS})
-target_include_directories(homepi-pcm-router PRIVATE ${ALSA_INCLUDE_DIRS} ${MOSQUITTO_INCLUDE_DIRS})
+target_link_directories(homepi-pcm-router PRIVATE ${ALSA_LIBRARY_DIRS} ${MOSQUITTO_LIBRARY_DIRS} ${SOXR_LIBRARY_DIRS})
+target_include_directories(homepi-pcm-router PRIVATE ${ALSA_INCLUDE_DIRS} ${MOSQUITTO_INCLUDE_DIRS} ${SOXR_INCLUDE_DIRS})
 
 install(TARGETS homepi-pcm-router RUNTIME DESTINATION bin)
 

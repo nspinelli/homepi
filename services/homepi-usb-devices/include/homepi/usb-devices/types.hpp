@@ -51,7 +51,7 @@ struct ServiceConfig {
   std::string serial_symlink = "vHifi";
   std::string udev_rules_relative = "udev/99-homepi-usb-devices.rules";
   /** Stable ALSA card ID for primary audio (pcm-router). */
-  std::string primary_audio_alsa_id = "HomePiPrimaryAudio";
+  std::string primary_audio_alsa_id = "HomePiPrimary";
   /** Reserved snd-usb-audio index for primary DAC (loopback uses 10–11). */
   int primary_audio_modprobe_index = 2;
   std::string modprobe_relative = "modprobe/homepi-audio-primary.conf";

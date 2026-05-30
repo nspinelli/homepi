@@ -18,6 +18,8 @@
         "getSources",
         "getGroups",
         "getLanguageStrings",
+        "getAirplaySource",
+        "setAirplaySource",
         "subscribe"
       ]
     },

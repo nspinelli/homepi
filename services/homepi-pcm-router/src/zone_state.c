@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "json_events.h"
+#include "log.h"
 
 struct ZoneStateCallback {
   ZoneStateEventFn fn;
@@ -33,6 +34,25 @@ static void push_stack(ZoneState* state, int zone_id) {
   }
   state->active_stack[0] = zone_id;
   state->active_count++;
+}
+
+static void log_stack_transition(const char* action, int zone_id, const ZoneState* state) {
+  char stack_buf[128];
+  size_t offset = 0;
+  stack_buf[0] = '\0';
+  for (size_t i = 0; i < state->active_count && offset < sizeof(stack_buf) - 8; ++i) {
+    const int written =
+        snprintf(stack_buf + offset, sizeof(stack_buf) - offset, "%s%d",
+                 i == 0 ? "" : ",", state->active_stack[i]);
+    if (written <= 0) {
+      break;
+    }
+    offset += (size_t)written;
+  }
+  char detail[192];
+  snprintf(detail, sizeof(detail), "zone=%d owner=%d stack=[%s]", zone_id, state->owner_zone_id,
+           stack_buf);
+  log_msg(LOG_LEVEL_INFO, "zone_state", action, detail);
 }
 
 static void emit_owner_event(const char* event_name, int owner, int previous) {
@@ -79,13 +99,26 @@ void zone_state_on_active_start(ZoneState* state, int zone_id) {
   state->zones[zone_id - 1].active = true;
   state->owner_zone_id = state->active_count > 0 ? state->active_stack[0] : 0;
   const int owner = state->owner_zone_id;
+  log_stack_transition("route_start", zone_id, state);
   pthread_mutex_unlock(&state->mutex);
 
+  if (g_event_fn) {
+    g_event_fn("zone_active", zone_id, previous, g_event_user);
+  }
   emit_owner_event("owner_changed", owner, previous);
 
   char payload[128];
   snprintf(payload, sizeof(payload), "{\"zoneId\":%d,\"active\":true}", zone_id);
   json_events_emit("modules.pcm", "zone_updated", "zone-active", payload);
+}
+
+static bool zone_in_stack(const ZoneState* state, int zone_id) {
+  for (size_t i = 0; i < state->active_count; ++i) {
+    if (state->active_stack[i] == zone_id) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool zone_state_on_active_end(ZoneState* state, int zone_id) {
@@ -94,6 +127,12 @@ bool zone_state_on_active_end(ZoneState* state, int zone_id) {
   }
 
   pthread_mutex_lock(&state->mutex);
+  if (!zone_in_stack(state, zone_id)) {
+    const bool cleared = state->owner_zone_id == 0;
+    pthread_mutex_unlock(&state->mutex);
+    return cleared;
+  }
+
   const int previous = state->owner_zone_id;
   state->zones[zone_id - 1].active = false;
   remove_from_stack(state, zone_id);
@@ -104,8 +143,12 @@ bool zone_state_on_active_end(ZoneState* state, int zone_id) {
   }
   const int owner = state->owner_zone_id;
   const bool cleared = owner == 0;
+  log_stack_transition("route_end", zone_id, state);
   pthread_mutex_unlock(&state->mutex);
 
+  if (g_event_fn) {
+    g_event_fn("zone_inactive", zone_id, previous, g_event_user);
+  }
   if (cleared) {
     emit_owner_event("owner_cleared", 0, previous);
   } else {
@@ -116,6 +159,39 @@ bool zone_state_on_active_end(ZoneState* state, int zone_id) {
   snprintf(payload, sizeof(payload), "{\"zoneId\":%d,\"active\":false}", zone_id);
   json_events_emit("modules.pcm", "zone_updated", "zone-inactive", payload);
   return cleared;
+}
+
+bool zone_state_on_route_end(ZoneState* state, int zone_id) {
+  return zone_state_on_active_end(state, zone_id);
+}
+
+void zone_state_on_route_join(ZoneState* state, int zone_id) {
+  if (zone_id < 1 || zone_id > HOMEPI_PCM_MAX_ZONES) {
+    return;
+  }
+
+  pthread_mutex_lock(&state->mutex);
+  const int previous = state->owner_zone_id;
+  if (!zone_in_stack(state, zone_id) && state->active_count < HOMEPI_PCM_MAX_ZONES) {
+    state->active_stack[state->active_count++] = zone_id;
+  }
+  state->zones[zone_id - 1].active = true;
+  if (state->owner_zone_id == 0 && state->active_count > 0) {
+    state->owner_zone_id = state->active_stack[0];
+  }
+  const int owner = state->owner_zone_id;
+  pthread_mutex_unlock(&state->mutex);
+
+  if (g_event_fn) {
+    g_event_fn("zone_active", zone_id, previous, g_event_user);
+  }
+  if (owner != previous && owner > 0) {
+    emit_owner_event("owner_changed", owner, previous);
+  }
+
+  char payload[128];
+  snprintf(payload, sizeof(payload), "{\"zoneId\":%d,\"active\":true,\"joined\":true}", zone_id);
+  json_events_emit("modules.pcm", "zone_updated", "zone-join", payload);
 }
 
 void zone_state_set_metadata(ZoneState* state, int zone_id, const char* field, const char* value) {
@@ -159,4 +235,18 @@ size_t zone_state_copy_stack(const ZoneState* state, int* out, size_t max_len) {
   }
   pthread_mutex_unlock((pthread_mutex_t*)&state->mutex);
   return n;
+}
+
+bool zone_state_get_client_ip(const ZoneState* state, int zone_id, char* out, size_t out_len) {
+  if (!state || !out || out_len == 0 || zone_id < 1 || zone_id > HOMEPI_PCM_MAX_ZONES) {
+    return false;
+  }
+  out[0] = '\0';
+  pthread_mutex_lock((pthread_mutex_t*)&state->mutex);
+  const char* ip = state->zones[zone_id - 1].client_ip;
+  if (ip[0] != '\0') {
+    snprintf(out, out_len, "%s", ip);
+  }
+  pthread_mutex_unlock((pthread_mutex_t*)&state->mutex);
+  return out[0] != '\0';
 }

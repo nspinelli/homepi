@@ -39,6 +39,11 @@ export type MetadataStatus = "healthy" | "degraded" | "offline";
 export type PcmRouterStatus = "healthy" | "degraded" | "offline";
 
 /**
+ * Shairport supervisor service status for the system dashboard.
+ */
+export type ShairportStatus = "healthy" | "degraded" | "offline";
+
+/**
  * Runtime lifecycle status exposed on the dashboard.
  */
 export type RuntimeDashboardStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
@@ -73,8 +78,12 @@ export interface SystemStatusSnapshot {
   metadata: MetadataStatus;
   /** PCM router daemon status (systemd). */
   pcmRouter: PcmRouterStatus;
+  /** Shairport supervisor status (systemd). */
+  shairport: ShairportStatus;
   /** Process uptime in milliseconds. */
   uptimeMs: number;
+  /** CPU temperature in degrees Celsius, when available. */
+  cpuTempC: number | null;
   /** ISO8601 timestamp of the last emitted system event. */
   lastEventAt: string | null;
 }
@@ -94,6 +103,7 @@ export interface CoreServiceStatusEntry {
     | NqptpStatus
     | MetadataStatus
     | PcmRouterStatus
+    | ShairportStatus
     | "active"
     | "inactive"
     | RuntimeDashboardStatus;

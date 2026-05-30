@@ -1,0 +1,17 @@
+[Unit]
+Description=HomePi Shairport Sync Supervisor
+Wants=network-online.target mosquitto.service
+After=network-online.target homepi-nqptp.service homepi-pcm-router.service homepi-hifi-serial.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/opt/homepi/services/shairport
+ExecStart=/opt/homepi/services/shairport/bin/homepi-shairport-supervisor /opt/homepi/services/shairport/config/service-config.json
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-/opt/homepi/services/shairport/env/.env
+
+[Install]
+WantedBy=multi-user.target

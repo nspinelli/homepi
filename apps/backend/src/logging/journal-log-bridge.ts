@@ -15,7 +15,9 @@ const JOURNAL_UNITS = [
   "homepi-hifi-serial.service",
   "homepi-pcm-router.service",
   "homepi-nqptp.service",
-  "homepi-metadata.service",
+  "homepi-shairport-supervisor.service",
+  "homepi-shairport@.service",
+  "homepi-metadata@.service",
 ] as const;
 
 /**

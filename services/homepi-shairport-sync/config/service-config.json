@@ -1,0 +1,27 @@
+{
+  "service": "homepi-shairport-supervisor",
+  "version": "0.1.0",
+  "environment": "production",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "generatedDir": "/opt/homepi/runtime/generated",
+      "cacheDir": "/opt/homepi/runtime/cache",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi",
+      "databasePath": "/opt/homepi/runtime/state/homepi.sqlite"
+    }
+  },
+  "shairportSync": {
+    "upstreamVersion": "4.3.6",
+    "installRoot": "/opt/homepi/services/shairport",
+    "zoneCount": 16,
+    "healthIntervalSec": 30
+  }
+}

@@ -11,11 +11,14 @@ import type {
   MetadataStatus,
   NqptpStatus,
   PcmRouterStatus,
+  ShairportStatus,
   UsbDevicesStatus,
 } from "./types/system-status-types.js";
 import { getSystemdUnitActiveState } from "./runtime/check-systemd-unit.js";
 import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
+import { AudioRoutes } from "./audio/audio-routes.js";
+import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
 import type { HifiSerialHealth } from "./hifi-serial/hifi-serial-types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -54,7 +57,9 @@ const statusStore = new SystemStatusStore({
   nqptp: "offline",
   metadata: "offline",
   pcmRouter: "offline",
+  shairport: "offline",
   uptimeMs: 0,
+  cpuTempC: null,
   lastEventAt: null,
 });
 
@@ -66,6 +71,7 @@ const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.soc
 const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
+const audioRoutes = new AudioRoutes({ client: hifiSerialClient, logger });
 
 const host = "127.0.0.1";
 const port = 3000;
@@ -87,6 +93,7 @@ const server = createHttpServer({
   port,
   usbRoutes,
   hifiRoutes,
+  audioRoutes,
   hifiSerialSocketPath: hifiSocketPath,
   pcmRouterSocketPath,
 });
@@ -139,7 +146,9 @@ function mapHifiSerialStatus(health: HifiSerialHealth): HifiSerialStatus {
  * @param state - systemctl is-active output.
  * @returns Dashboard healthy / degraded / offline.
  */
-function mapSystemdServiceStatus(state: string): NqptpStatus | MetadataStatus | PcmRouterStatus {
+function mapSystemdServiceStatus(
+  state: string
+): NqptpStatus | MetadataStatus | PcmRouterStatus | ShairportStatus {
   if (state === "active") {
     return "healthy";
   }
@@ -166,10 +175,27 @@ async function pollNqptpHealth(): Promise<void> {
  */
 async function pollMetadataHealth(): Promise<void> {
   try {
-    const state = await getSystemdUnitActiveState("homepi-metadata");
-    statusStore.patchStatus({ metadata: mapSystemdServiceStatus(state) });
+    const supervisor = await getSystemdUnitActiveState("homepi-shairport-supervisor");
+    if (supervisor !== "active") {
+      statusStore.patchStatus({ metadata: "offline" });
+      return;
+    }
+    const zone1 = await getSystemdUnitActiveState("homepi-metadata@1");
+    statusStore.patchStatus({ metadata: mapSystemdServiceStatus(zone1) });
   } catch {
     statusStore.patchStatus({ metadata: "offline" });
+  }
+}
+
+/**
+ * Polls homepi-shairport-supervisor via systemd and updates the system status store.
+ */
+async function pollShairportHealth(): Promise<void> {
+  try {
+    const state = await getSystemdUnitActiveState("homepi-shairport-supervisor");
+    statusStore.patchStatus({ shairport: mapSystemdServiceStatus(state) });
+  } catch {
+    statusStore.patchStatus({ shairport: "offline" });
   }
 }
 
@@ -200,11 +226,21 @@ async function pollHifiSerialHealth(): Promise<void> {
   }
 }
 
+/**
+ * Polls CPU temperature and updates the system status store.
+ */
+async function pollCpuTemperature(): Promise<void> {
+  const cpuTempC = await readCpuTemperatureC();
+  statusStore.patchStatus({ cpuTempC });
+}
+
 void pollUsbDevicesHealth();
 void pollHifiSerialHealth();
 void pollNqptpHealth();
 void pollMetadataHealth();
+void pollShairportHealth();
 void pollPcmRouterHealth();
+void pollCpuTemperature();
 setInterval(() => {
   void pollUsbDevicesHealth();
 }, 10_000);
@@ -218,8 +254,14 @@ setInterval(() => {
   void pollMetadataHealth();
 }, 10_000);
 setInterval(() => {
+  void pollShairportHealth();
+}, 10_000);
+setInterval(() => {
   void pollPcmRouterHealth();
 }, 10_000);
+setInterval(() => {
+  void pollCpuTemperature();
+}, 5_000);
 
 setInterval(() => {
   statusStore.patchStatus({

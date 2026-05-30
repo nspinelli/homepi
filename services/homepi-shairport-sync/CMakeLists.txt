@@ -1,0 +1,35 @@
+cmake_minimum_required(VERSION 3.16)
+project(homepi-shairport-sync VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(SQLite3 REQUIRED)
+find_package(Threads REQUIRED)
+
+set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
+
+add_executable(homepi-shairport-supervisor
+  src/main.cpp
+  src/config-loader.cpp
+  src/db-repository.cpp
+  src/readiness-gate.cpp
+  src/config-generator.cpp
+  src/systemd-controller.cpp
+  src/hifi-event-client.cpp
+  src/supervisor.cpp
+)
+
+target_include_directories(homepi-shairport-supervisor PRIVATE
+  include
+  ${HOMEPI_LOGGING_CPP}/include
+)
+
+target_link_libraries(homepi-shairport-supervisor PRIVATE
+  SQLite::SQLite3
+  Threads::Threads
+)
+
+target_compile_options(homepi-shairport-supervisor PRIVATE -Wall -Wextra -Wpedantic)
+
+install(TARGETS homepi-shairport-supervisor RUNTIME DESTINATION bin)

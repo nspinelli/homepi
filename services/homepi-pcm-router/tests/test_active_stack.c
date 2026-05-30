@@ -32,6 +32,21 @@ int main(void) {
   assert(cleared);
   assert(zone_state_get_owner(&state) == 0);
 
+  zone_state_on_active_start(&state, 8);
+  assert(zone_state_get_owner(&state) == 8);
+  zone_state_on_active_start(&state, 3);
+  assert(zone_state_get_owner(&state) == 3);
+
+  int stack[HOMEPI_PCM_MAX_ZONES];
+  assert(zone_state_copy_stack(&state, stack, HOMEPI_PCM_MAX_ZONES) == 2);
+  assert(stack[0] == 3);
+  assert(stack[1] == 8);
+
+  zone_state_on_active_end(&state, 3);
+  assert(zone_state_get_owner(&state) == 8);
+  assert(zone_state_copy_stack(&state, stack, HOMEPI_PCM_MAX_ZONES) == 1);
+  assert(stack[0] == 8);
+
   zone_state_destroy(&state);
   printf("test_active_stack: OK\n");
   return 0;

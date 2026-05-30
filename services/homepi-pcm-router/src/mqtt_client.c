@@ -15,6 +15,23 @@ static bool g_stop = false;
 static bool g_connected = false;
 static ZoneState* g_zone_state = NULL;
 static HomepiConfig g_cfg;
+static bool g_zone_session_active[HOMEPI_PCM_MAX_ZONES + 1];
+static bool g_zone_playing[HOMEPI_PCM_MAX_ZONES + 1];
+
+static bool payload_is_true(const char* payload) {
+  return payload != NULL && (payload[0] == '1' || strcmp(payload, "true") == 0);
+}
+
+static void rebuild_routing_stack(void) {
+  if (!g_zone_state || zone_state_get_owner(g_zone_state) > 0) {
+    return;
+  }
+  for (int zone_id = 1; zone_id <= g_cfg.zone_count; ++zone_id) {
+    if (g_zone_session_active[zone_id] || g_zone_playing[zone_id]) {
+      zone_state_on_active_start(g_zone_state, zone_id);
+    }
+  }
+}
 
 static void on_connect(struct mosquitto* mosq, void* userdata, int rc) {
   (void)userdata;
@@ -60,12 +77,46 @@ static void on_message(struct mosquitto* mosq, void* userdata,
     payload[0] = '\0';
   }
 
-  if (strcmp(parsed.field, "active_start") == 0) {
+  if (strcmp(parsed.field, "route_start") == 0) {
     zone_state_on_active_start(g_zone_state, parsed.zone_id);
     return;
   }
-  if (strcmp(parsed.field, "active_end") == 0) {
+  if (strcmp(parsed.field, "route_end") == 0) {
     zone_state_on_active_end(g_zone_state, parsed.zone_id);
+    if (zone_state_get_owner(g_zone_state) == 0) {
+      rebuild_routing_stack();
+    }
+    return;
+  }
+  if (strcmp(parsed.field, "route_join") == 0) {
+    zone_state_on_route_join(g_zone_state, parsed.zone_id);
+    return;
+  }
+  if (strcmp(parsed.field, "active_start") == 0 || strcmp(parsed.field, "active_end") == 0) {
+    return;
+  }
+  if (strcmp(parsed.field, "active") == 0) {
+    if (parsed.zone_id >= 1 && parsed.zone_id <= HOMEPI_PCM_MAX_ZONES) {
+      g_zone_session_active[parsed.zone_id] = payload_is_true(payload);
+      if (g_zone_session_active[parsed.zone_id] && zone_state_get_owner(g_zone_state) == 0) {
+        zone_state_on_active_start(g_zone_state, parsed.zone_id);
+      }
+    }
+    return;
+  }
+  if (strcmp(parsed.field, "playing") == 0) {
+    if (parsed.zone_id >= 1 && parsed.zone_id <= HOMEPI_PCM_MAX_ZONES) {
+      const bool playing = payload_is_true(payload);
+      g_zone_playing[parsed.zone_id] = playing;
+      if (playing && zone_state_get_owner(g_zone_state) == 0) {
+        zone_state_on_active_start(g_zone_state, parsed.zone_id);
+      } else if (!playing && parsed.zone_id == zone_state_get_owner(g_zone_state)) {
+        zone_state_on_active_end(g_zone_state, parsed.zone_id);
+        if (zone_state_get_owner(g_zone_state) == 0) {
+          rebuild_routing_stack();
+        }
+      }
+    }
     return;
   }
 
@@ -74,12 +125,18 @@ static void on_message(struct mosquitto* mosq, void* userdata,
 
 static void* mqtt_loop(void* arg) {
   (void)arg;
+  int rebuild_ticks = 0;
   while (!g_stop) {
     const int rc = mosquitto_loop(g_mosq, 100, 1);
     if (rc != MOSQ_ERR_SUCCESS) {
       g_connected = false;
       mosquitto_reconnect(g_mosq);
       usleep(500000);
+    } else if (g_connected && rebuild_ticks < 15) {
+      rebuild_ticks++;
+      if (rebuild_ticks == 15 && zone_state_get_owner(g_zone_state) == 0) {
+        rebuild_routing_stack();
+      }
     }
   }
   return NULL;
@@ -89,6 +146,8 @@ bool mqtt_client_start(const HomepiConfig* cfg, ZoneState* zone_state) {
   g_zone_state = zone_state;
   g_cfg = *cfg;
   g_stop = false;
+  memset(g_zone_session_active, 0, sizeof(g_zone_session_active));
+  memset(g_zone_playing, 0, sizeof(g_zone_playing));
 
   mosquitto_lib_init();
   g_mosq = mosquitto_new("homepi-pcm-router", true, NULL);
@@ -119,3 +178,8 @@ void mqtt_client_stop(void) {
 }
 
 bool mqtt_client_is_connected(void) { return g_connected; }
+
+void mqtt_client_rebuild_routing_stack(ZoneState* zone_state) {
+  g_zone_state = zone_state;
+  rebuild_routing_stack();
+}

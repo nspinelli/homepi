@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,24 @@ class StateRepository {
   std::string groups_json() const;
 
   std::string snapshot_json() const;
+
+  /**
+   * Returns the configured AirPlay source number, if exactly one exists.
+   * @returns Source number 1-8 or nullopt.
+   */
+  std::optional<int> airplay_source_number() const;
+
+  /**
+   * Marks a single source as the AirPlay source.
+   * @param source_number Source slot 1-8.
+   */
+  void set_airplay_source(int source_number);
+
+  /**
+   * Applies an additional SQL migration idempotently.
+   * @param migration_sql Migration SQL text.
+   */
+  void apply_migration(const std::string& migration_sql);
 
  private:
   void* db_ = nullptr;

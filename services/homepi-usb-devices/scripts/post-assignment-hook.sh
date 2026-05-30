@@ -19,9 +19,9 @@ if [[ "${deploy_rc}" -eq 0 ]]; then
   PRIMARY_MODPROBE_CHANGED=true
   log "Primary audio modprobe changed — applying stable ALSA name"
   if bash "${SCRIPT_DIR}/apply-primary-audio-alsa.sh"; then
-    log "HomePiPrimaryAudio ALSA name is active"
+    log "HomePiPrimary ALSA name is active"
   else
-    log "Scheduling reboot to apply HomePiPrimaryAudio ALSA name"
+    log "Scheduling reboot to apply HomePiPrimary ALSA name"
     sync
     systemctl reboot --no-wall
     exit 0

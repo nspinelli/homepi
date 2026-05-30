@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Applies HomePiPrimaryAudio by rebinding the assigned USB audio device.
-# Exit 0 when /proc/asound/cards lists HomePiPrimaryAudio.
+# Applies HomePiPrimary by rebinding the assigned USB audio device.
+# Exit 0 when /proc/asound/cards lists HomePiPrimary.
 # Exit 1 when the stable ALSA name is still missing (caller should reboot).
 set -euo pipefail
 
 MODPROBE_DEST="/etc/modprobe.d/homepi-audio-primary.conf"
-PRIMARY_CARD_ID="${HOMEPI_PRIMARY_ALSA_CARD:-HomePiPrimaryAudio}"
+PRIMARY_CARD_ID="${HOMEPI_PRIMARY_ALSA_CARD:-HomePiPrimary}"
 WAIT_SEC="${HOMEPI_ALSA_APPLY_WAIT_SEC:-20}"
 
 log() { echo "==> $*"; }

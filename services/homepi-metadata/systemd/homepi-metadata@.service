@@ -1,0 +1,16 @@
+[Unit]
+Description=HomePi Shairport Metadata Reader Zone %i
+PartOf=homepi-shairport-supervisor.service
+After=homepi-shairport@%i.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/opt/homepi/services/metadata
+ExecStart=/opt/homepi/services/metadata/bin/run-metadata-reader.sh %i
+Restart=no
+EnvironmentFile=-/opt/homepi/services/metadata/env/.env
+
+[Install]
+WantedBy=homepi-shairport-supervisor.service

@@ -78,10 +78,13 @@ static void on_message(struct mosquitto* mosq, void* userdata,
   }
 
   if (strcmp(parsed.field, "route_start") == 0) {
+    g_zone_session_active[parsed.zone_id] = true;
     zone_state_on_active_start(g_zone_state, parsed.zone_id);
     return;
   }
   if (strcmp(parsed.field, "route_end") == 0) {
+    g_zone_session_active[parsed.zone_id] = false;
+    g_zone_playing[parsed.zone_id] = false;
     zone_state_on_active_end(g_zone_state, parsed.zone_id);
     if (zone_state_get_owner(g_zone_state) == 0) {
       rebuild_routing_stack();
@@ -97,9 +100,18 @@ static void on_message(struct mosquitto* mosq, void* userdata,
   }
   if (strcmp(parsed.field, "active") == 0) {
     if (parsed.zone_id >= 1 && parsed.zone_id <= HOMEPI_PCM_MAX_ZONES) {
-      g_zone_session_active[parsed.zone_id] = payload_is_true(payload);
-      if (g_zone_session_active[parsed.zone_id] && zone_state_get_owner(g_zone_state) == 0) {
-        zone_state_on_active_start(g_zone_state, parsed.zone_id);
+      const bool active = payload_is_true(payload);
+      g_zone_session_active[parsed.zone_id] = active;
+      if (active) {
+        if (zone_state_get_owner(g_zone_state) == 0) {
+          zone_state_on_active_start(g_zone_state, parsed.zone_id);
+        }
+      } else {
+        g_zone_playing[parsed.zone_id] = false;
+        zone_state_on_active_end(g_zone_state, parsed.zone_id);
+        if (zone_state_get_owner(g_zone_state) == 0) {
+          rebuild_routing_stack();
+        }
       }
     }
     return;
@@ -108,9 +120,11 @@ static void on_message(struct mosquitto* mosq, void* userdata,
     if (parsed.zone_id >= 1 && parsed.zone_id <= HOMEPI_PCM_MAX_ZONES) {
       const bool playing = payload_is_true(payload);
       g_zone_playing[parsed.zone_id] = playing;
-      if (playing && zone_state_get_owner(g_zone_state) == 0) {
-        zone_state_on_active_start(g_zone_state, parsed.zone_id);
-      } else if (!playing && parsed.zone_id == zone_state_get_owner(g_zone_state)) {
+      if (playing) {
+        if (zone_state_get_owner(g_zone_state) == 0) {
+          zone_state_on_active_start(g_zone_state, parsed.zone_id);
+        }
+      } else {
         zone_state_on_active_end(g_zone_state, parsed.zone_id);
         if (zone_state_get_owner(g_zone_state) == 0) {
           rebuild_routing_stack();

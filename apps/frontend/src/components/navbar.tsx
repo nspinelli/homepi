@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils.js";
  */
 export function Navbar(): React.JSX.Element {
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-header/20 backdrop-blur-md supports-[backdrop-filter]:bg-header/20">
+    <header className="fixed top-0 z-50 w-full border-b border-border/60 bg-header/75 backdrop-blur-xl supports-[backdrop-filter]:bg-header/65">
       <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
           <img

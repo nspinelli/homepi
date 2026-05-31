@@ -171,6 +171,52 @@ StateRepository::~StateRepository() {
   }
 }
 
+void StateRepository::patch_zone_controller(int zone_number, const std::string& fields_json) {
+  if (zone_number < 1 || zone_number > 16) {
+    return;
+  }
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  const std::string& p = fields_json;
+
+  if (p.find("\"enabled\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "enabled", json_get_int(p, "enabled"), now);
+  }
+  if (p.find("\"name\"") != std::string::npos) {
+    upsert_zone_text(db, zone_number, "name", json_get_string(p, "name"), now);
+  }
+  if (p.find("\"treble\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "treble", json_get_int(p, "treble"), now);
+  }
+  if (p.find("\"bass\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "bass", json_get_int(p, "bass"), now);
+  }
+  if (p.find("\"balance\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "balance", json_get_int(p, "balance"), now);
+  }
+  if (p.find("\"loudness\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "loudness", json_get_int(p, "loudness"), now);
+  }
+  if (p.find("\"initialVolume\"") != std::string::npos) {
+    const int initial_volume = json_get_int(p, "initialVolume");
+    if (initial_volume >= 0 && initial_volume <= 100) {
+      upsert_zone_int(db, zone_number, "initial_volume", initial_volume, now);
+    }
+  }
+  if (p.find("\"pageVolume\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "page_volume", json_get_int(p, "pageVolume"), now);
+  }
+  if (p.find("\"groupNumber\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "group_number", json_get_int(p, "groupNumber"), now);
+  }
+  if (p.find("\"power\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "power", json_get_int(p, "power"), now);
+  }
+  if (p.find("\"volume\"") != std::string::npos) {
+    upsert_zone_int(db, zone_number, "volume", json_get_int(p, "volume"), now);
+  }
+}
+
 void StateRepository::apply_parsed_update(const ParsedUpdate& update) {
   auto* db = static_cast<sqlite3*>(db_);
   const std::string now = utc_now();
@@ -362,11 +408,44 @@ std::vector<ZoneState> StateRepository::get_zones() const {
     if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {
       z.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
     }
-    if (sqlite3_column_type(stmt, 11) != SQLITE_NULL) {
-      z.volume = sqlite3_column_int(stmt, 11);
+    if (sqlite3_column_type(stmt, 2) != SQLITE_NULL) {
+      z.enabled = sqlite3_column_int(stmt, 2);
+    }
+    if (sqlite3_column_type(stmt, 3) != SQLITE_NULL) {
+      z.treble = sqlite3_column_int(stmt, 3);
+    }
+    if (sqlite3_column_type(stmt, 4) != SQLITE_NULL) {
+      z.bass = sqlite3_column_int(stmt, 4);
+    }
+    if (sqlite3_column_type(stmt, 5) != SQLITE_NULL) {
+      z.balance = sqlite3_column_int(stmt, 5);
+    }
+    if (sqlite3_column_type(stmt, 6) != SQLITE_NULL) {
+      z.loudness = sqlite3_column_int(stmt, 6);
+    }
+    if (sqlite3_column_type(stmt, 7) != SQLITE_NULL) {
+      z.initial_volume = sqlite3_column_int(stmt, 7);
+    }
+    if (sqlite3_column_type(stmt, 8) != SQLITE_NULL) {
+      z.page_volume = sqlite3_column_int(stmt, 8);
+    }
+    if (sqlite3_column_type(stmt, 9) != SQLITE_NULL) {
+      z.group_number = sqlite3_column_int(stmt, 9);
     }
     if (sqlite3_column_type(stmt, 10) != SQLITE_NULL) {
       z.power = sqlite3_column_int(stmt, 10);
+    }
+    if (sqlite3_column_type(stmt, 11) != SQLITE_NULL) {
+      z.volume = sqlite3_column_int(stmt, 11);
+    }
+    if (sqlite3_column_type(stmt, 12) != SQLITE_NULL) {
+      z.mute = sqlite3_column_int(stmt, 12);
+    }
+    if (sqlite3_column_type(stmt, 13) != SQLITE_NULL) {
+      z.source = sqlite3_column_int(stmt, 13);
+    }
+    if (sqlite3_column_type(stmt, 14) != SQLITE_NULL) {
+      z.updated_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 14));
     }
     zones.push_back(z);
   }
@@ -460,15 +539,44 @@ std::string StateRepository::zones_json() const {
     if (i > 0) {
       out << ",";
     }
-    out << "{\"zoneNumber\":" << zones[i].zone_number;
-    if (zones[i].name) {
-      out << ",\"name\":\"" << json_escape(*zones[i].name) << "\"";
+    const auto& z = zones[i];
+    out << "{\"zoneNumber\":" << z.zone_number;
+    if (z.name) {
+      out << ",\"name\":\"" << json_escape(*z.name) << "\"";
     }
-    if (zones[i].volume) {
-      out << ",\"volume\":" << *zones[i].volume;
+    out << ",\"enabled\":" << (z.enabled.has_value() ? *z.enabled : 0);
+    if (z.treble) {
+      out << ",\"treble\":" << *z.treble;
     }
-    if (zones[i].power) {
-      out << ",\"power\":" << *zones[i].power;
+    if (z.bass) {
+      out << ",\"bass\":" << *z.bass;
+    }
+    if (z.balance) {
+      out << ",\"balance\":" << *z.balance;
+    }
+    if (z.loudness) {
+      out << ",\"loudness\":" << *z.loudness;
+    }
+    if (z.initial_volume.has_value()) {
+      out << ",\"initialVolume\":" << *z.initial_volume;
+    }
+    if (z.page_volume.has_value()) {
+      out << ",\"pageVolume\":" << *z.page_volume;
+    }
+    if (z.group_number) {
+      out << ",\"groupNumber\":" << *z.group_number;
+    }
+    if (z.power) {
+      out << ",\"power\":" << *z.power;
+    }
+    if (z.volume) {
+      out << ",\"volume\":" << *z.volume;
+    }
+    if (z.mute) {
+      out << ",\"mute\":" << *z.mute;
+    }
+    if (z.source) {
+      out << ",\"source\":" << *z.source;
     }
     out << "}";
   }
@@ -615,6 +723,65 @@ void StateRepository::set_airplay_source(int source_number) {
       std::to_string(source_number) + ",1,'" + now +
       "') ON CONFLICT(source_number) DO UPDATE SET is_airplay=1,updated_at=excluded.updated_at";
   sqlite3_exec(db, sql.c_str(), nullptr, nullptr, nullptr);
+}
+
+std::string StateRepository::shairport_zone_settings_json() const {
+  std::ostringstream out;
+  out << "[";
+  sqlite3_stmt* stmt = nullptr;
+  const char* sql =
+      "SELECT zone_number,volume_control_profile,active_state_timeout,session_timeout,"
+      "log_verbosity FROM shairport_zone_settings ORDER BY zone_number";
+  auto* db = static_cast<sqlite3*>(db_);
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return "[]";
+  }
+  bool first = true;
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    if (!first) {
+      out << ",";
+    }
+    first = false;
+    out << "{\"zoneNumber\":" << sqlite3_column_int(stmt, 0);
+    if (sqlite3_column_type(stmt, 1) != SQLITE_NULL) {
+      out << ",\"volumeControlProfile\":\""
+          << json_escape(reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1))) << "\"";
+    }
+    out << ",\"activeStateTimeout\":" << sqlite3_column_double(stmt, 2);
+    out << ",\"sessionTimeout\":" << sqlite3_column_int(stmt, 3);
+    out << ",\"logVerbosity\":" << sqlite3_column_int(stmt, 4);
+    out << "}";
+  }
+  sqlite3_finalize(stmt);
+  out << "]";
+  return out.str();
+}
+
+void StateRepository::update_shairport_zone_settings(int zone_number,
+                                                     const std::string& volume_control_profile,
+                                                     double active_state_timeout,
+                                                     int session_timeout, int log_verbosity) {
+  if (zone_number < 1 || zone_number > 16) {
+    return;
+  }
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  std::ostringstream sql;
+  sql << "UPDATE shairport_zone_settings SET updated_at='" << now << "'";
+  if (!volume_control_profile.empty()) {
+    sql << ",volume_control_profile='" << sql_escape(volume_control_profile) << "'";
+  }
+  if (active_state_timeout >= 0) {
+    sql << ",active_state_timeout=" << active_state_timeout;
+  }
+  if (session_timeout >= 0) {
+    sql << ",session_timeout=" << session_timeout;
+  }
+  if (log_verbosity >= 0) {
+    sql << ",log_verbosity=" << log_verbosity;
+  }
+  sql << " WHERE zone_number=" << zone_number;
+  sqlite3_exec(db, sql.str().c_str(), nullptr, nullptr, nullptr);
 }
 
 }  // namespace homepi::hifi_serial

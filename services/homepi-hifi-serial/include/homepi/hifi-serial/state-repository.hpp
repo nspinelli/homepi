@@ -27,6 +27,13 @@ class StateRepository {
 
   void apply_parsed_update(const ParsedUpdate& update);
 
+  /**
+   * Writes controller zone fields to the cache without sending serial commands.
+   * @param zone_number Zone 1-16.
+   * @param fields_json JSON object with optional controller fields.
+   */
+  void patch_zone_controller(int zone_number, const std::string& fields_json);
+
   void set_serial_metadata(const std::string& device_id, const std::string& path);
 
   void mark_full_sync_complete();
@@ -68,6 +75,21 @@ class StateRepository {
    * @param migration_sql Migration SQL text.
    */
   void apply_migration(const std::string& migration_sql);
+
+  /** @returns JSON array of shairport_zone_settings rows. */
+  std::string shairport_zone_settings_json() const;
+
+  /**
+   * Updates Shairport settings for one zone.
+   * @param zone_number Zone 1-16.
+   * @param volume_control_profile Profile name or empty to skip.
+   * @param active_state_timeout Timeout seconds or negative to skip.
+   * @param session_timeout Session timeout or negative to skip.
+   * @param log_verbosity Log level or negative to skip.
+   */
+  void update_shairport_zone_settings(int zone_number, const std::string& volume_control_profile,
+                                      double active_state_timeout, int session_timeout,
+                                      int log_verbosity);
 
  private:
   void* db_ = nullptr;

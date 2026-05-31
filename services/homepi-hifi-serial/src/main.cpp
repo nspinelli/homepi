@@ -223,12 +223,46 @@ int main(int argc, char* argv[]) {
           return ok("{\"queued\":true}");
         }
 
+        if (method == "patchZoneController") {
+          const int zone_number = homepi::hifi_serial::json_get_int(line, "zoneNumber");
+          if (zone_number < 1 || zone_number > 16) {
+            return err("zoneNumber must be between 1 and 16");
+          }
+          repository.patch_zone_controller(zone_number, line);
+          return ok("{\"patched\":true}");
+        }
+
         if (method == "getAirplaySource") {
           const auto source = repository.airplay_source_number();
           if (!source.has_value()) {
             return ok("{\"sourceNumber\":null}");
           }
           return ok("{\"sourceNumber\":" + std::to_string(*source) + "}");
+        }
+
+        if (method == "getShairportZoneSettings") {
+          return ok("{\"shairportZoneSettings\":" + repository.shairport_zone_settings_json() +
+                    "}");
+        }
+
+        if (method == "updateShairportZoneSettings") {
+          const int zone_number = homepi::hifi_serial::json_get_int(line, "zoneNumber");
+          if (zone_number < 1 || zone_number > 16) {
+            return err("zoneNumber must be between 1 and 16");
+          }
+          const std::string profile =
+              homepi::hifi_serial::json_get_string(line, "volumeControlProfile");
+          const double active_timeout =
+              homepi::hifi_serial::json_get_double(line, "activeStateTimeout");
+          const int session_timeout =
+              homepi::hifi_serial::json_get_int(line, "sessionTimeout");
+          const int log_verbosity = homepi::hifi_serial::json_get_int(line, "logVerbosity");
+          repository.update_shairport_zone_settings(
+              zone_number, profile,
+              active_timeout >= 0 ? active_timeout : -1.0,
+              session_timeout >= 0 ? session_timeout : -1,
+              log_verbosity >= 0 ? log_verbosity : -1);
+          return ok("{\"updated\":true}");
         }
 
         if (method == "setAirplaySource") {

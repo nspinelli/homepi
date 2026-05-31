@@ -90,4 +90,31 @@ std::string cmd_language_string_query(int index);
 /** Sends raw command string (must start with *). */
 std::string cmd_raw(const std::string& command);
 
+/** Sets zone name. */
+std::string cmd_zone_name_set(int zone, const std::string& name);
+
+/** Sets zone enabled flag. */
+std::string cmd_zone_enable_set(int zone, int enabled);
+
+/** Sets zone treble. */
+std::string cmd_zone_treb_set(int zone, int treble);
+
+/** Sets zone bass. */
+std::string cmd_zone_bass_set(int zone, int bass);
+
+/** Sets zone balance. */
+std::string cmd_zone_bal_set(int zone, int balance);
+
+/** Sets zone loudness. */
+std::string cmd_zone_loudness_set(int zone, int loudness);
+
+/** Sets zone initial volume. */
+std::string cmd_zone_inivol_set(int zone, int volume);
+
+/** Sets zone page volume. */
+std::string cmd_zone_pgvol_set(int zone, int volume);
+
+/** Sets zone group number. */
+std::string cmd_zone_group_set(int zone, int group);
+
 }  // namespace homepi::hifi_serial

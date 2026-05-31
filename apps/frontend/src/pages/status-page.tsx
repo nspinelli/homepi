@@ -76,7 +76,7 @@ export function StatusPage(): React.JSX.Element {
   });
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6">
+    <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-6">
       <div className="mb-6">
         <Button variant="ghost" size="sm" className="mb-4 gap-2 text-muted-foreground" asChild>
           <Link to="/">
@@ -193,18 +193,18 @@ export function StatusPage(): React.JSX.Element {
         <div className="border-b border-border p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <h2 className="font-medium text-card-foreground">Live events</h2>
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search events..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                className="h-8 w-48 border-0 bg-secondary pl-9"
+                className="h-8 w-full border-0 bg-secondary pl-9 sm:w-48"
               />
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {(["all", "info", "warning", "error", "debug"] as const).map((level) => (
               <button
                 key={level}
@@ -231,17 +231,20 @@ export function StatusPage(): React.JSX.Element {
               </p>
             ) : (
               filteredLogs.map((log) => (
-                <div key={log.id} className="flex items-start gap-4 px-4 py-3 text-sm">
-                  <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
-                    {formatLogTime(log.timestamp)}
-                  </span>
-                  <Badge variant="outline" className={`text-xs font-normal ${LEVEL_COLORS[log.level]}`}>
-                    {log.level}
-                  </Badge>
-                  <span className="min-w-24 whitespace-nowrap text-muted-foreground">
-                    {log.service}
-                  </span>
-                  <span className="text-foreground">{log.message}</span>
+                <div
+                  key={log.id}
+                  className="flex flex-col gap-2 px-4 py-3 text-sm sm:flex-row sm:items-start sm:gap-4"
+                >
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 sm:shrink-0">
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {formatLogTime(log.timestamp)}
+                    </span>
+                    <Badge variant="outline" className={`text-xs font-normal ${LEVEL_COLORS[log.level]}`}>
+                      {log.level}
+                    </Badge>
+                    <span className="text-muted-foreground">{log.service}</span>
+                  </div>
+                  <span className="min-w-0 break-words text-foreground">{log.message}</span>
                 </div>
               ))
             )}

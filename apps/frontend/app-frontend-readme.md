@@ -39,7 +39,8 @@ Appearance preferences are stored in `localStorage` under `homepi:user-settings`
 
 | Path | Description |
 |------|-------------|
-| `/` | Empty home page (reserved for future modules) |
+| `/` | Dashboard with audio module card |
+| `/audio` | Audio zones, sources, groups, paging, and settings |
 | `/status` | System status dashboard |
 | `/settings` | User preferences (appearance theme) |
 

@@ -12,6 +12,7 @@
         "getHealth",
         "syncController",
         "sendCommand",
+        "patchZoneController",
         "getSnapshot",
         "getController",
         "getZones",
@@ -20,6 +21,8 @@
         "getLanguageStrings",
         "getAirplaySource",
         "setAirplaySource",
+        "getShairportZoneSettings",
+        "updateShairportZoneSettings",
         "subscribe"
       ]
     },

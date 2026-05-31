@@ -114,4 +114,40 @@ std::string cmd_raw(const std::string& command) {
   return build_command(command);
 }
 
+std::string cmd_zone_name_set(int zone, const std::string& name) {
+  return build_command("Z" + std::to_string(zone) + "NAME\"" + escape_protocol_string(name) + "\"");
+}
+
+std::string cmd_zone_enable_set(int zone, int enabled) {
+  return build_command("Z" + std::to_string(zone) + "ENABLE" + std::to_string(enabled));
+}
+
+std::string cmd_zone_treb_set(int zone, int treble) {
+  return build_command("Z" + std::to_string(zone) + "TREB" + std::to_string(treble));
+}
+
+std::string cmd_zone_bass_set(int zone, int bass) {
+  return build_command("Z" + std::to_string(zone) + "BASS" + std::to_string(bass));
+}
+
+std::string cmd_zone_bal_set(int zone, int balance) {
+  return build_command("Z" + std::to_string(zone) + "BAL" + std::to_string(balance));
+}
+
+std::string cmd_zone_loudness_set(int zone, int loudness) {
+  return build_command("Z" + std::to_string(zone) + "LOUDNESS" + std::to_string(loudness));
+}
+
+std::string cmd_zone_inivol_set(int zone, int volume) {
+  return build_command("Z" + std::to_string(zone) + "INIVOL" + std::to_string(volume));
+}
+
+std::string cmd_zone_pgvol_set(int zone, int volume) {
+  return build_command("Z" + std::to_string(zone) + "PGVOL" + std::to_string(volume));
+}
+
+std::string cmd_zone_group_set(int zone, int group) {
+  return build_command("Z" + std::to_string(zone) + "GROUP" + std::to_string(group));
+}
+
 }  // namespace homepi::hifi_serial

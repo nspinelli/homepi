@@ -1,6 +1,7 @@
 #include "homepi/hifi-serial/protocol-parser.hpp"
 
 #include <cctype>
+#include <cstring>
 #include <sstream>
 
 #include "homepi/hifi-serial/json-utils.hpp"
@@ -81,20 +82,117 @@ std::optional<int> parse_group_index(const std::string& line, std::size_t start)
   return group;
 }
 
+std::size_t numeric_suffix_end(const std::string& line, std::size_t prefix_len) {
+  if (line.size() <= prefix_len) {
+    return prefix_len;
+  }
+  std::size_t i = prefix_len;
+  if (line[i] == '-') {
+    ++i;
+  }
+  while (i < line.size() && std::isdigit(static_cast<unsigned char>(line[i]))) {
+    ++i;
+  }
+  return i;
+}
+
+bool bulk_marker_shadowed(const std::string& line, char prefix, int index, int max_index,
+                          std::size_t pos) {
+  if (max_index < 10) {
+    return false;
+  }
+  const std::string marker = std::string(1, prefix) + std::to_string(index);
+  for (int longer = max_index; longer > index; --longer) {
+    const std::string longer_marker = std::string(1, prefix) + std::to_string(longer);
+    if (longer_marker.size() > marker.size() &&
+        pos + longer_marker.size() <= line.size() &&
+        line.compare(pos, longer_marker.size(), longer_marker) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Returns true when `pos` begins another ZzKEYWORD / SsKEYWORD segment (empty name slot).
+ * @param line - Full response line.
+ * @param pos - Candidate value start index.
+ * @param prefix - Z or S.
+ * @param max_index - Highest valid index.
+ * @param keyword - Protocol keyword (e.g. NAME).
+ * @returns Whether the position is an immediate next marker, not a name value.
+ */
+bool value_is_immediate_prefixed_keyword(const std::string& line, std::size_t pos, char prefix,
+                                         int max_index, const char* keyword) {
+  if (pos >= line.size() || line[pos] != prefix) {
+    return false;
+  }
+
+  const std::size_t keyword_len = std::strlen(keyword);
+  std::size_t scan = pos + 1;
+  if (scan >= line.size()) {
+    return false;
+  }
+
+  int index = 0;
+  if (line[scan] == '0') {
+    return false;
+  }
+  if (!std::isdigit(static_cast<unsigned char>(line[scan]))) {
+    return false;
+  }
+  while (scan < line.size() && std::isdigit(static_cast<unsigned char>(line[scan]))) {
+    index = index * 10 + (line[scan] - '0');
+    ++scan;
+  }
+
+  if (index <= 0 || index > max_index) {
+    return false;
+  }
+
+  return scan + keyword_len <= line.size() && line.compare(scan, keyword_len, keyword) == 0;
+}
+
 void emit_indexed_numeric_bulk(std::vector<ParsedUpdate>& out, char prefix, int max_index,
                                const std::string& topic, const std::string& event,
                                const char* id_field, const char* value_field,
                                const std::string& line) {
+  std::vector<std::pair<std::size_t, std::size_t>> consumed;
+
   for (int i = max_index; i >= 1; --i) {
     const std::string marker = std::string(1, prefix) + std::to_string(i);
-    const auto pos = line.find(marker);
-    if (pos == std::string::npos) {
-      continue;
+    std::size_t search_from = 0;
+    while (search_from < line.size()) {
+      const auto pos = line.find(marker, search_from);
+      if (pos == std::string::npos) {
+        break;
+      }
+      search_from = pos + 1;
+      if (bulk_marker_shadowed(line, prefix, i, max_index, pos)) {
+        continue;
+      }
+
+      const std::size_t value_start = pos + marker.size();
+      const std::size_t value_end = numeric_suffix_end(line, value_start);
+      const bool overlaps = [&]() {
+        for (const auto& span : consumed) {
+          if (pos < span.second && value_end > span.first) {
+            return true;
+          }
+        }
+        return false;
+      }();
+      if (overlaps) {
+        continue;
+      }
+
+      const int value = parse_int_suffix(line, value_start);
+      std::ostringstream payload;
+      payload << "\"" << id_field << "\":" << i << ",\"" << value_field << "\":" << value;
+      out.push_back(make_update(topic, event, payload_obj(payload.str())));
+      consumed.push_back({pos, value_end});
+      break;
     }
-    const int value = parse_int_suffix(line, pos + marker.size());
-    std::ostringstream payload;
-    payload << "\"" << id_field << "\":" << i << ",\"" << value_field << "\":" << value;
-    out.push_back(make_update(topic, event, payload_obj(payload.str())));
   }
 }
 
@@ -103,22 +201,419 @@ void emit_zone_bulk(std::vector<ParsedUpdate>& out, const std::string& field, co
   emit_indexed_numeric_bulk(out, 'Z', 16, "modules.audio.zone", event, "zone", field.c_str(), line);
 }
 
+/**
+ * Parses ENABLE flag immediately after the ENABLE keyword (0 or 1 only).
+ * @param line - Full response line.
+ * @param enable_keyword_pos - Index of the ENABLE substring.
+ * @returns 0/1 when valid, nullopt otherwise.
+ */
+std::optional<int> parse_enable_flag(const std::string& line, std::size_t enable_keyword_pos) {
+  constexpr std::size_t kEnableLen = 6;
+  const std::size_t val_pos = enable_keyword_pos + kEnableLen;
+  if (val_pos >= line.size()) {
+    return std::nullopt;
+  }
+  if (line[val_pos] == '0') {
+    return 0;
+  }
+  if (line[val_pos] == '1') {
+    return 1;
+  }
+  return std::nullopt;
+}
+
+/**
+ * Parses bulk or interleaved ZzENABLEd / SsENABLEd segments (d is 0 or 1).
+ * @param out - Parsed updates to append.
+ * @param prefix - Z for zones, S for sources.
+ * @param max_index - Highest zone/source index.
+ * @param topic - Event topic.
+ * @param event - Event name.
+ * @param id_field - JSON id field (zone or source).
+ * @param line - Full response line.
+ */
+void emit_prefixed_enable_bulk(std::vector<ParsedUpdate>& out, char prefix, int max_index,
+                               const std::string& topic, const std::string& event,
+                               const char* id_field, const std::string& line) {
+  constexpr const char* kEnable = "ENABLE";
+  std::vector<std::pair<std::size_t, std::size_t>> consumed;
+
+  for (int index = max_index; index >= 1; --index) {
+    const std::string marker = std::string(1, prefix) + std::to_string(index) + kEnable;
+    std::size_t search_from = 0;
+    while (search_from < line.size()) {
+      const auto pos = line.find(marker, search_from);
+      if (pos == std::string::npos) {
+        break;
+      }
+      search_from = pos + 1;
+      if (bulk_marker_shadowed(line, prefix, index, max_index, pos)) {
+        continue;
+      }
+
+      const std::size_t val_pos = pos + marker.size();
+      if (val_pos >= line.size()) {
+        continue;
+      }
+
+      const char flag = line[val_pos];
+      if (flag != '0' && flag != '1') {
+        continue;
+      }
+
+      const std::size_t val_end = val_pos + 1;
+      const bool overlaps = [&]() {
+        for (const auto& span : consumed) {
+          if (pos < span.second && val_end > span.first) {
+            return true;
+          }
+        }
+        return false;
+      }();
+      if (overlaps) {
+        continue;
+      }
+
+      const int enabled = flag - '0';
+      std::ostringstream payload;
+      payload << "\"" << id_field << "\":" << index << ",\"enabled\":" << enabled;
+      out.push_back(make_update(topic, event, payload_obj(payload.str())));
+      consumed.push_back({pos, val_end});
+      break;
+    }
+  }
+}
+
+/**
+ * Parses bulk ZzKEYWORDnn / SsKEYWORDnn segments (e.g. Z7INIVOL35).
+ * @param out - Parsed updates to append.
+ * @param prefix - Z for zones, S for sources.
+ * @param max_index - Highest zone/source index.
+ * @param topic - Event topic.
+ * @param event - Event name.
+ * @param id_field - JSON id field (zone or source).
+ * @param value_field - JSON value field name.
+ * @param keyword - Protocol keyword after the index (e.g. INIVOL).
+ * @param line - Full response line.
+ */
+void emit_prefixed_value_bulk(std::vector<ParsedUpdate>& out, char prefix, int max_index,
+                              const std::string& topic, const std::string& event,
+                              const char* id_field, const char* value_field, const char* keyword,
+                              const std::string& line) {
+  const std::size_t keyword_len = std::strlen(keyword);
+
+  std::size_t pos = 0;
+  while (pos < line.size()) {
+    if (line[pos] != prefix) {
+      ++pos;
+      continue;
+    }
+
+    const std::size_t digit_pos = pos + 1;
+    if (digit_pos >= line.size()) {
+      ++pos;
+      continue;
+    }
+
+    int index = 0;
+    std::size_t scan = digit_pos;
+    if (line[scan] == '0') {
+      index = 0;
+      ++scan;
+    } else if (std::isdigit(static_cast<unsigned char>(line[scan]))) {
+      while (scan < line.size() && std::isdigit(static_cast<unsigned char>(line[scan]))) {
+        index = index * 10 + (line[scan] - '0');
+        ++scan;
+      }
+    } else {
+      ++pos;
+      continue;
+    }
+
+    if (index <= 0 || index > max_index) {
+      ++pos;
+      continue;
+    }
+
+    if (scan + keyword_len > line.size() || line.compare(scan, keyword_len, keyword) != 0) {
+      ++pos;
+      continue;
+    }
+
+    const std::size_t val_start = scan + keyword_len;
+    const int value = parse_int_suffix(line, val_start);
+    const std::size_t val_end = numeric_suffix_end(line, val_start);
+    if (val_end <= val_start) {
+      ++pos;
+      continue;
+    }
+
+    std::ostringstream payload;
+    payload << "\"" << id_field << "\":" << index << ",\"" << value_field << "\":" << value;
+    out.push_back(make_update(topic, event, payload_obj(payload.str())));
+    pos = val_end;
+  }
+}
+
+/**
+ * Truncates leaked protocol markers from a parsed zone/source name.
+ * @param name - Raw parsed name.
+ * @returns Sanitized display name.
+ */
+/**
+ * Detects names that are actually the next zone marker (e.g. 8NAME"Office").
+ * @param name - Parsed candidate name.
+ * @returns True when the value should be ignored.
+ */
+bool name_looks_like_leaked_marker(const std::string& name) {
+  std::size_t i = 0;
+  while (i < name.size() && std::isdigit(static_cast<unsigned char>(name[i]))) {
+    ++i;
+  }
+  if (i > 0 && i + 4 <= name.size() && name.compare(i, 4, "NAME") == 0) {
+    return true;
+  }
+  return name.find("NAME\"") != std::string::npos;
+}
+
+std::string sanitize_parsed_name(std::string name) {
+  const auto hash = name.find('#');
+  if (hash != std::string::npos) {
+    name.erase(hash);
+  }
+  for (std::size_t i = 0; i + 1 < name.size(); ++i) {
+    if (name[i] != 'Z') {
+      continue;
+    }
+    std::size_t scan = i + 1;
+    if (scan >= name.size() || !std::isdigit(static_cast<unsigned char>(name[scan]))) {
+      continue;
+    }
+    while (scan < name.size() && std::isdigit(static_cast<unsigned char>(name[scan]))) {
+      ++scan;
+    }
+    if (scan + 4 <= name.size() && name.compare(scan, 4, "NAME") == 0) {
+      name.erase(i);
+      break;
+    }
+  }
+  while (!name.empty() && (name.back() == ' ' || name.back() == '\r')) {
+    name.pop_back();
+  }
+  return name;
+}
+
+/**
+ * Reads a name after the NAME keyword (quoted or unquoted until the next marker).
+ * @param line - Full response line.
+ * @param value_start - Index after the NAME keyword.
+ * @param prefix - Z or S.
+ * @returns Parsed name when present.
+ */
+std::optional<std::string> parse_name_value_after_keyword(const std::string& line,
+                                                          std::size_t value_start, char prefix) {
+  if (value_start >= line.size()) {
+    return std::nullopt;
+  }
+
+  std::optional<std::string> raw;
+  if (line[value_start] == '"') {
+    raw = parse_quoted_value(line, value_start);
+  } else {
+    std::string out;
+    for (std::size_t i = value_start; i < line.size(); ++i) {
+      if (line[i] == '#') {
+        break;
+      }
+      if (line[i] == prefix) {
+        std::size_t scan = i + 1;
+        if (scan < line.size() && std::isdigit(static_cast<unsigned char>(line[scan]))) {
+          while (scan < line.size() && std::isdigit(static_cast<unsigned char>(line[scan]))) {
+            ++scan;
+          }
+          if (scan + 4 <= line.size() && line.compare(scan, 4, "NAME") == 0) {
+            break;
+          }
+        }
+      }
+      out.push_back(line[i]);
+    }
+    raw = out;
+  }
+
+  if (!raw) {
+    return std::nullopt;
+  }
+
+  const std::string clean = sanitize_parsed_name(*raw);
+  if (clean.empty()) {
+    return std::nullopt;
+  }
+  return clean;
+}
+
+std::size_t quoted_value_end(const std::string& line, std::size_t quote_pos) {
+  if (quote_pos >= line.size() || line[quote_pos] != '"') {
+    return quote_pos;
+  }
+  for (std::size_t i = quote_pos + 1; i < line.size(); ++i) {
+    if (line[i] == '\\' && i + 1 < line.size()) {
+      ++i;
+      continue;
+    }
+    if (line[i] == '"') {
+      return i + 1;
+    }
+  }
+  return line.size();
+}
+
+/**
+ * Parses bulk ZzNAME"..." / SsNAME"..." name segments.
+ * @param out - Parsed updates to append.
+ * @param prefix - Z for zones, S for sources.
+ * @param max_index - Highest zone/source index.
+ * @param topic - Event topic.
+ * @param event - Event name.
+ * @param id_field - JSON id field (zone or source).
+ * @param line - Full response line.
+ * @param value_field - JSON value field name.
+ */
+void emit_prefixed_name_bulk(std::vector<ParsedUpdate>& out, char prefix, int max_index,
+                             const std::string& topic, const std::string& event,
+                             const char* id_field, const std::string& line,
+                             const char* value_field = "name") {
+  constexpr const char* kName = "NAME";
+  constexpr std::size_t kNameLen = 4;
+
+  std::size_t pos = 0;
+  while (pos < line.size()) {
+    if (line[pos] != prefix) {
+      ++pos;
+      continue;
+    }
+
+    const std::size_t digit_pos = pos + 1;
+    if (digit_pos >= line.size()) {
+      ++pos;
+      continue;
+    }
+
+    int index = 0;
+    std::size_t scan = digit_pos;
+    if (line[scan] == '0') {
+      index = 0;
+      ++scan;
+    } else if (std::isdigit(static_cast<unsigned char>(line[scan]))) {
+      while (scan < line.size() && std::isdigit(static_cast<unsigned char>(line[scan]))) {
+        index = index * 10 + (line[scan] - '0');
+        ++scan;
+      }
+    } else {
+      ++pos;
+      continue;
+    }
+
+    if (index <= 0 || index > max_index) {
+      ++pos;
+      continue;
+    }
+
+    if (scan + kNameLen > line.size() || line.compare(scan, kNameLen, kName) != 0) {
+      ++pos;
+      continue;
+    }
+
+    const std::size_t value_start = scan + kNameLen;
+    if (value_is_immediate_prefixed_keyword(line, value_start, prefix, max_index, kName)) {
+      pos = value_start;
+      continue;
+    }
+
+    const auto name = parse_name_value_after_keyword(line, value_start, prefix);
+    if (!name) {
+      ++pos;
+      continue;
+    }
+
+    if (name_looks_like_leaked_marker(*name)) {
+      pos = value_start;
+      continue;
+    }
+
+    std::ostringstream payload;
+    payload << "\"" << id_field << "\":" << index << ",\"" << value_field << "\":\""
+            << json_escape(*name) << "\"";
+    out.push_back(make_update(topic, event, payload_obj(payload.str())));
+
+    if (value_start < line.size() && line[value_start] == '"') {
+      const auto quote_pos = line.find('"', value_start);
+      pos = quote_pos == std::string::npos ? value_start + 1 : quoted_value_end(line, quote_pos);
+    } else {
+      pos = value_start + name->size();
+    }
+  }
+}
+
+/**
+ * Parses bulk Gz"..." name segments (groups omit the NAME keyword).
+ * @param out - Parsed updates to append.
+ * @param prefix - G for groups.
+ * @param max_index - Highest group index.
+ * @param topic - Event topic.
+ * @param event - Event name.
+ * @param id_field - JSON id field.
+ * @param line - Full response line.
+ * @param value_field - JSON value field name.
+ */
 void emit_indexed_quoted_names(std::vector<ParsedUpdate>& out, char prefix, int max_index,
                                const std::string& topic, const std::string& event,
                                const char* id_field, const std::string& line,
                                const char* value_field = "name") {
+  std::vector<std::pair<std::size_t, std::size_t>> consumed;
+
   for (int i = max_index; i >= 1; --i) {
     const std::string marker = std::string(1, prefix) + std::to_string(i);
-    const auto pos = line.find(marker);
-    if (pos == std::string::npos) {
-      continue;
-    }
-    const auto name = parse_quoted_value(line, pos + marker.size());
-    if (name) {
+    std::size_t search_from = 0;
+    while (search_from < line.size()) {
+      const auto pos = line.find(marker, search_from);
+      if (pos == std::string::npos) {
+        break;
+      }
+      search_from = pos + 1;
+      if (bulk_marker_shadowed(line, prefix, i, max_index, pos)) {
+        continue;
+      }
+
+      const std::size_t value_start = pos + marker.size();
+      if (value_start >= line.size() || line[value_start] != '"') {
+        continue;
+      }
+
+      const auto name = parse_quoted_value(line, value_start);
+      if (!name) {
+        continue;
+      }
+
+      const std::size_t value_end = quoted_value_end(line, value_start);
+      const bool overlaps = [&]() {
+        for (const auto& span : consumed) {
+          if (pos < span.second && value_end > span.first) {
+            return true;
+          }
+        }
+        return false;
+      }();
+      if (overlaps) {
+        continue;
+      }
+
       std::ostringstream payload;
       payload << "\"" << id_field << "\":" << i << ",\"" << value_field << "\":\""
               << json_escape(*name) << "\"";
       out.push_back(make_update(topic, event, payload_obj(payload.str())));
+      consumed.push_back({pos, value_end});
+      break;
     }
   }
 }
@@ -267,26 +762,35 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
     const int z = *zone;
     if (line.find("NAME", 1) != std::string::npos) {
       if (z == 0) {
-        emit_indexed_quoted_names(updates, 'Z', 16, "modules.audio.zone", "zone_name_changed", "zone",
-                                  line);
+        emit_prefixed_name_bulk(updates, 'Z', 16, "modules.audio.zone", "zone_name_changed", "zone",
+                                line);
       } else {
-        const auto name = parse_quoted_value(line, line.find("NAME") + 4);
-        if (name) {
-          updates.push_back(make_update("modules.audio.zone", "zone_name_changed",
-                                        payload_obj("\"zone\":" + std::to_string(z) + ",\"name\":\"" +
-                                                    json_escape(*name) + "\"")));
+        const std::string marker = "Z" + std::to_string(z) + "NAME";
+        const auto marker_pos = line.find(marker, 1);
+        if (marker_pos != std::string::npos) {
+          const auto name = parse_name_value_after_keyword(line, marker_pos + marker.size(), 'Z');
+          if (name) {
+            updates.push_back(make_update("modules.audio.zone", "zone_name_changed",
+                                          payload_obj("\"zone\":" + std::to_string(z) +
+                                                      ",\"name\":\"" + json_escape(*name) + "\"")));
+          }
         }
       }
       return updates;
     }
     if (line.find("VOLUME", 1) != std::string::npos) {
       if (z == 0) {
-        emit_zone_bulk(updates, "volume", "zone_volume_changed", line, 0);
+        emit_prefixed_value_bulk(updates, 'Z', 16, "modules.audio.zone", "zone_volume_changed",
+                                 "zone", "volume", "VOLUME", line);
       } else {
-        const int vol = parse_int_suffix(line, line.find("VOLUME") + 6);
-        updates.push_back(make_update("modules.audio.zone", "zone_volume_changed",
-                                      payload_obj("\"zone\":" + std::to_string(z) +
-                                                  ",\"volume\":" + std::to_string(vol))));
+        const std::string marker = "Z" + std::to_string(z) + "VOLUME";
+        const auto marker_pos = line.find(marker, 1);
+        if (marker_pos != std::string::npos) {
+          const int vol = parse_int_suffix(line, marker_pos + marker.size());
+          updates.push_back(make_update("modules.audio.zone", "zone_volume_changed",
+                                        payload_obj("\"zone\":" + std::to_string(z) +
+                                                    ",\"volume\":" + std::to_string(vol))));
+        }
       }
       return updates;
     }
@@ -303,12 +807,19 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
     }
     if (line.find("ENABLE", 1) != std::string::npos) {
       if (z == 0) {
-        emit_zone_bulk(updates, "enabled", "zone_enable_changed", line, 0);
+        emit_prefixed_enable_bulk(updates, 'Z', 16, "modules.audio.zone", "zone_enable_changed",
+                                  "zone", line);
       } else {
-        const int en = parse_int_suffix(line, line.find("ENABLE") + 6);
-        updates.push_back(make_update("modules.audio.zone", "zone_enable_changed",
-                                      payload_obj("\"zone\":" + std::to_string(z) +
-                                                  ",\"enabled\":" + std::to_string(en))));
+        const std::string marker = "Z" + std::to_string(z) + "ENABLE";
+        const auto marker_pos = line.find(marker, 1);
+        if (marker_pos != std::string::npos) {
+          const auto en = parse_enable_flag(line, marker_pos + marker.size() - 6);
+          if (en) {
+            updates.push_back(make_update("modules.audio.zone", "zone_enable_changed",
+                                          payload_obj("\"zone\":" + std::to_string(z) +
+                                                      ",\"enabled\":" + std::to_string(*en))));
+          }
+        }
       }
       return updates;
     }
@@ -380,7 +891,8 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
     }
     if (line.find("INIVOL", 1) != std::string::npos) {
       if (z == 0) {
-        emit_zone_bulk(updates, "initialVolume", "zone_initial_volume_changed", line, 0);
+        emit_prefixed_value_bulk(updates, 'Z', 16, "modules.audio.zone", "zone_initial_volume_changed",
+                                 "zone", "initialVolume", "INIVOL", line);
       } else if (z > 0) {
         const int vol = parse_int_suffix(line, line.find("INIVOL") + 6);
         updates.push_back(
@@ -392,7 +904,8 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
     }
     if (line.find("PGVOL", 1) != std::string::npos) {
       if (z == 0) {
-        emit_zone_bulk(updates, "pageVolume", "zone_page_volume_changed", line, 0);
+        emit_prefixed_value_bulk(updates, 'Z', 16, "modules.audio.zone", "zone_page_volume_changed",
+                                 "zone", "pageVolume", "PGVOL", line);
       } else if (z > 0) {
         const int vol = parse_int_suffix(line, line.find("PGVOL") + 5);
         updates.push_back(make_update("modules.audio.zone", "zone_page_volume_changed",
@@ -419,27 +932,34 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
     const int s = *source;
     if (line.find("NAME", 1) != std::string::npos) {
       if (s == 0) {
-        emit_indexed_quoted_names(updates, 'S', 8, "modules.audio.source", "source_name_changed",
-                                  "source", line);
+        emit_prefixed_name_bulk(updates, 'S', 8, "modules.audio.source", "source_name_changed",
+                                "source", line);
       } else {
-        const auto name = parse_quoted_value(line, line.find("NAME") + 4);
-        if (name) {
-          updates.push_back(make_update("modules.audio.source", "source_name_changed",
-                                        payload_obj("\"source\":" + std::to_string(s) +
-                                                    ",\"name\":\"" + json_escape(*name) + "\"")));
+        const std::string marker = "S" + std::to_string(s) + "NAME";
+        const auto marker_pos = line.find(marker, 1);
+        if (marker_pos != std::string::npos) {
+          const auto name = parse_name_value_after_keyword(line, marker_pos + marker.size(), 'S');
+          if (name) {
+            updates.push_back(make_update("modules.audio.source", "source_name_changed",
+                                          payload_obj("\"source\":" + std::to_string(s) +
+                                                      ",\"name\":\"" + json_escape(*name) + "\"")));
+          }
         }
       }
       return updates;
     }
     if (line.find("ENABLE", 1) != std::string::npos) {
       if (s == 0) {
-        emit_indexed_numeric_bulk(updates, 'S', 8, "modules.audio.source", "source_enable_changed",
-                                  "source", "enabled", line);
+        emit_prefixed_enable_bulk(updates, 'S', 8, "modules.audio.source", "source_enable_changed",
+                                  "source", line);
       } else {
-        const int en = parse_int_suffix(line, line.find("ENABLE") + 6);
-        updates.push_back(make_update("modules.audio.source", "source_enable_changed",
-                                      payload_obj("\"source\":" + std::to_string(s) +
-                                                  ",\"enabled\":" + std::to_string(en))));
+        const auto enable_pos = line.find("ENABLE", 1);
+        const auto en = parse_enable_flag(line, enable_pos);
+        if (en) {
+          updates.push_back(make_update("modules.audio.source", "source_enable_changed",
+                                        payload_obj("\"source\":" + std::to_string(s) +
+                                                    ",\"enabled\":" + std::to_string(*en))));
+        }
       }
       return updates;
     }

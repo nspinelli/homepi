@@ -111,6 +111,23 @@ export class HifiSerialClient {
   }
 
   /**
+   * Updates cached controller zone fields in SQLite (does not send serial commands).
+   * @param zoneNumber - Zone 1-16.
+   * @param fields - Controller fields to persist.
+   * @param correlationId - Request correlation id.
+   */
+  async patchZoneController(
+    zoneNumber: number,
+    fields: Record<string, unknown>,
+    correlationId: string
+  ): Promise<{ patched: boolean }> {
+    return this.request<{ patched: boolean }>("patchZoneController", correlationId, {
+      zoneNumber,
+      ...fields,
+    });
+  }
+
+  /**
    * Returns the configured AirPlay source number.
    * @param correlationId - Request correlation id.
    */
@@ -131,6 +148,42 @@ export class HifiSerialClient {
   ): Promise<{ sourceNumber: number }> {
     return this.request<{ sourceNumber: number }>("setAirplaySource", correlationId, {
       sourceNumber,
+    });
+  }
+
+  /**
+   * Returns all Shairport per-zone settings rows.
+   * @param correlationId - Request correlation id.
+   * @returns Shairport zone settings list.
+   */
+  async getShairportZoneSettings(
+    correlationId: string
+  ): Promise<{ shairportZoneSettings: unknown[] }> {
+    return this.request<{ shairportZoneSettings: unknown[] }>(
+      "getShairportZoneSettings",
+      correlationId
+    );
+  }
+
+  /**
+   * Updates Shairport settings for one zone in SQLite.
+   * @param zoneNumber - Zone 1-16.
+   * @param settings - Settings to update.
+   * @param correlationId - Request correlation id.
+   */
+  async updateShairportZoneSettings(
+    zoneNumber: number,
+    settings: {
+      volumeControlProfile?: string;
+      activeStateTimeout?: number;
+      sessionTimeout?: number;
+      logVerbosity?: number;
+    },
+    correlationId: string
+  ): Promise<{ updated: boolean }> {
+    return this.request<{ updated: boolean }>("updateShairportZoneSettings", correlationId, {
+      zoneNumber,
+      ...settings,
     });
   }
 

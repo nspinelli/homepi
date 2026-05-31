@@ -18,6 +18,7 @@ import { getSystemdUnitActiveState } from "./runtime/check-systemd-unit.js";
 import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import { AudioRoutes } from "./audio/audio-routes.js";
+import { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
 import type { HifiSerialHealth } from "./hifi-serial/hifi-serial-types.js";
 
@@ -71,7 +72,14 @@ const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.soc
 const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
-const audioRoutes = new AudioRoutes({ client: hifiSerialClient, logger });
+const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
+const audioRoutes = new AudioRoutes({
+  client: hifiSerialClient,
+  pcmClient: pcmRouterClient,
+  statusStore,
+  config: serviceConfig,
+  logger,
+});
 
 const host = "127.0.0.1";
 const port = 3000;

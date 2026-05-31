@@ -1,0 +1,71 @@
+import type { LucideIcon } from "lucide-react";
+import { Megaphone, Radio, Settings, Speaker, Users } from "lucide-react";
+
+import { TabsList, TabsTrigger } from "@/components/ui/tabs.js";
+import { cn } from "@/lib/utils.js";
+
+/**
+ * Audio module tab definition for the pill navigation bar.
+ */
+export interface AudioSectionTabItem {
+  /** Radix tab value. */
+  value: string;
+  /** Visible label under the icon. */
+  label: string;
+  /** Lucide icon component. */
+  icon: LucideIcon;
+}
+
+/** Tab entries shown on the Home Audio page. */
+export const AUDIO_SECTION_TABS: AudioSectionTabItem[] = [
+  { value: "zones", label: "Zones", icon: Speaker },
+  { value: "sources", label: "Sources", icon: Radio },
+  { value: "groups", label: "Groups", icon: Users },
+  { value: "paging", label: "Paging", icon: Megaphone },
+  { value: "settings", label: "Settings", icon: Settings },
+];
+
+/**
+ * Pill-shaped tab list for the audio module (icon above label).
+ */
+export function AudioSectionTabsList(): React.JSX.Element {
+  return (
+    <TabsList
+      className={cn(
+        "mb-6 flex h-auto w-full gap-0.5 rounded-full p-1",
+        "border border-border/50 bg-audio-tabs-track",
+        "overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      )}
+    >
+      {AUDIO_SECTION_TABS.map((tab) => (
+        <AudioSectionTabTrigger key={tab.value} tab={tab} />
+      ))}
+    </TabsList>
+  );
+}
+
+/**
+ * Single audio section tab trigger with stacked icon and label.
+ * @param props - Tab metadata.
+ */
+function AudioSectionTabTrigger({ tab }: { tab: AudioSectionTabItem }): React.JSX.Element {
+  const Icon = tab.icon;
+
+  return (
+    <TabsTrigger
+      value={tab.value}
+      className={cn(
+        "min-w-[4.25rem] flex-1 flex-col gap-1 rounded-full border-0 px-2 py-2.5",
+        "h-auto text-[11px] font-medium leading-tight shadow-none",
+        "text-muted-foreground transition-colors",
+        "focus-visible:ring-2 focus-visible:ring-zone-accent/40",
+        "data-[state=active]:bg-audio-tabs-active data-[state=active]:text-zone-accent",
+        "data-[state=active]:shadow-none",
+        "dark:text-foreground/75 dark:data-[state=active]:text-zone-accent"
+      )}
+    >
+      <Icon className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+      <span className="truncate">{tab.label}</span>
+    </TabsTrigger>
+  );
+}

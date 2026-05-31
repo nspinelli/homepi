@@ -1,9 +1,19 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import type { ServiceConfig } from "@homepi/core-config";
 import type { Logger } from "@homepi/core-logging";
 import { createErrorResponse, createSuccessResponse } from "@homepi/core-api";
 
 import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
+import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
+import type { SystemStatusStore } from "../system-status-store.js";
+import { buildAudioSnapshot } from "./build-audio-snapshot.js";
+import {
+  buildZoneControllerCommands,
+  requiresShairportRestart,
+  type ShairportZonePatch,
+  type ZoneControllerPatch,
+} from "./hifi-zone-commands.js";
 
 /**
  * Dependencies for audio configuration HTTP handlers.
@@ -11,6 +21,12 @@ import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
 export interface AudioRouteDeps {
   /** HiFi serial socket client. */
   client: HifiSerialClient;
+  /** PCM router socket client. */
+  pcmClient: PcmRouterClient;
+  /** System status store. */
+  statusStore: SystemStatusStore;
+  /** Loaded service configuration. */
+  config: ServiceConfig;
   /** Structured logger. */
   logger: Logger;
 }
@@ -53,13 +69,30 @@ export class AudioRoutes {
     }
 
     try {
-      if (req.method === "GET" && pathname === "/api/audio/airplay-source") {
-        const result = await this.deps.client.getAirplaySource(correlationId);
+      if (req.method === "GET" && pathname === "/api/audio/snapshot") {
+        const snapshot = await buildAudioSnapshot(
+          {
+            config: this.deps.config,
+            hifiClient: this.deps.client,
+            pcmClient: this.deps.pcmClient,
+            systemStatus: this.deps.statusStore.getStatus(),
+          },
+          correlationId
+        );
         sendJson(
           res,
           200,
-          createSuccessResponse({ correlationId, data: result })
+          createSuccessResponse({
+            correlationId,
+            data: snapshot as unknown as Record<string, unknown>,
+          })
         );
+        return true;
+      }
+
+      if (req.method === "GET" && pathname === "/api/audio/airplay-source") {
+        const result = await this.deps.client.getAirplaySource(correlationId);
+        sendJson(res, 200, createSuccessResponse({ correlationId, data: result }));
         return true;
       }
 
@@ -81,10 +114,65 @@ export class AudioRoutes {
           parsed.sourceNumber,
           correlationId
         );
+        sendJson(res, 200, createSuccessResponse({ correlationId, data: result }));
+        return true;
+      }
+
+      const zoneMatch = pathname.match(/^\/api\/audio\/zones\/(\d+)$/);
+      if (req.method === "PUT" && zoneMatch) {
+        const zoneNumber = Number(zoneMatch[1]);
+        if (zoneNumber < 1 || zoneNumber > 16) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "zone must be 1-16" },
+            })
+          );
+          return true;
+        }
+
+        const body = JSON.parse(await readBody(req)) as {
+          controller?: ZoneControllerPatch;
+          shairport?: ShairportZonePatch;
+        };
+
+        const controllerPatch = body.controller ?? {};
+        const shairportPatch = body.shairport ?? {};
+
+        if (Object.keys(controllerPatch).length > 0) {
+          await this.deps.client.patchZoneController(
+            zoneNumber,
+            controllerPatch as Record<string, unknown>,
+            correlationId
+          );
+        }
+
+        for (const command of buildZoneControllerCommands(zoneNumber, controllerPatch)) {
+          await this.deps.client.sendCommand(command, correlationId);
+        }
+
+        if (Object.keys(shairportPatch).length > 0) {
+          await this.deps.client.updateShairportZoneSettings(
+            zoneNumber,
+            shairportPatch,
+            correlationId
+          );
+        }
+
+        const shairportRestartRequired = requiresShairportRestart(
+          controllerPatch,
+          shairportPatch
+        );
+
         sendJson(
           res,
           200,
-          createSuccessResponse({ correlationId, data: result })
+          createSuccessResponse({
+            correlationId,
+            data: { zoneNumber, shairportRestartRequired },
+          })
         );
         return true;
       }

@@ -47,7 +47,7 @@ export function SettingsPage(): React.JSX.Element {
   const showSelection = mounted && hydrated;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-6">
+    <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-6">
       <div className="mb-6">
         <Button variant="ghost" size="sm" className="mb-4 gap-2 text-muted-foreground" asChild>
           <Link to="/">

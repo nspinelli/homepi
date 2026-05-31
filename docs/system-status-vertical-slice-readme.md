@@ -42,8 +42,8 @@ data: {"version":1,"event":"heartbeat","payload":{"kind":"heartbeat"}}
 Behavior:
 
 1. Initial `system_status_snapshot` after connect
-2. Periodic `system_status_delta` updates (5s)
-3. `heartbeat` events (30s)
+2. `system_status_delta` when native service state changes (event-driven)
+3. `heartbeat` events (30s transport liveness)
 4. Connect/disconnect logged via `core/logging`
 
 Example: `apps/backend/examples/sse-system-status-event.example.json`
@@ -98,8 +98,14 @@ Configuration uses Vite env vars (`VITE_API_BASE_URL`, `VITE_EVENTS_URL`, `VITE_
 2. Logger is created via `@homepi/core-logging`
 3. `SystemStatusStore` initializes core readiness snapshot
 4. HTTP server binds `127.0.0.1:3000`
-5. SSE broadcaster starts heartbeat and delta timers
-6. Frontend dev server proxies `/api`, `/events`, `/ws` to backend
+5. Native event bridges start (HiFi, PCM, USB) with reconnect backoff
+6. Journald bridge starts (UI logs + lifecycle status for services without sockets)
+7. One-time startup snapshots load service health into the store
+8. Slow fallback reconciliation starts (120s; fault recovery only)
+9. SSE broadcaster emits `system_status_delta` on status **changes** (not on a fixed interval)
+10. Frontend dev server proxies `/api`, `/events`, `/ws` to backend
+
+See [architecture/event-flow.md](architecture/event-flow.md) for the full event-driven model.
 
 Production uses NGINX (`infra/nginx/templates/homepi.nginx.conf.template`) to serve the frontend and proxy API, SSE, and WebSocket routes.
 

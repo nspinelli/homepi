@@ -112,7 +112,7 @@ class Logger {
 
     auto& stream =
         (level == LogLevel::WARN || level == LogLevel::ERROR) ? std::cerr : std::cout;
-    stream << line.str() << '\n';
+    stream << line.str() << '\n' << std::flush;
   }
 
  private:

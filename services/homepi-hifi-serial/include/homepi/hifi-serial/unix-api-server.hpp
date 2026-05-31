@@ -16,6 +16,8 @@ struct ApiContext {
   std::function<ServiceHealth()> health_fn;
   std::function<std::string(const std::string& line)> handle_rpc_fn;
   std::function<std::string()> snapshot_json_fn;
+  /** Called when a client subscribes to the event stream. */
+  std::function<void()> on_subscribe_fn;
 };
 
 /**

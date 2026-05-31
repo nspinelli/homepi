@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/events/service-health-payload.schema.json",
+  "title": "HomePi Service Health Payload",
+  "description": "Payload for system.service topic event envelopes emitted by native daemons.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["status"],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "offline"]
+    },
+    "connected": {
+      "type": "boolean"
+    },
+    "degraded": {
+      "type": "boolean"
+    },
+    "syncInProgress": {
+      "type": "boolean"
+    },
+    "assignmentsDegraded": {
+      "type": "boolean"
+    },
+    "reachable": {
+      "type": "boolean"
+    },
+    "audioActive": {
+      "type": "boolean"
+    }
+  }
+}

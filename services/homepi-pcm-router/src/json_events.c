@@ -23,6 +23,18 @@ static void iso_timestamp(char* out, size_t out_len) {
   strftime(out, out_len, "%Y-%m-%dT%H:%M:%S.000Z", &tm);
 }
 
+void json_events_emit_service_status(const char* event, const char* correlation_id,
+                                     const char* status, const char* extra_json) {
+  char payload[512];
+  if (extra_json && extra_json[0] != '\0') {
+    snprintf(payload, sizeof(payload), "{\"status\":\"%s\"%s}", status,
+             extra_json[0] == ',' ? extra_json : "");
+  } else {
+    snprintf(payload, sizeof(payload), "{\"status\":\"%s\"}", status);
+  }
+  json_events_emit("system.service", event, correlation_id, payload);
+}
+
 void json_events_emit(const char* topic, const char* event, const char* correlation_id,
                       const char* payload_json) {
   char timestamp[40];

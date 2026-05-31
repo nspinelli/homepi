@@ -34,6 +34,24 @@ export interface ServiceLoggingConfig {
 }
 
 /**
+ * Fallback reconciliation settings for event-driven service status.
+ */
+export interface FallbackReconciliationConfig {
+  /** Whether slow fallback reconciliation runs. */
+  enabled?: boolean;
+  /** Reconciliation interval in milliseconds (60s–300s). */
+  intervalMs?: number;
+}
+
+/**
+ * Service status configuration (backend).
+ */
+export interface ServiceStatusConfig {
+  /** Slow fallback reconciliation for fault recovery. */
+  fallbackReconciliation?: FallbackReconciliationConfig;
+}
+
+/**
  * Base service configuration per service-config.schema.json.
  */
 export interface ServiceConfig {
@@ -43,6 +61,8 @@ export interface ServiceConfig {
   enabled?: boolean;
   logging: ServiceLoggingConfig;
   runtime: RuntimeConfig;
+  /** Optional status pipeline settings. */
+  status?: ServiceStatusConfig;
   modules?: Record<
     string,
     {

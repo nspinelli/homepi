@@ -150,6 +150,9 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
     if (zone.zone_number < 1 || zone.zone_number > config_.zone_count) {
       continue;
     }
+    if (!zone.enabled.has_value() || zone.enabled.value() != 1) {
+      continue;
+    }
     const ZoneSettings* zone_settings = settings_for(settings, zone.zone_number);
     const double active_timeout = 0.0;
     const int session_timeout = zone_settings ? zone_settings->session_timeout : 60;

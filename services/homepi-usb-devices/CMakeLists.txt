@@ -19,6 +19,7 @@ add_executable(homepi-usb-devices
   src/udev-monitor.cpp
   src/assignment-repository.cpp
   src/artifact-writer.cpp
+  src/service-health-emitter.cpp
   src/unix-api-server.cpp
 )
 

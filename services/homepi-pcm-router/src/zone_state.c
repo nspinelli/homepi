@@ -1,10 +1,47 @@
 #include "zone_state.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "json_events.h"
 #include "log.h"
+
+/**
+ * Converts Shairport volume (Apple dB -30..0 or 0..100 percent) to 0..100.
+ * @param value Raw MQTT or metadata volume string.
+ * @return Percent 0..100, or -1 when unparseable.
+ */
+static int airplay_volume_to_percent(const char* value) {
+  if (!value || value[0] == '\0') {
+    return -1;
+  }
+
+  char* end = NULL;
+  const double parsed = strtod(value, &end);
+  if (end == value) {
+    return -1;
+  }
+
+  if (value[0] == '-' || strchr(value, '.') != NULL) {
+    double pct = ((parsed + 30.0) / 30.0) * 100.0;
+    if (pct < 0.0) {
+      pct = 0.0;
+    }
+    if (pct > 100.0) {
+      pct = 100.0;
+    }
+    return (int)(pct + 0.5);
+  }
+
+  if (parsed < 0.0) {
+    return 0;
+  }
+  if (parsed > 100.0) {
+    return 100;
+  }
+  return (int)(parsed + 0.5);
+}
 
 struct ZoneStateCallback {
   ZoneStateEventFn fn;
@@ -198,6 +235,9 @@ void zone_state_set_metadata(ZoneState* state, int zone_id, const char* field, c
   if (zone_id < 1 || zone_id > HOMEPI_PCM_MAX_ZONES || !field || !value) {
     return;
   }
+
+  int owner = 0;
+  pthread_mutex_lock(&state->mutex);
   ZoneRecord* zone = &state->zones[zone_id - 1];
   if (strcmp(field, "title") == 0) {
     snprintf(zone->title, sizeof(zone->title), "%s", value);
@@ -214,6 +254,38 @@ void zone_state_set_metadata(ZoneState* state, int zone_id, const char* field, c
   } else if (strcmp(field, "volume") == 0) {
     snprintf(zone->volume, sizeof(zone->volume), "%s", value);
   }
+  owner = state->owner_zone_id;
+  const bool in_stack = zone_in_stack(state, zone_id);
+  const bool zone_active = state->zones[zone_id - 1].active;
+  pthread_mutex_unlock(&state->mutex);
+
+  if (strcmp(field, "volume") == 0) {
+    /* Each Shairport zone publishes its own volume; do not gate on DAC owner. */
+    if (in_stack || zone_active) {
+      const int pct = airplay_volume_to_percent(value);
+      if (pct >= 0) {
+        char volume_payload[128];
+        snprintf(volume_payload, sizeof(volume_payload),
+                 "{\"zoneId\":%d,\"zone\":%d,\"volume\":%d}", zone_id, zone_id, pct);
+        json_events_emit("modules.pcm", "zone_volume_changed", "airplay-volume", volume_payload);
+      }
+    }
+    return;
+  }
+
+  if (owner != zone_id) {
+    return;
+  }
+
+  if (strcmp(field, "title") != 0 && strcmp(field, "artist") != 0 &&
+      strcmp(field, "album") != 0 && strcmp(field, "client_name") != 0) {
+    return;
+  }
+
+  char payload[768];
+  snprintf(payload, sizeof(payload),
+           "{\"zoneId\":%d,\"field\":\"%s\",\"value\":\"%s\"}", zone_id, field, value);
+  json_events_emit("modules.pcm", "pcm_metadata_updated", "metadata", payload);
 }
 
 int zone_state_get_owner(const ZoneState* state) {

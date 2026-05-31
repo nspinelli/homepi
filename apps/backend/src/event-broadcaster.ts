@@ -5,14 +5,15 @@ import type { SystemStatusSnapshot } from "./types/system-status-types.js";
 
 const EVENT_SOURCE = "homepi-backend";
 const STATUS_TOPIC = "system.status";
+const MAX_REPLAY_EVENTS = 200;
 
 /**
  * Manages SSE subscribers and emits HomePi event envelopes.
  */
 export class EventBroadcaster {
   private readonly subscribers = new Set<ServerResponseLike>();
+  private readonly recentEnvelopes: EventEnvelope[] = [];
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private statusTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Creates an event broadcaster.
@@ -40,6 +41,9 @@ export class EventBroadcaster {
     });
 
     this.sendEnvelope(res, this.createSnapshotEnvelope(correlationId));
+    for (const envelope of this.recentEnvelopes) {
+      this.sendEnvelope(res, envelope);
+    }
   }
 
   /**
@@ -62,11 +66,10 @@ export class EventBroadcaster {
   }
 
   /**
-   * Starts periodic heartbeat and status delta broadcasts.
-   * @param onStatusEmit - Callback invoked when a status event is emitted.
+   * Starts periodic SSE heartbeat broadcasts (transport liveness only).
    */
-  start(onStatusEmit: (timestamp: string) => void): void {
-    if (this.heartbeatTimer || this.statusTimer) {
+  start(): void {
+    if (this.heartbeatTimer) {
       return;
     }
 
@@ -80,14 +83,18 @@ export class EventBroadcaster {
       });
       this.broadcast(envelope);
     }, 30_000);
+  }
 
-    this.statusTimer = setInterval(() => {
-      const timestamp = new Date().toISOString();
-      onStatusEmit(timestamp);
-      this.broadcast(
-        this.createDeltaEnvelope(`status-${Date.now()}`, timestamp)
-      );
-    }, 5_000);
+  /**
+   * Broadcasts a system status delta to all SSE subscribers.
+   * @param correlationId - Correlation identifier.
+   * @param emittedAt - Optional emission timestamp.
+   */
+  broadcastStatusDelta(correlationId?: string, emittedAt?: string): void {
+    const timestamp = emittedAt ?? new Date().toISOString();
+    this.broadcast(
+      this.createDeltaEnvelope(correlationId ?? `status-${Date.now()}`, timestamp)
+    );
   }
 
   /**
@@ -98,11 +105,8 @@ export class EventBroadcaster {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
-    if (this.statusTimer) {
-      clearInterval(this.statusTimer);
-      this.statusTimer = null;
-    }
     this.subscribers.clear();
+    this.recentEnvelopes.length = 0;
   }
 
   /**
@@ -110,6 +114,13 @@ export class EventBroadcaster {
    * @param envelope - Event envelope to send.
    */
   broadcast(envelope: EventEnvelope): void {
+    if (envelope.event !== "heartbeat") {
+      this.recentEnvelopes.push(envelope);
+      if (this.recentEnvelopes.length > MAX_REPLAY_EVENTS) {
+        this.recentEnvelopes.shift();
+      }
+    }
+
     const frame = formatSseMessage(envelope);
     for (const subscriber of this.subscribers) {
       try {

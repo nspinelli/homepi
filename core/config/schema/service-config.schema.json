@@ -70,6 +70,31 @@
     "runtime": {
       "$ref": "runtime-config.schema.json"
     },
+    "status": {
+      "type": "object",
+      "description": "Optional service status and fallback reconciliation settings (backend).",
+      "additionalProperties": false,
+      "properties": {
+        "fallbackReconciliation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable slow fallback status reconciliation.",
+              "default": true
+            },
+            "intervalMs": {
+              "type": "integer",
+              "description": "Fallback reconciliation interval in milliseconds.",
+              "minimum": 60000,
+              "maximum": 300000,
+              "default": 120000
+            }
+          }
+        }
+      }
+    },
     "modules": {
       "type": "object",
       "description": "Optional module configuration references consumed by this service.",

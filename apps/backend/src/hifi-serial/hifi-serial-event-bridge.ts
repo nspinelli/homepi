@@ -5,6 +5,9 @@ import type { EventEnvelope } from "@homepi/core-events";
 import type { Logger } from "@homepi/core-logging";
 
 import type { EventBroadcaster } from "../event-broadcaster.js";
+import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
+import { mapEnvelopeToStatusPatch } from "../status/service-event-handlers.js";
+import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
 
 /**
  * Options for the HiFi serial SSE event bridge.
@@ -16,8 +19,10 @@ export interface HifiSerialEventBridgeOptions {
   logger: Logger;
   /** SSE broadcaster. */
   broadcaster: EventBroadcaster;
-  /** Called when any event is forwarded. */
-  onEvent?: (timestamp: string) => void;
+  /** Status update coordinator. */
+  coordinator: StatusUpdateCoordinator;
+  /** Called when connection state changes. */
+  onConnectionChange?: (connected: boolean) => void;
 }
 
 /**
@@ -27,13 +32,30 @@ export class HifiSerialEventBridge {
   private socket: Socket | null = null;
   private buffer = "";
   private stopped = false;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private connected = false;
+  private readonly reconnect: EventBridgeReconnect;
 
   /**
    * Creates an event bridge.
    * @param options - Bridge options.
    */
-  constructor(private readonly options: HifiSerialEventBridgeOptions) {}
+  constructor(private readonly options: HifiSerialEventBridgeOptions) {
+    this.reconnect = new EventBridgeReconnect({
+      logger: options.logger,
+      module: "app.backend.hifi-serial",
+      correlationId: "hifi-event-bridge",
+      connect: () => this.connect(),
+      isStopped: () => this.stopped,
+    });
+  }
+
+  /**
+   * Returns whether the bridge is currently connected.
+   * @returns True when socket is connected.
+   */
+  isConnected(): boolean {
+    return this.connected;
+  }
 
   /**
    * Starts the persistent socket subscription.
@@ -48,10 +70,8 @@ export class HifiSerialEventBridge {
    */
   stop(): void {
     this.stopped = true;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
+    this.reconnect.clearTimer();
+    this.setConnected(false);
     this.socket?.destroy();
     this.socket = null;
   }
@@ -65,6 +85,8 @@ export class HifiSerialEventBridge {
     this.socket = socket;
 
     socket.on("connect", () => {
+      this.reconnect.resetBackoff();
+      this.setConnected(true);
       this.options.logger.info({
         module: "app.backend.hifi-serial",
         event: "event_bridge_connected",
@@ -98,20 +120,20 @@ export class HifiSerialEventBridge {
 
     socket.on("close", () => {
       this.socket = null;
+      this.setConnected(false);
       if (!this.stopped) {
-        this.scheduleReconnect();
+        this.options.coordinator.markServiceOffline("hifiSerial", "hifi-event-bridge");
+        this.reconnect.scheduleReconnect();
       }
     });
   }
 
-  private scheduleReconnect(): void {
-    if (this.reconnectTimer) {
+  private setConnected(connected: boolean): void {
+    if (this.connected === connected) {
       return;
     }
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      this.connect();
-    }, 5_000);
+    this.connected = connected;
+    this.options.onConnectionChange?.(connected);
   }
 
   private handleLine(line: string): void {
@@ -138,6 +160,20 @@ export class HifiSerialEventBridge {
 
     const envelope = parsed as EventEnvelope;
     this.options.broadcaster.broadcast(envelope);
-    this.options.onEvent?.(envelope.timestamp);
+
+    const patch = mapEnvelopeToStatusPatch(envelope);
+    if (patch) {
+      this.options.coordinator.patchAndBroadcast(
+        patch,
+        "hifi-event-bridge",
+        envelope.timestamp
+      );
+    } else if (envelope.timestamp) {
+      this.options.coordinator.patchAndBroadcast(
+        {},
+        "hifi-event-bridge",
+        envelope.timestamp
+      );
+    }
   }
 }

@@ -157,6 +157,7 @@ StateRepository::StateRepository(const std::string& database_path,
     throw std::runtime_error("Failed to open database: " + database_path);
   }
   db_ = raw;
+  sqlite3_busy_timeout(raw, 5000);
   apply_migration(migration_sql);
 }
 

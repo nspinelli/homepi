@@ -23,6 +23,16 @@ void json_events_emit(const char* topic, const char* event, const char* correlat
                       const char* payload_json);
 
 /**
+ * Emits a system.service health envelope.
+ * @param event Event name.
+ * @param correlation_id Correlation id.
+ * @param status Dashboard status (healthy, degraded, offline).
+ * @param extra_json Optional extra JSON fields prefixed with comma (e.g. ",\"audioActive\":true").
+ */
+void json_events_emit_service_status(const char* event, const char* correlation_id,
+                                     const char* status, const char* extra_json);
+
+/**
  * Builds JSON snapshot of router state.
  * @param owner_zone_id Current owner (0 = none).
  * @param stack Zone id stack.

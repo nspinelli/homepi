@@ -21,6 +21,7 @@ homepi/
 pnpm install
 pnpm run build
 pnpm run test
+bash scripts/build-native-services.sh   # USB, HiFi serial, PCM router
 ```
 
 ## Operational install (Pi)
@@ -38,3 +39,18 @@ sudo bash scripts/install-operational.sh
 - Gateway: see [infra/nginx/infra-nginx-readme.md](infra/nginx/infra-nginx-readme.md)
 
 Contracts and schemas under `core/` are source of truth. See `.cursorrules` for architectural rules.
+
+## Service status (event-driven)
+
+Dashboard service health is **event-driven**, not poll-driven:
+
+```text
+Native daemon → Unix socket / journald → Backend bridge → SystemStatusStore → SSE / WebSocket → UI
+```
+
+- One-time **startup snapshots** on backend boot (`getHealth` / `systemctl`)
+- Live updates from native `system.service` events
+- **Fallback reconciliation** every 120s only for fault recovery (nqptp, metadata, shairport)
+- **Uptime** computed at read time from process `startedAt`
+
+See [docs/architecture/event-flow.md](docs/architecture/event-flow.md), [docs/architecture/service-status.md](docs/architecture/service-status.md), and [docs/architecture/sockets-and-ports.md](docs/architecture/sockets-and-ports.md).

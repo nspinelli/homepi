@@ -23,8 +23,21 @@ import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import type { AudioRoutes } from "./audio/audio-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
+import type { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
+import type { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 import { JournalLogBridge } from "./logging/journal-log-bridge.js";
+import { FallbackReconciliation } from "./status/fallback-reconciliation.js";
+import { resolveFallbackReconciliation } from "./status/resolve-fallback-reconciliation.js";
+import { JournalServiceStatusBridge } from "./status/journal-service-status-bridge.js";
+import {
+  createStartupSnapshotLoaders,
+  loadStartupSnapshots,
+} from "./status/startup-snapshots.js";
+import { StatusUpdateCoordinator } from "./status/status-update-coordinator.js";
+import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
+import { UsbDevicesEventBridge } from "./usb-devices/usb-devices-event-bridge.js";
+import type { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
 
 /**
  * HTTP server configuration for the backend vertical slice.
@@ -52,6 +65,14 @@ export interface HttpServerOptions {
   hifiSerialSocketPath?: string;
   /** Unix socket path for PCM router event bridge; omit to disable. */
   pcmRouterSocketPath?: string;
+  /** Unix socket path for USB devices event bridge; omit to disable. */
+  usbDevicesSocketPath?: string;
+  /** USB devices socket client for startup snapshots. */
+  usbDevicesClient: UsbDevicesClient;
+  /** HiFi serial socket client for startup snapshots. */
+  hifiSerialClient: HifiSerialClient;
+  /** PCM router socket client for startup snapshots. */
+  pcmRouterClient: PcmRouterClient;
 }
 
 /**
@@ -72,18 +93,53 @@ export function createHttpServer(options: HttpServerOptions): Server {
     audioRoutes,
     hifiSerialSocketPath,
     pcmRouterSocketPath,
+    usbDevicesSocketPath,
+    usbDevicesClient,
+    hifiSerialClient,
+    pcmRouterClient,
   } = options;
-  const broadcaster = new EventBroadcaster(logger, () => statusStore.getStatus());
+
+  const getStatus = () => statusStore.getStatus();
+  const broadcaster = new EventBroadcaster(logger, getStatus);
   const sseHandler = new SseHandler(logger, broadcaster);
-  const wsHandler = new WsHandler(logger, () => statusStore.getStatus());
+  const wsHandler = new WsHandler(logger, getStatus);
+  const coordinator = new StatusUpdateCoordinator({
+    statusStore,
+    broadcaster,
+    wsHandler,
+  });
+
+  const bridgeState = {
+    usbDevices: false,
+    hifiSerial: false,
+    pcmRouter: false,
+  };
+
+  const journalServiceStatusBridge = new JournalServiceStatusBridge({
+    logger,
+    coordinator,
+  });
+
+  const usbEventBridge = usbDevicesSocketPath
+    ? new UsbDevicesEventBridge({
+        socketPath: usbDevicesSocketPath,
+        logger,
+        broadcaster,
+        coordinator,
+        onConnectionChange: (connected) => {
+          bridgeState.usbDevices = connected;
+        },
+      })
+    : undefined;
 
   const hifiEventBridge = hifiSerialSocketPath
     ? new HifiSerialEventBridge({
         socketPath: hifiSerialSocketPath,
         logger,
         broadcaster,
-        onEvent: (timestamp) => {
-          statusStore.patchStatus({ lastEventAt: timestamp });
+        coordinator,
+        onConnectionChange: (connected) => {
+          bridgeState.hifiSerial = connected;
         },
       })
     : undefined;
@@ -93,21 +149,40 @@ export function createHttpServer(options: HttpServerOptions): Server {
         socketPath: pcmRouterSocketPath,
         logger,
         broadcaster,
-        onEvent: (timestamp) => {
-          statusStore.patchStatus({ lastEventAt: timestamp });
+        coordinator,
+        onConnectionChange: (connected) => {
+          bridgeState.pcmRouter = connected;
         },
       })
     : undefined;
 
-  broadcaster.start((timestamp) => {
-    statusStore.patchStatus({ lastEventAt: timestamp });
-  });
+  broadcaster.start();
 
+  usbEventBridge?.start();
   hifiEventBridge?.start();
   pcmEventBridge?.start();
 
-  const journalLogBridge = new JournalLogBridge({ logger, broadcaster });
+  const journalLogBridge = new JournalLogBridge({
+    logger,
+    broadcaster,
+    serviceStatusBridge: journalServiceStatusBridge,
+  });
   journalLogBridge.start();
+
+  const fallbackSettings = resolveFallbackReconciliation(config);
+  const fallbackReconciliation = new FallbackReconciliation({
+    logger,
+    coordinator,
+    statusStore,
+    usbDevicesClient,
+    hifiSerialClient,
+    getBridgeState: () => ({
+      usbDevices: usbEventBridge?.isConnected() ?? false,
+      hifiSerial: hifiEventBridge?.isConnected() ?? false,
+      pcmRouter: pcmEventBridge?.isConnected() ?? false,
+    }),
+    intervalMs: fallbackSettings.intervalMs,
+  });
 
   const server = createServer((req, res) => {
     handleRequest(req, res);
@@ -135,10 +210,37 @@ export function createHttpServer(options: HttpServerOptions): Server {
       message: "HomePi backend started",
       data: { host, port, environment: config.environment },
     });
+
+    const loaders = createStartupSnapshotLoaders({
+      coordinator,
+      usbDevicesClient,
+      hifiSerialClient,
+      pcmRouterClient,
+    });
+    void loadStartupSnapshots(loaders, logger).then(() => {
+      if (fallbackSettings.enabled) {
+        fallbackReconciliation.start();
+      }
+    });
+
+    void pollCpuTemperature();
+    setInterval(() => {
+      void pollCpuTemperature();
+    }, 5_000);
   });
 
+  /**
+   * Reads CPU temperature and broadcasts when the value changes.
+   */
+  async function pollCpuTemperature(): Promise<void> {
+    const cpuTempC = await readCpuTemperatureC();
+    coordinator.patchAndBroadcast({ cpuTempC }, "cpu-temperature");
+  }
+
   server.on("close", () => {
+    fallbackReconciliation.stop();
     journalLogBridge.stop();
+    usbEventBridge?.stop();
     hifiEventBridge?.stop();
     pcmEventBridge?.stop();
     broadcaster.stop();

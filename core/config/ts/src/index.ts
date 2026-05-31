@@ -3,6 +3,8 @@ export type {
   RuntimeConfig,
   RuntimePaths,
   ServiceConfig,
+  ServiceStatusConfig,
+  FallbackReconciliationConfig,
   ServiceLoggingConfig,
 } from "./config-types.js";
 export { loadEnvFile, mergeEnv, type EnvMap } from "./env-loader.js";

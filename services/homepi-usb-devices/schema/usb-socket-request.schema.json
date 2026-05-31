@@ -8,7 +8,7 @@
   "properties": {
     "method": {
       "type": "string",
-      "enum": ["listDevices", "getAssignments", "setAssignments", "getHealth"]
+      "enum": ["listDevices", "getAssignments", "setAssignments", "getHealth", "subscribe"]
     },
     "correlationId": {
       "type": "string"

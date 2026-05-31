@@ -416,6 +416,7 @@ static bool open_dac(void) {
   }
   atomic_store(&g_dac_open, true);
   json_events_emit("modules.pcm", "dac_state", "dac-open", "{\"state\":\"DAC_OPEN\"}");
+  json_events_emit_service_status("dac_opened", "dac-open", "healthy", ",\"state\":\"DAC_OPEN\"");
   return true;
 }
 

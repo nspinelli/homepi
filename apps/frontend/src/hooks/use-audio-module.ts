@@ -80,6 +80,26 @@ function removePcmStack(stack: number[], zoneId: number): number[] {
 }
 
 /**
+ * Removes a zone from live PCM routing and clears now-playing when the stack empties.
+ * @param pcm - Current PCM state.
+ * @param zoneNumber - Zone leaving the route.
+ * @returns Updated PCM state.
+ */
+function clearZoneFromPcmRouting(
+  pcm: AudioSnapshot["pcm"],
+  zoneNumber: number
+): AudioSnapshot["pcm"] {
+  const activeStack = removePcmStack(pcm.activeStack, zoneNumber);
+  const ownerZoneId = activeStack[0] ?? 0;
+  return {
+    ...pcm,
+    activeStack,
+    ownerZoneId,
+    metadata: ownerZoneId === 0 ? {} : pcm.metadata,
+  };
+}
+
+/**
  * Returns the zone currently feeding the DAC (stack head).
  * @param pcm - PCM routing state.
  * @returns Owner zone id or 0.
@@ -89,27 +109,6 @@ function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
     return pcm.activeStack[0] ?? 0;
   }
   return pcm.ownerZoneId;
-}
-
-/**
- * Drops stale PCM stack entries for zones that are no longer powered on.
- * AirPlay activate turns zones on; deactivate/play_end should remove them from routing.
- * @param pcm - Raw PCM routing state.
- * @param zones - Current Hi-Fi zone rows.
- * @returns Effective routing state for UI display.
- */
-function getEffectivePcmRouting(
-  pcm: AudioSnapshot["pcm"],
-  zones: HifiZone[]
-): AudioSnapshot["pcm"] {
-  const poweredZoneIds = new Set(
-    zones
-      .filter((zone) => isZoneEnabled(zone) && (zone.power ?? 0) === 1)
-      .map((zone) => zone.zoneNumber)
-  );
-  const activeStack = pcm.activeStack.filter((zoneId) => poweredZoneIds.has(zoneId));
-  const ownerZoneId = activeStack.length > 0 ? activeStack[0] : 0;
-  return { ...pcm, activeStack, ownerZoneId };
 }
 
 /**
@@ -170,13 +169,15 @@ function patchPcmFromEvent(
   }
 
   if (event === "owner_cleared") {
-    return { ...pcm, ownerZoneId: 0, activeStack: [] };
+    return { ...pcm, ownerZoneId: 0, activeStack: [], metadata: {} };
   }
 
   if (event === "owner_changed") {
     if (typeof payload.ownerZoneId === "number") {
       ownerZoneId = payload.ownerZoneId;
-      if (ownerZoneId > 0) {
+      if (ownerZoneId === 0) {
+        activeStack = [];
+      } else {
         activeStack = pushPcmStack(activeStack, ownerZoneId);
       }
     }
@@ -241,7 +242,12 @@ function patchZonesFromEvent(
   event: string,
   payload: Record<string, unknown>
 ): HifiZone[] {
-  const zoneNum = typeof payload.zone === "number" ? payload.zone : null;
+  const zoneNum =
+    typeof payload.zone === "number"
+      ? payload.zone
+      : typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : null;
   if (zoneNum === null) {
     return zones;
   }
@@ -356,6 +362,51 @@ export function useAudioModule(): {
       if (envelope.source === "homepi-pcm-router") {
         const payload = envelope.payload as Record<string, unknown>;
         snapshot.pcm = patchPcmFromEvent(snapshot.pcm, envelope.event, payload);
+
+        const routedZoneId =
+          typeof payload.zoneId === "number"
+            ? payload.zoneId
+            : typeof payload.zone === "number"
+              ? payload.zone
+              : null;
+
+        if (
+          envelope.event === "zone_volume_changed" &&
+          typeof payload.volume === "number" &&
+          routedZoneId !== null
+        ) {
+          snapshot.zones = patchZonesFromEvent(snapshot.zones, envelope.event, {
+            zone: routedZoneId,
+            volume: payload.volume,
+          });
+        }
+
+        if (envelope.event === "zone_updated" && routedZoneId !== null) {
+          if (payload.active === true) {
+            snapshot.zones = snapshot.zones.map((zone) =>
+              zone.zoneNumber === routedZoneId && (zone.power ?? 0) === 0
+                ? { ...zone, power: 1 }
+                : zone
+            );
+          } else {
+            snapshot.zones = snapshot.zones.map((zone) =>
+              zone.zoneNumber === routedZoneId
+                ? {
+                    ...zone,
+                    power: 0,
+                    volume: zoneInitialVolume(zone),
+                  }
+                : zone
+            );
+          }
+        }
+
+        if (
+          snapshot.pcm.ownerZoneId === 0 &&
+          snapshot.pcm.activeStack.length === 0
+        ) {
+          snapshot.pcm = { ...snapshot.pcm, metadata: {} };
+        }
 
         const metaField =
           typeof payload.field === "string"
@@ -535,11 +586,17 @@ export function useAudioModule(): {
         if (!current.snapshot) {
           return { ...current, togglingPowerZone: zoneNumber };
         }
+        const nextPcm =
+          nextPower === 0
+            ? clearZoneFromPcmRouting(current.snapshot.pcm, zoneNumber)
+            : current.snapshot.pcm;
+
         return {
           ...current,
           togglingPowerZone: zoneNumber,
           snapshot: {
             ...current.snapshot,
+            pcm: nextPcm,
             zones: current.snapshot.zones.map((row) =>
               row.zoneNumber === zoneNumber
                 ? {
@@ -615,8 +672,11 @@ export function useAudioModule(): {
       if (!snapshot) {
         return false;
       }
-      const pcm = getEffectivePcmRouting(snapshot.pcm, snapshot.zones);
-      return pcm.activeStack.includes(zoneNumber);
+      const zone = snapshot.zones.find((row) => row.zoneNumber === zoneNumber);
+      if (!zone || !isZoneEnabled(zone)) {
+        return false;
+      }
+      return snapshot.pcm.activeStack.includes(zoneNumber);
     },
     [state.snapshot]
   );
@@ -627,8 +687,7 @@ export function useAudioModule(): {
       if (!snapshot) {
         return false;
       }
-      const pcm = getEffectivePcmRouting(snapshot.pcm, snapshot.zones);
-      return getDacOwnerZoneId(pcm) === zoneNumber;
+      return getDacOwnerZoneId(snapshot.pcm) === zoneNumber;
     },
     [state.snapshot]
   );
@@ -638,12 +697,11 @@ export function useAudioModule(): {
     if (!snapshot) {
       return null;
     }
-    const pcm = getEffectivePcmRouting(snapshot.pcm, snapshot.zones);
-    const ownerZoneId = getDacOwnerZoneId(pcm);
+    const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
+    const { title, artist, album, clientName } = snapshot.pcm.metadata;
     if (ownerZoneId <= 0) {
       return null;
     }
-    const { title, artist, album, clientName } = pcm.metadata;
     if (!title && !artist) {
       return null;
     }

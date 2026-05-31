@@ -27,15 +27,15 @@ void log_set_level(const char* level) { g_min_level = parse_level(level); }
 static const char* level_name(LogLevel level) {
   switch (level) {
     case LOG_LEVEL_DEBUG:
-      return "debug";
+      return "DEBUG";
     case LOG_LEVEL_INFO:
-      return "info";
+      return "INFO";
     case LOG_LEVEL_WARN:
-      return "warn";
+      return "WARN";
     case LOG_LEVEL_ERROR:
-      return "error";
+      return "ERROR";
     default:
-      return "info";
+      return "INFO";
   }
 }
 
@@ -49,11 +49,15 @@ void log_msg(LogLevel level, const char* module, const char* event, const char* 
   struct tm tm;
   gmtime_r(&ts.tv_sec, &tm);
   char timestamp[32];
-  strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%S", &tm);
+  strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm);
+
+  const char* module_str = module ? module : "";
+  const char* event_str = event ? event : "";
+  const char* message_str = message ? message : "";
 
   fprintf(stderr,
-          "{\"timestamp\":\"%s.000Z\",\"level\":\"%s\",\"service\":\"homepi-pcm-router\","
-          "\"module\":\"%s\",\"event\":\"%s\",\"message\":\"%s\"}\n",
-          timestamp, level_name(level), module ? module : "", event ? event : "",
-          message ? message : "");
+          "{\"ts\":\"%s\",\"service\":\"homepi-pcm-router\","
+          "\"module\":\"%s\",\"level\":\"%s\",\"event\":\"%s\","
+          "\"correlationId\":\"%s\",\"message\":\"%s\",\"data\":{}}\n",
+          timestamp, module_str, level_name(level), event_str, event_str, message_str);
 }

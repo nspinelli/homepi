@@ -118,6 +118,36 @@ describe("system status vertical slice", () => {
     expect(exampleResult.valid).toBe(true);
   });
 
+  it("computes uptime at read time when startedAt is provided", () => {
+    const startedAt = new Date(Date.now() - 5_000);
+    const store = new SystemStatusStore(
+      {
+        backend: "healthy",
+        config: "loaded",
+        logging: "active",
+        runtime: "running",
+        transport: "ready",
+        events: "ready",
+        state: "ready",
+        api: "ready",
+        usbDevices: "offline",
+        hifiSerial: "offline",
+        nqptp: "offline",
+        metadata: "offline",
+        pcmRouter: "offline",
+        shairport: "offline",
+        uptimeMs: 0,
+        cpuTempC: null,
+        lastEventAt: null,
+      },
+      startedAt
+    );
+
+    const status = store.getStatus();
+    expect(status.uptimeMs).toBeGreaterThanOrEqual(4_900);
+    expect(status.uptimeMs).toBeLessThanOrEqual(6_000);
+  });
+
   it("aggregates core status from the state store", () => {
     const store = new SystemStatusStore({
       backend: "healthy",

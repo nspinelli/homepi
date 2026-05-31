@@ -120,16 +120,10 @@ static void on_message(struct mosquitto* mosq, void* userdata,
     if (parsed.zone_id >= 1 && parsed.zone_id <= HOMEPI_PCM_MAX_ZONES) {
       const bool playing = payload_is_true(payload);
       g_zone_playing[parsed.zone_id] = playing;
-      if (playing) {
-        if (zone_state_get_owner(g_zone_state) == 0) {
-          zone_state_on_active_start(g_zone_state, parsed.zone_id);
-        }
-      } else {
-        zone_state_on_active_end(g_zone_state, parsed.zone_id);
-        if (zone_state_get_owner(g_zone_state) == 0) {
-          rebuild_routing_stack();
-        }
+      if (playing && zone_state_get_owner(g_zone_state) == 0) {
+        zone_state_on_active_start(g_zone_state, parsed.zone_id);
       }
+      /* Paused playback keeps routing; route_end/active=false tear down. */
     }
     return;
   }

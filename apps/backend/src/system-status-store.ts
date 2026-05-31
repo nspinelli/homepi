@@ -10,12 +10,15 @@ const STATE_TOPIC = "system.status";
  */
 export class SystemStatusStore {
   private snapshot: StateSnapshot;
+  private readonly startedAt: Date | null;
 
   /**
    * Creates a new system status store with an initial snapshot.
    * @param initial - Initial system status values.
+   * @param startedAt - Optional process start time for computed uptime.
    */
-  constructor(initial: SystemStatusSnapshot) {
+  constructor(initial: SystemStatusSnapshot, startedAt?: Date) {
+    this.startedAt = startedAt ?? null;
     this.snapshot = createSnapshot({
       owner: STATE_OWNER,
       topic: STATE_TOPIC,
@@ -25,10 +28,15 @@ export class SystemStatusStore {
 
   /**
    * Returns the current system status snapshot values.
+   * Uptime is computed at read time when startedAt was provided.
    * @returns System status snapshot.
    */
   getStatus(): SystemStatusSnapshot {
-    return structuredClone(this.snapshot.state) as unknown as SystemStatusSnapshot;
+    const status = structuredClone(this.snapshot.state) as unknown as SystemStatusSnapshot;
+    if (this.startedAt) {
+      status.uptimeMs = Math.max(0, Date.now() - this.startedAt.getTime());
+    }
+    return status;
   }
 
   /**

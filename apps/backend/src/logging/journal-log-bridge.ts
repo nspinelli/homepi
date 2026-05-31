@@ -5,9 +5,13 @@ import type { LogLevel, LogMessage } from "@homepi/core-logging";
 import type { Logger } from "@homepi/core-logging";
 
 import type { EventBroadcaster } from "../event-broadcaster.js";
+import type { JournalServiceStatusBridge } from "../status/journal-service-status-bridge.js";
 
 const LOG_TOPIC = "system.logging";
 const LOG_EVENT = "log_record";
+
+/** How far back to load journal lines when the bridge starts (then follow). */
+const JOURNAL_LOOKBACK = "-30m";
 
 const JOURNAL_UNITS = [
   "homepi-backend.service",
@@ -20,6 +24,63 @@ const JOURNAL_UNITS = [
   "homepi-metadata@.service",
 ] as const;
 
+const LOG_LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];
+
+/**
+ * Normalizes a journal JSON line into the core logging contract.
+ * @param raw - Parsed journal line object.
+ * @returns Normalized log message or null when required fields are missing.
+ */
+export function normalizeJournalLogLine(
+  raw: Record<string, unknown>
+): LogMessage | null {
+  const ts =
+    typeof raw.ts === "string"
+      ? raw.ts
+      : typeof raw.timestamp === "string"
+        ? raw.timestamp
+        : null;
+  const service = typeof raw.service === "string" ? raw.service : null;
+  const module = typeof raw.module === "string" ? raw.module : null;
+  const event = typeof raw.event === "string" ? raw.event : null;
+  const message =
+    typeof raw.message === "string"
+      ? raw.message
+      : typeof raw.msg === "string"
+        ? raw.msg
+        : null;
+
+  if (!ts || !service || !module || !event || !message) {
+    return null;
+  }
+
+  const levelRaw = typeof raw.level === "string" ? raw.level.toUpperCase() : "INFO";
+  const level = LOG_LEVELS.includes(levelRaw as LogLevel)
+    ? (levelRaw as LogLevel)
+    : "INFO";
+
+  const correlationId =
+    typeof raw.correlationId === "string" && raw.correlationId.length > 0
+      ? raw.correlationId
+      : event;
+
+  const data =
+    typeof raw.data === "object" && raw.data !== null && !Array.isArray(raw.data)
+      ? (raw.data as Record<string, unknown>)
+      : {};
+
+  return {
+    ts,
+    service,
+    module,
+    level,
+    event,
+    correlationId,
+    message,
+    data,
+  };
+}
+
 /**
  * Options for the journald → SSE log bridge.
  */
@@ -28,6 +89,8 @@ export interface JournalLogBridgeOptions {
   logger: Logger;
   /** SSE broadcaster receiving log_record envelopes. */
   broadcaster: EventBroadcaster;
+  /** Optional bridge for lifecycle → service status updates. */
+  serviceStatusBridge?: JournalServiceStatusBridge;
 }
 
 /**
@@ -57,7 +120,7 @@ export class JournalLogBridge {
       "-o",
       "cat",
       "--since",
-      "now",
+      JOURNAL_LOOKBACK,
       ...JOURNAL_UNITS.flatMap((unit) => ["-u", unit]),
     ];
 
@@ -152,16 +215,11 @@ export class JournalLogBridge {
       return;
     }
 
-    const log = parsed as Partial<LogMessage>;
-    if (
-      typeof log.ts !== "string" ||
-      typeof log.service !== "string" ||
-      typeof log.module !== "string" ||
-      typeof log.level !== "string" ||
-      typeof log.event !== "string" ||
-      typeof log.correlationId !== "string" ||
-      typeof log.message !== "string"
-    ) {
+    const log =
+      typeof parsed === "object" && parsed !== null
+        ? normalizeJournalLogLine(parsed as Record<string, unknown>)
+        : null;
+    if (!log) {
       return;
     }
 
@@ -175,14 +233,20 @@ export class JournalLogBridge {
         ts: log.ts,
         service: log.service,
         module: log.module,
-        level: log.level as LogLevel,
+        level: log.level,
         event: log.event,
         correlationId: log.correlationId,
         message: log.message,
-        data: log.data ?? {},
+        data: log.data,
       },
     });
 
     this.options.broadcaster.broadcast(envelope);
+    this.options.serviceStatusBridge?.handleLogLine({
+      ts: log.ts,
+      service: log.service,
+      module: log.module,
+      event: log.event,
+    });
   }
 }

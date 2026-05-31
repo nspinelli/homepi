@@ -20,6 +20,7 @@ add_executable(homepi-hifi-serial
   src/state-repository.cpp
   src/sync-engine.cpp
   src/event-publisher.cpp
+  src/service-health-emitter.cpp
   src/unix-api-server.cpp
 )
 

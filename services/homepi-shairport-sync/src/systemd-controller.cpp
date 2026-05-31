@@ -37,6 +37,13 @@ void SystemdController::restart_zones(const std::vector<int>& zone_numbers) cons
   }
 }
 
+void SystemdController::stop_zones(const std::vector<int>& zone_numbers) const {
+  for (int zone : zone_numbers) {
+    run_systemctl("stop homepi-metadata@" + std::to_string(zone) + ".service");
+    run_systemctl("stop homepi-shairport@" + std::to_string(zone) + ".service");
+  }
+}
+
 bool SystemdController::is_unit_active(const std::string& unit) const {
   const std::string cmd = "systemctl is-active " + unit + " 2>/dev/null";
   std::array<char, 64> buffer{};

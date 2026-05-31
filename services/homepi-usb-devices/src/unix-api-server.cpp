@@ -4,9 +4,12 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <thread>
 
 #include "homepi/usb-devices/artifact-writer.hpp"
@@ -22,9 +25,6 @@ namespace {
 constexpr const char* kPostAssignmentHook =
     "/opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh";
 
-/**
- * Deploys udev rules and restarts HiFi serial after assignment changes (non-blocking).
- */
 void run_post_assignment_hook_async() {
   std::thread([]() {
     std::system(
@@ -68,7 +68,7 @@ bool UnixApiServer::start() {
     return false;
   }
 
-  if (listen(server_fd_, 8) < 0) {
+  if (listen(server_fd_, 16) < 0) {
     close(server_fd_);
     server_fd_ = -1;
     return false;
@@ -89,8 +89,27 @@ void UnixApiServer::stop() {
   if (thread_.joinable()) {
     thread_.join();
   }
+  std::lock_guard lock(clients_mutex_);
+  for (int fd : subscribers_) {
+    close(fd);
+  }
+  subscribers_.clear();
   std::error_code ec;
   fs::remove(context_.config.socket_path, ec);
+}
+
+void UnixApiServer::broadcast(const std::string& line) {
+  const std::string frame = line + "\n";
+  std::lock_guard lock(clients_mutex_);
+  for (auto it = subscribers_.begin(); it != subscribers_.end();) {
+    const ssize_t written = ::write(*it, frame.c_str(), frame.size());
+    if (written < 0) {
+      close(*it);
+      it = subscribers_.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
 
 void UnixApiServer::listen_loop() {
@@ -102,26 +121,62 @@ void UnixApiServer::listen_loop() {
       }
       continue;
     }
+    std::thread([this, client]() { handle_client(client); }).detach();
+  }
+}
 
-    std::string buffer;
-    char chunk[4096];
-    while (true) {
-      const ssize_t read_bytes = ::read(client, chunk, sizeof(chunk));
-      if (read_bytes <= 0) {
-        break;
+void UnixApiServer::handle_client(int client_fd) {
+  bool subscribed = false;
+  std::string buffer;
+  char chunk[4096];
+
+  while (!stop_.load()) {
+    const ssize_t n = ::read(client_fd, chunk, sizeof(chunk));
+    if (n <= 0) {
+      break;
+    }
+    buffer.append(chunk, static_cast<std::size_t>(n));
+
+    std::size_t pos = 0;
+    while ((pos = buffer.find('\n')) != std::string::npos) {
+      const std::string line = buffer.substr(0, pos);
+      buffer.erase(0, pos + 1);
+      if (line.empty()) {
+        continue;
       }
-      buffer.append(chunk, static_cast<std::size_t>(read_bytes));
-      if (buffer.find('\n') != std::string::npos) {
+
+      const std::string method = json_get_string(line, "method");
+      if (method == "subscribe") {
+        if (!subscribed) {
+          subscribed = true;
+          std::lock_guard lock(clients_mutex_);
+          subscribers_.insert(client_fd);
+          if (context_.on_subscribe_fn) {
+            context_.on_subscribe_fn();
+          }
+        }
+        const std::string correlation_id = json_get_string(line, "correlationId");
+        const std::string response =
+            "{\"ok\":true,\"correlationId\":\"" +
+            json_escape(correlation_id.empty() ? "usb-devices" : correlation_id) +
+            "\",\"data\":{\"subscribed\":true}}\n";
+        ::write(client_fd, response.c_str(), response.size());
+        continue;
+      }
+
+      const std::string response = handle_request(line) + "\n";
+      ::write(client_fd, response.c_str(), response.size());
+      if (method != "subscribe") {
         break;
       }
     }
-
-    const auto line_end = buffer.find('\n');
-    const std::string line = line_end == std::string::npos ? buffer : buffer.substr(0, line_end);
-    const std::string response = handle_request(line) + "\n";
-    ::write(client, response.c_str(), response.size());
-    close(client);
   }
+
+  {
+    std::lock_guard lock(clients_mutex_);
+    subscribers_.erase(client_fd);
+  }
+  close(client_fd);
 }
 
 std::string UnixApiServer::handle_request(const std::string& line) const {

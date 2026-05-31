@@ -25,6 +25,12 @@
       "restartSec": 5
     }
   },
+  "status": {
+    "fallbackReconciliation": {
+      "enabled": true,
+      "intervalMs": 120000
+    }
+  },
   "modules": {
     "audio": {
       "enabled": true,

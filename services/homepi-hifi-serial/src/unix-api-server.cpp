@@ -4,9 +4,11 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <iostream>
 #include <iomanip>
 #include <sstream>
 
@@ -58,14 +60,22 @@ bool UnixApiServer::start() {
   std::strncpy(addr.sun_path, context_.config.socket_path.c_str(), sizeof(addr.sun_path) - 1);
 
   if (bind(server_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+    const int bind_errno = errno;
+    std::cerr << "hifi-serial socket bind failed path=" << context_.config.socket_path
+              << " errno=" << bind_errno << " " << std::strerror(bind_errno) << "\n";
     close(server_fd_);
     server_fd_ = -1;
+    errno = bind_errno;
     return false;
   }
 
   if (listen(server_fd_, 16) < 0) {
+    const int listen_errno = errno;
+    std::cerr << "hifi-serial socket listen failed path=" << context_.config.socket_path
+              << " errno=" << listen_errno << " " << std::strerror(listen_errno) << "\n";
     close(server_fd_);
     server_fd_ = -1;
+    errno = listen_errno;
     return false;
   }
 
@@ -170,6 +180,9 @@ void UnixApiServer::handle_client(int client_fd) {
             std::lock_guard lock(clients_mutex_);
             subscribers_.insert(client_fd);
             send_snapshot();
+            if (context_.on_subscribe_fn) {
+              context_.on_subscribe_fn();
+            }
           }
           continue;
         }

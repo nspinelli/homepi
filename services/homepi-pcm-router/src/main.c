@@ -157,10 +157,16 @@ static int run_daemon(void) {
   if (g_audio_router_active) {
     json_events_emit("modules.pcm", "health", "startup",
                      "{\"status\":\"running\",\"audioActive\":true}");
+    json_events_emit_service_status("service_ready", "startup", "healthy",
+                                  ",\"audioActive\":true");
   } else {
     json_events_emit("modules.pcm", "health", "startup",
                      "{\"status\":\"degraded\",\"audioActive\":false}");
+    json_events_emit_service_status("service_degraded", "startup", "degraded",
+                                  ",\"audioActive\":false");
   }
+  json_events_emit_service_status("service_started", "startup",
+                                g_audio_router_active ? "healthy" : "degraded", NULL);
 
   while (!g_stop) {
     sleep(1);

@@ -1,6 +1,10 @@
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
+#include <sys/file.h>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -8,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 
 #include "homepi/log.hpp"
 #include "homepi/hifi-serial/command-queue.hpp"
@@ -20,6 +25,7 @@
 #include "homepi/hifi-serial/serial-port.hpp"
 #include "homepi/hifi-serial/state-repository.hpp"
 #include "homepi/hifi-serial/sync-engine.hpp"
+#include "homepi/hifi-serial/service-health-emitter.hpp"
 #include "homepi/hifi-serial/unix-api-server.hpp"
 
 namespace {
@@ -34,11 +40,43 @@ homepi::hifi_serial::EventPublisher* g_events = nullptr;
 
 void handle_signal(int /*signal*/) { g_running = false; }
 
+void emit_health_event(const std::string& event_name, const std::string& correlation_id) {
+  if (g_server == nullptr) {
+    return;
+  }
+  homepi::hifi_serial::ServiceHealth health;
+  {
+    std::lock_guard lock(g_health_mutex);
+    health = g_health;
+    if (g_queue) {
+      health.queue_depth = g_queue->pending_count();
+    }
+  }
+  homepi::hifi_serial::emit_service_health(*g_server, health, event_name, correlation_id);
+}
+
 std::string read_migration(const std::string& path) {
   std::ifstream input(path);
   std::ostringstream buffer;
   buffer << input.rdbuf();
   return buffer.str();
+}
+
+/**
+ * Ensures only one daemon instance runs (prevents duplicate serial/socket contention).
+ * @param lock_path Path to the flock lock file.
+ * @returns True when this process acquired the lock.
+ */
+bool acquire_instance_lock(const std::string& lock_path) {
+  const int fd = ::open(lock_path.c_str(), O_RDWR | O_CREAT, 0644);
+  if (fd < 0) {
+    return false;
+  }
+  if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
+    ::close(fd);
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -69,6 +107,14 @@ int main(int argc, char* argv[]) {
   homepi::logging::Logger logger(config.service, log_level);
   logger.log(log_level, "core.runtime", "lifecycle_starting", "startup",
              "homepi-hifi-serial starting");
+
+  const std::string instance_lock_path = config.socket_dir + "/hifi-serial.lock";
+  if (!acquire_instance_lock(instance_lock_path)) {
+    logger.log(homepi::logging::LogLevel::ERROR, "core.runtime", "instance_already_running",
+               "startup", "Another homepi-hifi-serial instance is already running",
+               std::string("{\"lockPath\":\"") + instance_lock_path + "\"}");
+    return 1;
+  }
 
   const std::string migration_path = "storage/migrations/002-hifi-serial.sql";
   {
@@ -166,13 +212,17 @@ int main(int argc, char* argv[]) {
             std::lock_guard lock(g_health_mutex);
             g_health.sync_in_progress = true;
           }
+          emit_health_event("sync_started", correlation_id);
           homepi::hifi_serial::SyncEngine::run_full_sync(queue);
           repository.mark_full_sync_complete();
           {
             std::lock_guard lock(g_health_mutex);
             g_health.sync_in_progress = false;
             g_health.last_full_sync_at = "now";
+            g_health.degraded = false;
           }
+          emit_health_event("sync_completed", correlation_id);
+          emit_health_event("service_recovered", correlation_id);
           return ok("{\"synced\":true}");
         }
 
@@ -294,6 +344,7 @@ int main(int argc, char* argv[]) {
         return err("unknown method");
       },
       .snapshot_json_fn = [&]() { return repository.snapshot_json(); },
+      .on_subscribe_fn = [&]() { emit_health_event("service_ready", "subscribe"); },
   });
 
   g_server = &server;
@@ -315,34 +366,44 @@ int main(int argc, char* argv[]) {
     }
   });
 
-  const bool serial_opened =
-      !serial_path.empty() && port.open(serial_path, config.baud_rate);
-  if (serial_opened) {
-    std::lock_guard lock(g_health_mutex);
-    g_health.connected = true;
-    g_health.serial_assigned = true;
-    g_health.serial_path = serial_path;
-    g_health.lifecycle = "running";
-    repository.set_serial_metadata(serial_resolution.device_id, serial_path);
-    logger.log(log_level, "hifi.serial", "serial_connected", "startup",
-               "Serial port opened", "{\"path\":\"" + serial_path + "\"}");
-  } else {
-    std::lock_guard lock(g_health_mutex);
-    g_health.degraded = true;
-    g_health.lifecycle = "running";
-    logger.log(homepi::logging::LogLevel::WARN, "hifi.serial", "serial_unavailable",
-               "startup", "Serial port not available");
-  }
-
   if (!server.start()) {
     logger.log(homepi::logging::LogLevel::ERROR, "hifi.api", "socket_bind_failed", "startup",
-               "Failed to bind unix socket");
+               "Failed to bind unix socket",
+               std::string("{\"socketPath\":\"") + config.socket_path + "\",\"errno\":" +
+                   std::to_string(errno) + ",\"error\":\"" +
+                   homepi::hifi_serial::json_escape(std::strerror(errno)) + "\"}");
     return 1;
   }
 
   logger.log(log_level, "core.runtime", "service_started", "startup",
              "homepi-hifi-serial running",
-             std::string("{\"socketPath\":\"") + config.socket_path + "\"");
+             std::string("{\"socketPath\":\"") + config.socket_path + "\"}");
+  emit_health_event("service_started", "startup");
+
+  const bool serial_opened =
+      !serial_path.empty() && port.open(serial_path, config.baud_rate);
+  if (serial_opened) {
+    {
+      std::lock_guard lock(g_health_mutex);
+      g_health.connected = true;
+      g_health.serial_assigned = true;
+      g_health.serial_path = serial_path;
+      g_health.lifecycle = "running";
+    }
+    repository.set_serial_metadata(serial_resolution.device_id, serial_path);
+    logger.log(log_level, "hifi.serial", "serial_connected", "startup",
+               "Serial port opened", "{\"path\":\"" + serial_path + "\"}");
+    emit_health_event("hardware_connected", "startup");
+  } else {
+    {
+      std::lock_guard lock(g_health_mutex);
+      g_health.degraded = true;
+      g_health.lifecycle = "running";
+    }
+    logger.log(homepi::logging::LogLevel::WARN, "hifi.serial", "serial_unavailable",
+               "startup", "Serial port not available");
+    emit_health_event("service_degraded", "startup");
+  }
 
   if (serial_opened) {
     std::thread([&repository, &queue, &logger, log_level]() {
@@ -350,6 +411,7 @@ int main(int argc, char* argv[]) {
         std::lock_guard lock(g_health_mutex);
         g_health.sync_in_progress = true;
       }
+      emit_health_event("sync_started", "startup");
       logger.log(log_level, "hifi.serial", "sync_started", "startup",
                  "Running startup controller sync");
       homepi::hifi_serial::SyncEngine::run_full_sync(queue);
@@ -359,7 +421,11 @@ int main(int argc, char* argv[]) {
         g_health.sync_in_progress = false;
         g_health.last_full_sync_at = "now";
         g_health.degraded = false;
+        g_health.connected = true;
       }
+      emit_health_event("sync_completed", "startup");
+      emit_health_event("controller_connected", "startup");
+      emit_health_event("service_recovered", "startup");
       logger.log(log_level, "hifi.serial", "sync_completed", "startup",
                  "Startup controller sync finished");
     }).detach();

@@ -13,6 +13,7 @@ const STATUS_TOPIC = "system.status";
  */
 export class WsHandler {
   private readonly wss: WebSocketServer;
+  private readonly sockets = new Set<WebSocket>();
 
   /**
    * Creates a WebSocket handler with noServer mode.
@@ -56,10 +57,36 @@ export class WsHandler {
    * Closes the WebSocket server.
    */
   close(): void {
+    this.sockets.clear();
     this.wss.close();
   }
 
+  /**
+   * Broadcasts a system status delta to all connected WebSocket clients.
+   * @param correlationId - Correlation identifier.
+   */
+  broadcastStatusDelta(correlationId: string): void {
+    const timestamp = new Date().toISOString();
+    for (const socket of this.sockets) {
+      if (socket.readyState !== socket.OPEN) {
+        continue;
+      }
+      const envelope = createTransportEnvelope({
+        type: "event",
+        source: WS_SOURCE,
+        topic: STATUS_TOPIC,
+        correlationId,
+        payload: {
+          status: this.getStatus(),
+          emittedAt: timestamp,
+        },
+      });
+      socket.send(encodeNdjsonLine(envelope));
+    }
+  }
+
   private onConnection(socket: WebSocket, request: IncomingMessage): void {
+    this.sockets.add(socket);
     const requestWithCorrelation = request as IncomingMessage & {
       homepiCorrelationId?: string;
     };
@@ -83,6 +110,7 @@ export class WsHandler {
     });
 
     socket.on("close", () => {
+      this.sockets.delete(socket);
       this.logger.info({
         module: "app.backend.transport",
         event: "websocket_client_disconnected",

@@ -78,6 +78,16 @@ ServiceConfig load_service_config(const std::string& config_path) {
     config.log_level = level;
   }
 
+  const int baud_rate = json_get_int(json, "baudRate");
+  if (baud_rate > 0) {
+    config.baud_rate = baud_rate;
+  }
+
+  const int command_interval_ms = json_get_int(json, "commandIntervalMs");
+  if (command_interval_ms > 0) {
+    config.command_interval_ms = command_interval_ms;
+  }
+
   return config;
 }
 

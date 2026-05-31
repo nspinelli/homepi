@@ -2,7 +2,8 @@
 
 #include <atomic>
 #include <functional>
-#include <memory>
+#include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -21,9 +22,11 @@ struct ApiContext {
   std::function<std::vector<UsbDevice>()> scan_fn;
   std::function<void()> on_devices_changed;
   std::function<ServiceHealth()> health_fn;
+  /** Called when a client subscribes to the event stream. */
+  std::function<void()> on_subscribe_fn;
 };
 
-/** Unix domain socket NDJSON API server. */
+/** Unix domain socket NDJSON API server with RPC and event fan-out. */
 class UnixApiServer {
  public:
   explicit UnixApiServer(ApiContext context);
@@ -41,14 +44,23 @@ class UnixApiServer {
   /** Stops the server and removes the socket file. */
   void stop();
 
+  /**
+   * Broadcasts an event line to all subscribers.
+   * @param line NDJSON event envelope.
+   */
+  void broadcast(const std::string& line);
+
  private:
   void listen_loop();
+  void handle_client(int client_fd);
   std::string handle_request(const std::string& line) const;
 
   ApiContext context_;
   std::thread thread_;
   std::atomic<bool> stop_{false};
   int server_fd_ = -1;
+  std::mutex clients_mutex_;
+  std::set<int> subscribers_;
 };
 
 }  // namespace homepi::usb_devices

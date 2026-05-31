@@ -1,5 +1,6 @@
 #include "homepi/shairport-sync/supervisor.hpp"
 
+#include <algorithm>
 #include <chrono>
 
 #include "homepi/log.hpp"
@@ -37,18 +38,36 @@ void Supervisor::set_airplay_source(int source_number) {
 }
 
 std::vector<int> Supervisor::enabled_zone_numbers() const {
+  const auto rows = db_.get_zones();
   std::vector<int> zones;
-  for (const auto& zone : db_.get_zones()) {
-    if (zone.enabled.value_or(1) != 0) {
+  zones.reserve(rows.size());
+  for (const auto& zone : rows) {
+    if (zone.enabled.has_value() && zone.enabled.value() == 1) {
       zones.push_back(zone.zone_number);
     }
   }
-  if (zones.empty()) {
-    for (int zone = 1; zone <= config_.zone_count; ++zone) {
-      zones.push_back(zone);
+  return zones;
+}
+
+void Supervisor::reconcile_zone_units(const std::vector<int>& enabled) {
+  std::vector<int> start_zones;
+  std::vector<int> stop_zones;
+  for (int zone = 1; zone <= config_.zone_count; ++zone) {
+    const bool should_run =
+        std::find(enabled.begin(), enabled.end(), zone) != enabled.end();
+    const std::string unit = "homepi-shairport@" + std::to_string(zone) + ".service";
+    if (should_run && !systemd_.is_unit_active(unit)) {
+      start_zones.push_back(zone);
+    } else if (!should_run && systemd_.is_unit_active(unit)) {
+      stop_zones.push_back(zone);
     }
   }
-  return zones;
+  if (!start_zones.empty()) {
+    systemd_.start_zones(start_zones);
+  }
+  if (!stop_zones.empty()) {
+    systemd_.stop_zones(stop_zones);
+  }
 }
 
 void Supervisor::transition_offline(const std::vector<std::string>& failures) {
@@ -80,7 +99,6 @@ void Supervisor::evaluate() {
     return;
   }
 
-  const bool was_running = state_ == SupervisorState::running;
   state_ = SupervisorState::configuring;
   failed_prerequisites_.clear();
 
@@ -99,26 +117,27 @@ void Supervisor::evaluate() {
   config_hashes_ = new_hashes;
 
   const auto enabled = enabled_zone_numbers();
-  if (!was_running) {
-    systemd_.start_zones(enabled);
-    state_ = SupervisorState::running;
-    active_zone_count_ = static_cast<int>(enabled.size());
-    return;
-  }
-
   if (!restart_zones.empty()) {
     systemd_.restart_zones(restart_zones);
   }
+  reconcile_zone_units(enabled);
+
   active_zone_count_ = static_cast<int>(enabled.size());
   state_ = SupervisorState::running;
 }
 
 void Supervisor::run() {
   hifi_client_.start(config_.hifi_socket_path, [this](const std::string& line) {
-    if (line.find("audio_state_snapshot") != std::string::npos) {
+    if (line.find("audio_state_snapshot") != std::string::npos ||
+        line.find("zone_enable_changed") != std::string::npos) {
       request_evaluate();
     }
   });
+
+  {
+    std::lock_guard lock(mutex_);
+    evaluate();
+  }
 
   while (running_.load()) {
     if (evaluate_pending_.exchange(false)) {

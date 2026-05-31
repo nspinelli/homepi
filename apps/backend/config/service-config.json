@@ -16,5 +16,11 @@
       "stateDir": "/opt/homepi/runtime/state",
       "socketDir": "/run/homepi"
     }
+  },
+  "status": {
+    "fallbackReconciliation": {
+      "enabled": true,
+      "intervalMs": 120000
+    }
   }
 }

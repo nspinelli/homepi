@@ -26,6 +26,12 @@ class SystemdController {
   void restart_zones(const std::vector<int>& zone_numbers) const;
 
   /**
+   * Stops zone and metadata instances for the given zone numbers.
+   * @param zone_numbers Zone ids to stop.
+   */
+  void stop_zones(const std::vector<int>& zone_numbers) const;
+
+  /**
    * @param unit Systemd unit name.
    * @returns True when unit is active.
    */

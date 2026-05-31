@@ -46,6 +46,7 @@ class Supervisor {
   void evaluate();
   void transition_offline(const std::vector<std::string>& failures);
   std::vector<int> enabled_zone_numbers() const;
+  void reconcile_zone_units(const std::vector<int>& enabled);
 
   ServiceConfig config_;
   DbRepository& db_;

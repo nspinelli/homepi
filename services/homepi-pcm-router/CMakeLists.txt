@@ -1,73 +1,55 @@
-cmake_minimum_required(VERSION 3.16)
-project(homepi-pcm-router VERSION 0.1.0 LANGUAGES C)
+cmake_minimum_required(VERSION 3.20)
+project(homepi-pcm-router VERSION 0.2.0 LANGUAGES CXX)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ALSA REQUIRED alsa)
-pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
-pkg_check_modules(SOXR REQUIRED soxr)
-find_package(SQLite3 REQUIRED)
 find_package(Threads REQUIRED)
 
-set(SOURCES
-  src/main.c
-  src/config.c
-  src/dac_resolver.c
-  src/audio_loopback.c
-  src/audio_router.c
-  src/ringbuffer.c
-  src/zone_state.c
-  src/shairport_metadata_adapter.c
-  src/json_events.c
-  src/unix_socket_server.c
-  src/mqtt_client.c
-  src/nqptp_refresh.c
-  src/log.c
+set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
+set(HOMEPI_STORAGE_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/storage/cpp")
+set(HOMEPI_EVENTS_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/events/cpp")
+
+add_subdirectory(${HOMEPI_STORAGE_CPP} ${CMAKE_BINARY_DIR}/homepi_core_storage)
+add_subdirectory(${HOMEPI_EVENTS_CPP} ${CMAKE_BINARY_DIR}/homepi_core_events)
+
+add_executable(homepi-pcm-router
+  src/main.cpp
+  src/service.cpp
+  src/audio-profile-loader.cpp
+  src/loopback-mapping.cpp
+  src/frame-ring.cpp
+  src/routing-state.cpp
+  src/snapshot-builder.cpp
+  src/audio-bridge.cpp
+  src/unix-api-server.cpp
+  src/event-subscriber.cpp
+  src/json-utils.cpp
 )
 
-add_executable(homepi-pcm-router ${SOURCES})
-target_include_directories(homepi-pcm-router PRIVATE include)
-target_link_libraries(homepi-pcm-router PRIVATE
-  ${ALSA_LIBRARIES}
-  ${MOSQUITTO_LIBRARIES}
-  ${SOXR_LIBRARIES}
-  SQLite::SQLite3
-  Threads::Threads
-  m
+target_include_directories(homepi-pcm-router PRIVATE
+  include
+  ${HOMEPI_LOGGING_CPP}/include
+  ${HOMEPI_STORAGE_CPP}/include
+  ${HOMEPI_EVENTS_CPP}/include
+  ${ALSA_INCLUDE_DIRS}
 )
+
+target_link_libraries(homepi-pcm-router PRIVATE
+  homepi_core_storage
+  homepi_core_events
+  ${ALSA_LIBRARIES}
+  Threads::Threads
+)
+
+target_link_directories(homepi-pcm-router PRIVATE ${ALSA_LIBRARY_DIRS})
 target_compile_options(homepi-pcm-router PRIVATE -Wall -Wextra -Wpedantic)
-target_link_directories(homepi-pcm-router PRIVATE ${ALSA_LIBRARY_DIRS} ${MOSQUITTO_LIBRARY_DIRS} ${SOXR_LIBRARY_DIRS})
-target_include_directories(homepi-pcm-router PRIVATE ${ALSA_INCLUDE_DIRS} ${MOSQUITTO_INCLUDE_DIRS} ${SOXR_INCLUDE_DIRS})
 
 install(TARGETS homepi-pcm-router RUNTIME DESTINATION bin)
 
 enable_testing()
-
-set(TEST_SOURCES
-  tests/test_topic_parse.c
-  tests/test_active_stack.c
-  tests/test_pcm_mapping.c
-  tests/test_fade_math.c
-)
-
-add_executable(test_topic_parse tests/test_topic_parse.c src/shairport_metadata_adapter.c)
-target_include_directories(test_topic_parse PRIVATE include)
-add_test(NAME test_topic_parse COMMAND test_topic_parse)
-
-add_executable(test_pcm_mapping tests/test_pcm_mapping.c src/audio_loopback.c src/config.c src/log.c)
-target_include_directories(test_pcm_mapping PRIVATE include)
-target_link_libraries(test_pcm_mapping PRIVATE ${ALSA_LIBRARIES} m)
-target_include_directories(test_pcm_mapping PRIVATE ${ALSA_INCLUDE_DIRS})
-add_test(NAME test_pcm_mapping COMMAND test_pcm_mapping)
-
-add_executable(test_active_stack tests/test_active_stack.c
-  src/zone_state.c src/json_events.c src/unix_socket_server.c src/log.c)
-target_include_directories(test_active_stack PRIVATE include)
-target_link_libraries(test_active_stack PRIVATE Threads::Threads)
-add_test(NAME test_active_stack COMMAND test_active_stack)
-
-add_executable(test_fade_math tests/test_fade_math.c)
-target_link_libraries(test_fade_math PRIVATE m)
-add_test(NAME test_fade_math COMMAND test_fade_math)
+add_executable(test_routing_state tests/test-routing-state.cpp src/routing-state.cpp)
+target_include_directories(test_routing_state PRIVATE include)
+add_test(NAME test_routing_state COMMAND test_routing_state)

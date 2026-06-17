@@ -9,6 +9,7 @@ import { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import { AudioRoutes } from "./audio/audio-routes.js";
+import { ShairportRemoteClient } from "./audio/shairport-remote-client.js";
 import { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,9 +66,11 @@ const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
+const shairportRemoteClient = new ShairportRemoteClient();
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
+  shairportRemote: shairportRemoteClient,
   statusStore,
   config: serviceConfig,
   logger,

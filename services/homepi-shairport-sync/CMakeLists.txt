@@ -8,6 +8,9 @@ find_package(SQLite3 REQUIRED)
 find_package(Threads REQUIRED)
 
 set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
+set(HOMEPI_STORAGE_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/storage/cpp")
+
+add_subdirectory(${HOMEPI_STORAGE_CPP} ${CMAKE_BINARY_DIR}/homepi_core_storage)
 
 add_executable(homepi-shairport-supervisor
   src/main.cpp
@@ -17,15 +20,18 @@ add_executable(homepi-shairport-supervisor
   src/config-generator.cpp
   src/systemd-controller.cpp
   src/hifi-event-client.cpp
+  src/usb-event-client.cpp
   src/supervisor.cpp
 )
 
 target_include_directories(homepi-shairport-supervisor PRIVATE
   include
   ${HOMEPI_LOGGING_CPP}/include
+  ${HOMEPI_STORAGE_CPP}/include
 )
 
 target_link_libraries(homepi-shairport-supervisor PRIVATE
+  homepi_core_storage
   SQLite::SQLite3
   Threads::Threads
 )

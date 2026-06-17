@@ -1,8 +1,7 @@
 [Unit]
 Description=HomePi PCM Router
-After=network-online.target sound.target mosquitto.service homepi-usb-devices.service
-Wants=network-online.target mosquitto.service
-Requires=mosquitto.service
+After=network-online.target sound.target homepi-usb-devices.service
+Wants=network-online.target
 
 [Service]
 Type=simple

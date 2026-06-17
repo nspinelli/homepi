@@ -70,13 +70,80 @@ export interface PcmMetadata {
 }
 
 /**
+ * PCM router playback progress and transport state for the DAC owner zone.
+ */
+export interface PcmPlayback {
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  /** Wall-clock ms when positionMs was last synced from the AirPlay source. */
+  progressSyncedAt?: number;
+}
+
+/**
+ * PCM profile tuple from pcm_router_snapshot v2.
+ */
+export interface PcmProfileTuple {
+  sampleRate: number;
+  channels: number;
+  sampleFormat: string;
+}
+
+/**
  * PCM router live routing state.
  */
 export interface PcmState {
   ownerZoneId: number;
   activeStack: number[];
   dacState: string;
+  profileMode?: string;
+  profileStatus?: string;
+  loopbackProfile?: PcmProfileTuple;
+  dacProfile?: PcmProfileTuple;
+  profileRevision?: number;
+  profileSource?: string;
+  audioBridgeState?: string;
   metadata: PcmMetadata;
+  playback: PcmPlayback;
+  /** True when pcm-router has cached cover art for the owner zone. */
+  hasCoverArt?: boolean;
+}
+
+/**
+ * Shairport remote commands accepted by the playback API.
+ */
+export type PlaybackRemoteCommand =
+  | "play"
+  | "pause"
+  | "playpause"
+  | "playresume"
+  | "stop"
+  | "nextitem"
+  | "previtem"
+  | "volumedown"
+  | "volumeup"
+  | "mutetoggle"
+  | "shuffle_songs";
+
+/**
+ * View model for the Home Audio player bar.
+ */
+export interface AudioPlaybackView {
+  visible: boolean;
+  zoneId: number;
+  zoneName: string;
+  track?: string;
+  artist?: string;
+  album?: string;
+  sourceLabel?: string;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  /** Wall-clock ms when positionMs was last synced from the source. */
+  progressSyncedAt: number;
+  /** Hi-Fi zone volume 0–100 (synced with AirPlay via the shairport hook). */
+  volume: number;
+  coverUrl?: string;
 }
 
 /**

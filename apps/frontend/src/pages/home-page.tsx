@@ -5,7 +5,7 @@ import { useAudioModule } from "@/hooks/use-audio-module.js";
  * Home dashboard with module cards.
  */
 export function HomePage(): React.JSX.Element {
-  const { state, nowPlaying } = useAudioModule();
+  const { state, nowPlaying, playback } = useAudioModule();
   const snapshot = state.snapshot;
   const connected = snapshot?.hifiConnected ?? false;
 
@@ -29,6 +29,7 @@ export function HomePage(): React.JSX.Element {
           artist={nowPlaying?.artist}
           album={nowPlaying?.album}
           source={nowPlaying?.source}
+          coverUrl={playback?.coverUrl}
           serviceStatuses={nowPlaying ? undefined : serviceStatuses}
         />
       </div>

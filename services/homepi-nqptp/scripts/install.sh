@@ -57,6 +57,8 @@ fetch_upstream() {
   rm -rf "${SRC_DIR}"
   mkdir -p "${BUILD_DIR}"
   git clone --depth 1 --branch "${UPSTREAM_VERSION}" "${UPSTREAM_REPO}" "${SRC_DIR}"
+  log "Patching nqptp for multi-zone play client reference counting"
+  patch -d "${SRC_DIR}" -p1 < "${SERVICE_ROOT}/patches/multi-zone-play-client-refcount.patch"
 }
 
 build_nqptp() {

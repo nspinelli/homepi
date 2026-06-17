@@ -61,12 +61,32 @@ export interface UsbDevice {
 }
 
 /**
+ * Supported PCM profile tuple.
+ */
+export interface AudioProfileTuple {
+  sampleRate: number;
+  channels: number;
+  sampleFormat: "S16_LE" | "S32_LE";
+}
+
+/**
  * USB role assignments from GET /api/usb-devices/assignments.
  */
 export interface UsbAssignments {
   serial: string | null;
   audioPrimary: string | null;
   paging: string | null;
+  audioPrimaryProfile?: AudioProfileTuple | null;
+}
+
+/**
+ * Audio capabilities for a USB device.
+ */
+export interface AudioCapabilities {
+  deviceId: string;
+  supportedProfileTuples: AudioProfileTuple[];
+  probedAt?: string;
+  probeError?: string;
 }
 
 /**

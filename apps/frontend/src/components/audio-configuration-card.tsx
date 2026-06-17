@@ -1,8 +1,8 @@
 import { CheckCircle2, CircleAlert, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button.js";
-import { useUsbDeviceSettings } from "@/hooks/use-usb-device-settings.js";
-import type { UsbDevice } from "@/types/dashboard-types.js";
+import { useUsbDeviceSettings, formatProfileTuple } from "@/hooks/use-usb-device-settings.js";
+import type { AudioProfileTuple, UsbDevice } from "@/types/dashboard-types.js";
 
 /**
  * Props for a device role dropdown row.
@@ -103,6 +103,16 @@ export function AudioConfigurationCard(): React.JSX.Element {
           </div>
         ) : null}
 
+        {state.profileAlert ? (
+          <div
+            className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300"
+            role="alert"
+          >
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <p>{state.profileAlert}</p>
+          </div>
+        ) : null}
+
         <DeviceSelectRow
           label="Primary Serial Connection"
           value={state.draft.serial}
@@ -116,8 +126,44 @@ export function AudioConfigurationCard(): React.JSX.Element {
           value={state.draft.audioPrimary}
           options={audioOptions}
           disabled={state.loading || state.saving}
-          onChange={(deviceId) => setDraft({ audioPrimary: deviceId })}
+          onChange={(deviceId) => setDraft({ audioPrimary: deviceId, audioPrimaryProfile: null })}
         />
+
+        {state.draft.audioPrimary ? (
+          <label className="grid gap-2">
+            <span className="text-sm font-medium text-foreground">Primary Audio Profile</span>
+            <select
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
+              value={
+                state.draft.audioPrimaryProfile
+                  ? `${state.draft.audioPrimaryProfile.sampleRate}:${state.draft.audioPrimaryProfile.channels}:${state.draft.audioPrimaryProfile.sampleFormat}`
+                  : ""
+              }
+              disabled={state.loading || state.saving || state.supportedProfileTuples.length === 0}
+              onChange={(event) => {
+                const tuple = state.supportedProfileTuples.find(
+                  (candidate) =>
+                    `${candidate.sampleRate}:${candidate.channels}:${candidate.sampleFormat}` ===
+                    event.target.value
+                );
+                setDraft({ audioPrimaryProfile: tuple ?? null });
+              }}
+            >
+              <option value="">Select profile</option>
+              {state.supportedProfileTuples.map((tuple: AudioProfileTuple) => (
+                <option
+                  key={`${tuple.sampleRate}:${tuple.channels}:${tuple.sampleFormat}`}
+                  value={`${tuple.sampleRate}:${tuple.channels}:${tuple.sampleFormat}`}
+                >
+                  {formatProfileTuple(tuple)}
+                </option>
+              ))}
+            </select>
+            {state.profileSelectionRequired ? (
+              <p className="text-sm text-destructive">Select a profile before saving.</p>
+            ) : null}
+          </label>
+        ) : null}
 
         <DeviceSelectRow
           label="Primary Paging Output"
@@ -152,7 +198,7 @@ export function AudioConfigurationCard(): React.JSX.Element {
           ) : null}
           <Button
             type="button"
-            disabled={!state.isDirty || state.loading || state.saving}
+            disabled={!state.isDirty || state.loading || state.saving || state.profileSelectionRequired}
             onClick={() => void save()}
           >
             {state.saving ? (

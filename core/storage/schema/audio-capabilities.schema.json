@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/audio-capabilities.schema.json",
+  "title": "Audio Capabilities",
+  "description": "Probed ALSA playback capabilities for a USB audio device.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["deviceId", "supportedProfileTuples", "probedAt"],
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "pattern": "^usb:",
+      "description": "Stable HomePi device identifier."
+    },
+    "supportedProfileTuples": {
+      "type": "array",
+      "items": {
+        "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
+      },
+      "minItems": 1,
+      "description": "ALSA-legal profile combinations probed from hardware."
+    },
+    "probedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO8601 UTC timestamp of the last successful probe."
+    },
+    "probeError": {
+      "type": "string",
+      "description": "Human-readable probe failure when capabilities are unavailable."
+    }
+  }
+}

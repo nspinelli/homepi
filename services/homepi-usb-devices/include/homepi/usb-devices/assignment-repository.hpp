@@ -74,6 +74,12 @@ class AssignmentRepository {
   static bool assignments_degraded(const UsbAssignments& assignments,
                                    const std::vector<UsbDevice>& devices);
 
+  /**
+   * Returns the underlying sqlite handle for storage writers.
+   * @return sqlite3 pointer.
+   */
+  void* db_handle() const;
+
  private:
   void* db_ = nullptr;
 };

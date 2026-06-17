@@ -1,6 +1,7 @@
 import { connect } from "node:net";
 
 import type {
+  AudioCapabilities,
   UsbAssignments,
   UsbDevice,
   UsbDevicesHealth,
@@ -30,7 +31,7 @@ export class UsbDevicesClient {
    */
   constructor(options: UsbDevicesClientOptions) {
     this.socketPath = options.socketPath;
-    this.timeoutMs = options.timeoutMs ?? 3_000;
+    this.timeoutMs = options.timeoutMs ?? 30_000;
   }
 
   /**
@@ -72,6 +73,30 @@ export class UsbDevicesClient {
    */
   async getHealth(correlationId: string): Promise<UsbDevicesHealth> {
     return this.request<UsbDevicesHealth>("getHealth", correlationId);
+  }
+
+  /**
+   * Returns probed audio capabilities for a device.
+   * @param deviceId - USB device id.
+   * @param correlationId - Request correlation id.
+   * @returns Capabilities payload.
+   */
+  async getAudioCapabilities(
+    deviceId: string,
+    correlationId: string
+  ): Promise<AudioCapabilities> {
+    return this.request<AudioCapabilities>("getAudioCapabilities", correlationId, { deviceId });
+  }
+
+  /**
+   * Returns the active operating profile artifact view.
+   * @param correlationId - Request correlation id.
+   * @returns Operating profile JSON object.
+   */
+  async getOperatingProfile(
+    correlationId: string
+  ): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>("getOperatingProfile", correlationId);
   }
 
   /**

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 
 #include "homepi/log.hpp"
 
@@ -20,7 +21,27 @@ void Supervisor::request_evaluate() {
 void Supervisor::stop() {
   running_ = false;
   hifi_client_.stop();
+  usb_client_.stop();
   cv_.notify_one();
+}
+
+homepi::storage::AudioProfileTuple Supervisor::load_loopback_profile() const {
+  if (std::filesystem::exists(config_.database_path)) {
+    try {
+      homepi::storage::DatabaseConnection db(config_.database_path,
+                                             homepi::storage::DatabaseOpenMode::ReadOnly);
+      homepi::storage::AudioProfileRepository repo(db);
+      return repo.load_active_config().loopback_profile;
+    } catch (...) {
+    }
+  }
+
+  const auto artifact =
+      homepi::storage::AudioProfileRepository::load_from_artifact(config_.artifact_path);
+  if (artifact.has_value()) {
+    return artifact->loopback_profile;
+  }
+  return homepi::storage::platform_loopback_default();
 }
 
 SupervisorHealth Supervisor::health() const {
@@ -104,7 +125,9 @@ void Supervisor::evaluate() {
 
   const auto zones = db_.get_zones();
   const auto settings = db_.get_zone_settings();
-  const auto new_hashes = generator_.generate(zones, settings, *airplay_source);
+  const auto loopback_profile = load_loopback_profile();
+  const auto new_hashes =
+      generator_.generate(zones, settings, *airplay_source, loopback_profile);
 
   std::vector<int> restart_zones;
   for (const auto& [zone, hash] : new_hashes) {
@@ -130,6 +153,15 @@ void Supervisor::run() {
   hifi_client_.start(config_.hifi_socket_path, [this](const std::string& line) {
     if (line.find("audio_state_snapshot") != std::string::npos ||
         line.find("zone_enable_changed") != std::string::npos) {
+      request_evaluate();
+    }
+  });
+
+  usb_client_.start(config_.usb_devices_socket_path, [this](const std::string& line) {
+    if (line.find("audio_operating_profile_changed") != std::string::npos ||
+        line.find("audio_profile_paused") != std::string::npos ||
+        line.find("audio_profile_invalid") != std::string::npos ||
+        line.find("primary_audio_unassigned") != std::string::npos) {
       request_evaluate();
     }
   });

@@ -150,18 +150,12 @@ export class FallbackReconciliation {
   private async reconcileMetadata(): Promise<void> {
     const before = this.options.statusStore.getStatus().metadata;
     try {
-      const supervisor = await getSystemdUnitActiveState("homepi-shairport-supervisor");
-      if (supervisor !== "active") {
-        if (before !== "offline") {
-          this.options.coordinator.patchAndBroadcast(
-            { metadata: "offline" },
-            "fallback-reconciliation"
-          );
-        }
-        return;
-      }
-      const zone1 = await getSystemdUnitActiveState("homepi-metadata@1");
-      const next = mapSystemdServiceStatus(zone1);
+      const [supervisor, pcmRouter] = await Promise.all([
+        getSystemdUnitActiveState("homepi-shairport-supervisor"),
+        getSystemdUnitActiveState("homepi-pcm-router"),
+      ]);
+      const next =
+        supervisor === "active" && pcmRouter === "active" ? "healthy" : "offline";
       if (next !== before) {
         this.options.coordinator.patchAndBroadcast(
           { metadata: next },

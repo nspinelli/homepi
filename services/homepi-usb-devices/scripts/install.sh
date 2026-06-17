@@ -63,6 +63,8 @@ install_files() {
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/001-usb-devices.sql" \
     "${INSTALL_ROOT}/storage/migrations/001-usb-devices.sql"
+  install -m 0644 "${SERVICE_ROOT}/storage/migrations/002-audio-profiles.sql" \
+    "${INSTALL_ROOT}/storage/migrations/002-audio-profiles.sql"
   install -m 0755 "${SERVICE_ROOT}/scripts/deploy-udev-rules.sh" \
     "${INSTALL_ROOT}/scripts/deploy-udev-rules.sh"
   install -m 0755 "${SERVICE_ROOT}/scripts/deploy-audio-modprobe.sh" \

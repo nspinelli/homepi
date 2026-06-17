@@ -10,7 +10,7 @@ UPDATE hifi_sources SET is_airplay = 1 WHERE source_number = 5;
 CREATE TABLE IF NOT EXISTS shairport_zone_settings (
   zone_number INTEGER PRIMARY KEY CHECK (zone_number BETWEEN 1 AND 16),
   volume_control_profile TEXT NOT NULL DEFAULT 'standard',
-  active_state_timeout REAL NOT NULL DEFAULT 5.0,
+  active_state_timeout REAL NOT NULL DEFAULT 1.0,
   session_timeout INTEGER NOT NULL DEFAULT 60,
   log_verbosity INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL

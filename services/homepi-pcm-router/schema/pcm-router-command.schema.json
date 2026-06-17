@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/pcm-router/pcm-router-command.schema.json",
+  "title": "PCM Router Socket Command",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["method"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "enum": ["subscribe", "set_routing", "route_start", "route_end", "route_join"]
+    },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "ownerZoneId": { "type": "integer", "minimum": 0, "maximum": 16 },
+    "activeStack": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 16 }
+    },
+    "zoneId": { "type": "integer", "minimum": 1, "maximum": 16 }
+  }
+}

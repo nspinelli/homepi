@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/operating-profile-artifact.schema.json",
+  "title": "Operating Profile Artifact",
+  "description": "Generated runtime artifact at /opt/homepi/runtime/generated/audio/operating-profile.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["mode", "loopbackProfile", "profileRevision", "profileSource", "profileStatus"],
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["no_dac_assigned", "dac_assigned"]
+    },
+    "primaryAudio": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["deviceId", "alsaDevice", "sampleRate", "channels", "sampleFormat", "source"],
+      "properties": {
+        "deviceId": { "type": "string", "pattern": "^usb:" },
+        "alsaDevice": { "type": "string" },
+        "sampleRate": { "type": "integer", "minimum": 8000 },
+        "channels": { "type": "integer", "minimum": 1 },
+        "sampleFormat": { "type": "string", "enum": ["S16_LE", "S32_LE"] },
+        "source": { "type": "string", "enum": ["user_selected"] }
+      }
+    },
+    "loopbackProfile": {
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
+    },
+    "profileRevision": { "type": "integer", "minimum": 0 },
+    "profileSource": {
+      "type": "string",
+      "enum": ["user_selected", "platform_policy"]
+    },
+    "profileStatus": {
+      "type": "string",
+      "enum": ["active", "paused_invalid"]
+    },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

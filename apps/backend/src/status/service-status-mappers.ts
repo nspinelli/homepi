@@ -93,10 +93,20 @@ export function mapUsbDevicesFromPayload(payload: Record<string, unknown>): UsbD
  * @returns Dashboard pcmRouter status.
  */
 export function mapPcmRouterFromDacState(dacState: string): PcmRouterStatus {
-  if (dacState === "DAC_OPEN" || dacState === "DAC_IDLE") {
+  const normalized = dacState.toLowerCase();
+  if (
+    normalized === "open" ||
+    normalized === "idle" ||
+    dacState === "DAC_OPEN" ||
+    dacState === "DAC_IDLE"
+  ) {
     return "healthy";
   }
   if (
+    normalized === "unassigned" ||
+    normalized === "unavailable" ||
+    normalized === "paused" ||
+    normalized === "degraded" ||
     dacState === "DAC_UNASSIGNED" ||
     dacState === "DAC_UNAVAILABLE" ||
     dacState === "DAC_DEGRADED"

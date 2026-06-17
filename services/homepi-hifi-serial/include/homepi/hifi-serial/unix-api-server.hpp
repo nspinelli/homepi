@@ -47,6 +47,7 @@ class UnixApiServer {
   std::thread thread_;
   std::mutex clients_mutex_;
   std::set<int> subscribers_;
+  std::set<int> active_clients_;
 };
 
 }  // namespace homepi::hifi_serial

@@ -87,18 +87,26 @@ bool UnixApiServer::start() {
 void UnixApiServer::stop() {
   stop_ = true;
   if (server_fd_ >= 0) {
-    shutdown(server_fd_, SHUT_RDWR);
+    ::shutdown(server_fd_, SHUT_RDWR);
     close(server_fd_);
     server_fd_ = -1;
+  }
+  {
+    std::lock_guard lock(clients_mutex_);
+    for (int fd : subscribers_) {
+      ::shutdown(fd, SHUT_RDWR);
+      close(fd);
+    }
+    subscribers_.clear();
+    for (int fd : active_clients_) {
+      ::shutdown(fd, SHUT_RDWR);
+      close(fd);
+    }
+    active_clients_.clear();
   }
   if (thread_.joinable()) {
     thread_.join();
   }
-  std::lock_guard lock(clients_mutex_);
-  for (int fd : subscribers_) {
-    close(fd);
-  }
-  subscribers_.clear();
   std::error_code ec;
   fs::remove(context_.config.socket_path, ec);
 }
@@ -131,6 +139,11 @@ void UnixApiServer::listen_loop() {
 }
 
 void UnixApiServer::handle_client(int client_fd) {
+  {
+    std::lock_guard lock(clients_mutex_);
+    active_clients_.insert(client_fd);
+  }
+
   bool subscribed = false;
   std::string buffer;
   char chunk[4096];
@@ -177,8 +190,10 @@ void UnixApiServer::handle_client(int client_fd) {
         if (method == "subscribe") {
           if (!subscribed) {
             subscribed = true;
-            std::lock_guard lock(clients_mutex_);
-            subscribers_.insert(client_fd);
+            {
+              std::lock_guard lock(clients_mutex_);
+              subscribers_.insert(client_fd);
+            }
             send_snapshot();
             if (context_.on_subscribe_fn) {
               context_.on_subscribe_fn();
@@ -191,8 +206,10 @@ void UnixApiServer::handle_client(int client_fd) {
 
       if (!subscribed) {
         subscribed = true;
-        std::lock_guard lock(clients_mutex_);
-        subscribers_.insert(client_fd);
+        {
+          std::lock_guard lock(clients_mutex_);
+          subscribers_.insert(client_fd);
+        }
         send_snapshot();
       }
     }
@@ -201,6 +218,7 @@ void UnixApiServer::handle_client(int client_fd) {
   {
     std::lock_guard lock(clients_mutex_);
     subscribers_.erase(client_fd);
+    active_clients_.erase(client_fd);
   }
   close(client_fd);
 }

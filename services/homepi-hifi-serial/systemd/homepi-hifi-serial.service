@@ -13,6 +13,8 @@ ExecStart=/opt/homepi/services/hifi-serial/bin/homepi-hifi-serial /opt/homepi/se
 EnvironmentFile=-/opt/homepi/services/hifi-serial/env/.env
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
+KillMode=mixed
 NoNewPrivileges=true
 
 [Install]

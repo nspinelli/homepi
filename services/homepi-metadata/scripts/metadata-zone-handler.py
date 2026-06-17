@@ -7,6 +7,7 @@ for the current stack owner (activeStack[0] / ownerZoneId from pcm-router).
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -23,6 +24,7 @@ ITEM_RE = re.compile(
 CODE_ABEG = "61626567"
 CODE_AEND = "61656e64"
 CODE_PICT = "50494354"
+CODE_PRGR = "70726772"
 
 READER = os.environ.get(
     "HOMEPI_METADATA_READER",
@@ -45,7 +47,7 @@ def mqtt_publish(topic: str, payload: str = "") -> None:
 
 
 def pcm_owner_zone() -> int:
-  """Return stack owner (activeStack top) from the PCM router snapshot."""
+    """Return stack owner (activeStack top) from the PCM router snapshot."""
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.5)
@@ -70,6 +72,38 @@ def read_line(source: TextIO) -> Optional[str]:
         return line
     time.sleep(0.1)
     return None
+
+
+def read_item_payload(source: TextIO, length: int) -> Optional[str]:
+    """Decode one metadata item body from the Shairport pipe."""
+    if length <= 0:
+        while True:
+            line = read_line(source)
+            if not line:
+                continue
+            if line.startswith("</data></item>"):
+                return ""
+        return ""
+
+    encoded_chunks: list[str] = []
+    while True:
+        line = read_line(source)
+        if not line:
+            continue
+        if line.startswith("</data></item>"):
+            break
+        if line.startswith("<data encoding=\"base64\">"):
+            continue
+        encoded_chunks.append(line.strip())
+
+    if not encoded_chunks:
+        return None
+
+    try:
+        decoded = base64.b64decode("".join(encoded_chunks), validate=False)
+    except ValueError:
+        return None
+    return decoded.decode("utf-8", errors="replace")
 
 
 def skip_item_body(source: TextIO, length: int) -> None:
@@ -152,6 +186,12 @@ def main() -> int:
                     reader.kill()
                 reader = None
                 skip_item_body(pipe, length)
+                continue
+
+            if code == CODE_PRGR:
+                payload = read_item_payload(pipe, length)
+                if payload and "/" in payload:
+                    mqtt_publish(f"{mqtt_topic}/track_progress", payload)
                 continue
 
             if code == CODE_PICT or pcm_owner_zone() != zone:

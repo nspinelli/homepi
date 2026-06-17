@@ -13,13 +13,52 @@ export interface PcmRouterClientOptions {
 }
 
 /**
- * PCM router snapshot payload from subscribe.
+ * PCM profile tuple from pcm_router_snapshot v2.
+ */
+export interface PcmProfileTuple {
+  sampleRate: number;
+  channels: number;
+  sampleFormat: string;
+}
+
+/**
+ * PCM router snapshot payload from subscribe (v2).
  */
 export interface PcmRouterSnapshotPayload {
   ownerZoneId: number;
   activeStack: number[];
   dacState: string;
+  profileMode?: string;
+  profileStatus?: string;
+  loopbackProfile?: PcmProfileTuple;
+  dacProfile?: PcmProfileTuple;
+  alsaDacDevice?: string;
+  profileRevision?: number;
+  profileSource?: string;
+  audioBridgeState?: string;
+  stats?: {
+    captureXruns: number;
+    playbackXruns: number;
+    framesCopied: number;
+  };
+  /** @deprecated Metadata is no longer emitted by pcm-router. */
   sourceType?: string;
+  /** @deprecated */
+  playing?: boolean;
+  /** @deprecated */
+  positionMs?: number;
+  /** @deprecated */
+  durationMs?: number;
+  /** @deprecated */
+  title?: string;
+  /** @deprecated */
+  artist?: string;
+  /** @deprecated */
+  album?: string;
+  /** @deprecated */
+  clientName?: string;
+  /** @deprecated */
+  hasCoverArt?: boolean;
 }
 
 /**
@@ -85,12 +124,61 @@ export class PcmRouterClient {
             const stack = Array.isArray(p.activeStack)
               ? (p.activeStack as number[])
               : [];
+            const parseTuple = (value: unknown): PcmProfileTuple | undefined => {
+              if (typeof value !== "object" || value === null) {
+                return undefined;
+              }
+              const tuple = value as Record<string, unknown>;
+              if (
+                typeof tuple.sampleRate !== "number" ||
+                typeof tuple.channels !== "number" ||
+                typeof tuple.sampleFormat !== "string"
+              ) {
+                return undefined;
+              }
+              return {
+                sampleRate: tuple.sampleRate,
+                channels: tuple.channels,
+                sampleFormat: tuple.sampleFormat,
+              };
+            };
             finish({
               ownerZoneId: typeof p.ownerZoneId === "number" ? p.ownerZoneId : 0,
               activeStack: stack,
               dacState: typeof p.dacState === "string" ? p.dacState : "unknown",
-              sourceType:
-                typeof p.sourceType === "string" ? p.sourceType : undefined,
+              profileMode: typeof p.profileMode === "string" ? p.profileMode : undefined,
+              profileStatus:
+                typeof p.profileStatus === "string" ? p.profileStatus : undefined,
+              loopbackProfile: parseTuple(p.loopbackProfile),
+              dacProfile: parseTuple(p.dacProfile),
+              alsaDacDevice:
+                typeof p.alsaDacDevice === "string" ? p.alsaDacDevice : undefined,
+              profileRevision:
+                typeof p.profileRevision === "number" ? p.profileRevision : undefined,
+              profileSource:
+                typeof p.profileSource === "string" ? p.profileSource : undefined,
+              audioBridgeState:
+                typeof p.audioBridgeState === "string" ? p.audioBridgeState : undefined,
+              stats:
+                typeof p.stats === "object" && p.stats !== null
+                  ? {
+                      captureXruns:
+                        typeof (p.stats as { captureXruns?: unknown }).captureXruns ===
+                        "number"
+                          ? (p.stats as { captureXruns: number }).captureXruns
+                          : 0,
+                      playbackXruns:
+                        typeof (p.stats as { playbackXruns?: unknown }).playbackXruns ===
+                        "number"
+                          ? (p.stats as { playbackXruns: number }).playbackXruns
+                          : 0,
+                      framesCopied:
+                        typeof (p.stats as { framesCopied?: unknown }).framesCopied ===
+                        "number"
+                          ? (p.stats as { framesCopied: number }).framesCopied
+                          : 0,
+                    }
+                  : undefined,
             });
             return;
           } catch {

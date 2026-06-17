@@ -17,12 +17,33 @@ export interface AudioSnapshot {
     ownerZoneId: number;
     activeStack: number[];
     dacState: string;
+    profileMode?: string;
+    profileStatus?: string;
+    loopbackProfile?: {
+      sampleRate: number;
+      channels: number;
+      sampleFormat: string;
+    };
+    dacProfile?: {
+      sampleRate: number;
+      channels: number;
+      sampleFormat: string;
+    };
+    profileRevision?: number;
+    profileSource?: string;
+    audioBridgeState?: string;
     metadata: {
       title?: string;
       artist?: string;
       album?: string;
       clientName?: string;
     };
+    playback: {
+      playing: boolean;
+      positionMs: number;
+      durationMs: number;
+    };
+    hasCoverArt?: boolean;
   };
   services: {
     hifiSerial: string;
@@ -87,7 +108,19 @@ export async function buildAudioSnapshot(
       ownerZoneId: pcmSnapshot?.ownerZoneId ?? 0,
       activeStack: pcmSnapshot?.activeStack ?? [],
       dacState: pcmSnapshot?.dacState ?? "unknown",
+      profileMode: pcmSnapshot?.profileMode,
+      profileStatus: pcmSnapshot?.profileStatus,
+      loopbackProfile: pcmSnapshot?.loopbackProfile,
+      dacProfile: pcmSnapshot?.dacProfile,
+      profileRevision: pcmSnapshot?.profileRevision,
+      profileSource: pcmSnapshot?.profileSource,
+      audioBridgeState: pcmSnapshot?.audioBridgeState,
       metadata: {},
+      playback: {
+        playing: false,
+        positionMs: 0,
+        durationMs: 0,
+      },
     },
     services: {
       hifiSerial: deps.systemStatus.hifiSerial,

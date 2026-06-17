@@ -14,7 +14,9 @@
 
 #include "homepi/usb-devices/artifact-writer.hpp"
 #include "homepi/usb-devices/assignment-repository.hpp"
+#include "homepi/usb-devices/audio-profile-service.hpp"
 #include "homepi/usb-devices/json-utils.hpp"
+#include "homepi/storage/audio-profile-types.hpp"
 
 namespace fs = std::filesystem;
 
@@ -25,12 +27,53 @@ namespace {
 constexpr const char* kPostAssignmentHook =
     "/opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh";
 
-void run_post_assignment_hook_async() {
-  std::thread([]() {
-    std::system(
-        "sudo -n /opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh "
-        ">>/opt/homepi/runtime/cache/post-assignment-hook.log 2>&1");
-  }).detach();
+std::optional<homepi::storage::AudioProfileTuple> parse_audio_primary_profile(
+    const std::string& assignments_block) {
+  const auto profile_pos = assignments_block.find("\"audioPrimaryProfile\"");
+  if (profile_pos == std::string::npos) {
+    return std::nullopt;
+  }
+  const auto brace = assignments_block.find('{', profile_pos);
+  const auto end = assignments_block.find('}', brace);
+  if (brace == std::string::npos || end == std::string::npos) {
+    return std::nullopt;
+  }
+  const std::string profile_object = assignments_block.substr(brace, end - brace + 1);
+  const std::string sample_rate = json_get_scalar(profile_object, "sampleRate");
+  const std::string channels = json_get_scalar(profile_object, "channels");
+  const std::string sample_format = json_get_string(profile_object, "sampleFormat");
+  if (sample_rate.empty() || channels.empty() || sample_format.empty()) {
+    return std::nullopt;
+  }
+  homepi::storage::AudioProfileTuple tuple;
+  tuple.sample_rate = static_cast<uint32_t>(std::stoul(sample_rate));
+  tuple.channels = static_cast<uint16_t>(std::stoul(channels));
+  tuple.sample_format =
+      homepi::storage::parse_sample_format(sample_format).value_or(homepi::storage::SampleFormat::S16Le);
+  return tuple;
+}
+
+bool profiles_equal(const std::optional<homepi::storage::AudioProfileTuple>& left,
+                    const std::optional<homepi::storage::AudioProfileTuple>& right) {
+  if (!left.has_value() && !right.has_value()) {
+    return true;
+  }
+  if (!left.has_value() || !right.has_value()) {
+    return false;
+  }
+  return left->sample_rate == right->sample_rate && left->channels == right->channels &&
+         left->sample_format == right->sample_format;
+}
+
+void run_post_assignment_hook(bool serial_changed, bool audio_changed) {
+  if (!serial_changed && !audio_changed) {
+    return;
+  }
+  std::ostringstream command;
+  command << "sudo -n " << kPostAssignmentHook << ' ' << (serial_changed ? "1" : "0") << ' '
+          << (audio_changed ? "1" : "0")
+          << " >>/opt/homepi/runtime/cache/post-assignment-hook.log 2>&1";
+  std::system(command.str().c_str());
 }
 
 }  // namespace
@@ -149,8 +192,10 @@ void UnixApiServer::handle_client(int client_fd) {
       if (method == "subscribe") {
         if (!subscribed) {
           subscribed = true;
-          std::lock_guard lock(clients_mutex_);
-          subscribers_.insert(client_fd);
+          {
+            std::lock_guard lock(clients_mutex_);
+            subscribers_.insert(client_fd);
+          }
           if (context_.on_subscribe_fn) {
             context_.on_subscribe_fn();
           }
@@ -212,6 +257,21 @@ std::string UnixApiServer::handle_request(const std::string& line) const {
     return ok(assignments_to_json(context_.repository->get_assignments()));
   }
 
+  if (method == "getAudioCapabilities") {
+    const std::string device_id = json_get_string(line, "deviceId");
+    if (device_id.empty() || context_.audio_profiles == nullptr) {
+      return err("deviceId is required");
+    }
+    return ok(context_.audio_profiles->capabilities_json(device_id));
+  }
+
+  if (method == "getOperatingProfile") {
+    if (context_.audio_profiles == nullptr) {
+      return err("audio profile service unavailable");
+    }
+    return ok(context_.audio_profiles->operating_profile_json());
+  }
+
   if (method == "getHealth") {
     const ServiceHealth health = context_.health_fn ? context_.health_fn() : ServiceHealth{};
     std::ostringstream data;
@@ -250,25 +310,39 @@ std::string UnixApiServer::handle_request(const std::string& line) const {
     if (!paging.empty()) {
       assignments.paging = paging;
     }
+    if (const auto profile = parse_audio_primary_profile(assignments_block)) {
+      assignments.audio_primary_profile = *profile;
+    }
 
     if (context_.scan_fn) {
       context_.repository->upsert_devices(context_.scan_fn());
     }
+    const auto previous = context_.repository->get_assignments();
     const auto devices = context_.repository->list_devices();
+    if (context_.audio_profiles != nullptr) {
+      context_.audio_profiles->refresh_audio_capabilities(devices);
+    }
     std::string error;
-    if (!context_.repository->set_assignments(assignments, devices, error)) {
+    if (context_.audio_profiles == nullptr) {
+      if (!context_.repository->set_assignments(assignments, devices, error)) {
+        return err(error);
+      }
+    } else if (!context_.audio_profiles->apply_assignments(assignments, devices, correlation_id,
+                                                           error)) {
       return err(error);
     }
     if (context_.artifacts != nullptr) {
       context_.artifacts->regenerate(assignments, devices);
     }
+    const bool serial_changed = assignments.serial != previous.serial;
+    const bool audio_changed =
+        assignments.audio_primary != previous.audio_primary ||
+        assignments.paging != previous.paging ||
+        !profiles_equal(assignments.audio_primary_profile, previous.audio_primary_profile);
     if (fs::exists(kPostAssignmentHook)) {
-      run_post_assignment_hook_async();
+      run_post_assignment_hook(serial_changed, audio_changed);
     }
-    if (context_.on_devices_changed) {
-      context_.on_devices_changed();
-    }
-    return ok(assignments_to_json(assignments));
+    return ok(assignments_to_json(context_.repository->get_assignments()));
   }
 
   return err("Unknown method: " + method);

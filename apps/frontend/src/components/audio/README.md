@@ -12,6 +12,7 @@ React components for the Home Audio module (`/audio`).
 | `zone-settings-patch.ts` | Shared diff/patch helpers for zone save payloads |
 | `zone-edit-slider.tsx` | Purple-accent range sliders used in the edit sheet |
 | `audio-section-tabs.tsx` | Pill-style icon tab bar for the audio page sections |
+| `audio-player-bar.tsx` | Now-playing transport bar above the audio section tabs |
 
 ## Edit flow
 

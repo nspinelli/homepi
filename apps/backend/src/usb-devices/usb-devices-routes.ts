@@ -77,6 +77,28 @@ export class UsbDevicesRoutes {
         return true;
       }
 
+      const capabilitiesMatch = pathname.match(/^\/api\/usb-devices\/([^/]+)\/audio-capabilities$/);
+      if (req.method === "GET" && capabilitiesMatch) {
+        const deviceId = decodeURIComponent(capabilitiesMatch[1] ?? "");
+        const capabilities = await this.deps.client.getAudioCapabilities(deviceId, correlationId);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({ correlationId, data: capabilities as unknown as Record<string, unknown> })
+        );
+        return true;
+      }
+
+      if (req.method === "GET" && pathname === "/api/usb-devices/operating-profile") {
+        const profile = await this.deps.client.getOperatingProfile(correlationId);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({ correlationId, data: profile })
+        );
+        return true;
+      }
+
       if (req.method === "GET" && pathname === "/api/usb-devices/health") {
         const health = await this.deps.client.getHealth(correlationId);
         sendJson(
@@ -167,6 +189,7 @@ function parseAssignments(body: string): UsbAssignments {
     serial: parsed.serial ?? null,
     audioPrimary: parsed.audioPrimary ?? null,
     paging: parsed.paging ?? null,
+    audioPrimaryProfile: parsed.audioPrimaryProfile ?? null,
   };
 }
 

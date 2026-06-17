@@ -13,11 +13,13 @@ namespace homepi::usb_devices {
 
 class AssignmentRepository;
 class ArtifactWriter;
+class AudioProfileService;
 
 /** Request handler context for socket API commands. */
 struct ApiContext {
   AssignmentRepository* repository = nullptr;
   ArtifactWriter* artifacts = nullptr;
+  AudioProfileService* audio_profiles = nullptr;
   ServiceConfig config{};
   std::function<std::vector<UsbDevice>()> scan_fn;
   std::function<void()> on_devices_changed;

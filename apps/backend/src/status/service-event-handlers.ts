@@ -10,6 +10,7 @@ import {
 
 const SERVICE_STATUS_TOPIC = "system.service";
 const PCM_TOPIC = "modules.pcm";
+const PCM_SNAPSHOT_TOPIC = "modules.pcm.snapshot";
 
 /**
  * Maps a native service event envelope to a partial system status patch.
@@ -34,7 +35,10 @@ export function mapEnvelopeToStatusPatch(
     }
   }
 
-  if (envelope.source === "homepi-pcm-router" && envelope.topic === PCM_TOPIC) {
+  if (
+    envelope.source === "homepi-pcm-router" &&
+    (envelope.topic === PCM_TOPIC || envelope.topic === PCM_SNAPSHOT_TOPIC)
+  ) {
     if (envelope.event === "pcm_router_snapshot" && typeof payload.dacState === "string") {
       return { pcmRouter: mapPcmRouterFromDacState(payload.dacState) };
     }

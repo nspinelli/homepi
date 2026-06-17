@@ -10,6 +10,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "homepi/storage/audio-profile-types.hpp"
+
 namespace homepi::usb_devices {
 
 namespace {
@@ -91,6 +93,7 @@ AssignmentRepository::AssignmentRepository(const std::string& database_path,
     throw std::runtime_error("Failed to open sqlite database: " + database_path);
   }
   db_ = raw;
+  sqlite3_busy_timeout(static_cast<sqlite3*>(db_), 5000);
   char* err = nullptr;
   if (sqlite3_exec(static_cast<sqlite3*>(db_), migrations_sql.c_str(), nullptr, nullptr, &err) !=
       SQLITE_OK) {
@@ -221,6 +224,25 @@ UsbAssignments AssignmentRepository::get_assignments() const {
     }
   }
   sqlite3_finalize(stmt);
+
+  if (assignments.audio_primary && !assignments.audio_primary->empty()) {
+    const char* profile_sql =
+        "SELECT sample_rate, channels, sample_format FROM audio_operating_profiles "
+        "WHERE role = 'primary_audio'";
+    if (sqlite3_prepare_v2(db, profile_sql, -1, &stmt, nullptr) == SQLITE_OK &&
+        sqlite3_step(stmt) == SQLITE_ROW) {
+      homepi::storage::AudioProfileTuple tuple;
+      tuple.sample_rate = static_cast<uint32_t>(sqlite3_column_int(stmt, 0));
+      tuple.channels = static_cast<uint16_t>(sqlite3_column_int(stmt, 1));
+      const char* format = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+      tuple.sample_format =
+          homepi::storage::parse_sample_format(format != nullptr ? format : "")
+              .value_or(homepi::storage::SampleFormat::S16Le);
+      assignments.audio_primary_profile = tuple;
+    }
+    sqlite3_finalize(stmt);
+  }
+
   return assignments;
 }
 
@@ -316,5 +338,7 @@ bool AssignmentRepository::assignments_degraded(const UsbAssignments& assignment
   };
   return check(assignments.serial) || check(assignments.audio_primary) || check(assignments.paging);
 }
+
+void* AssignmentRepository::db_handle() const { return db_; }
 
 }  // namespace homepi::usb_devices

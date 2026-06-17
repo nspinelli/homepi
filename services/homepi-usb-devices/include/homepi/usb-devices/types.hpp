@@ -4,7 +4,11 @@
 #include <string>
 #include <vector>
 
+#include "homepi/storage/audio-profile-types.hpp"
+
 namespace homepi::usb_devices {
+
+using AudioProfileTuple = homepi::storage::AudioProfileTuple;
 
 /** USB device capability kind. */
 enum class DeviceKind { Serial, Audio };
@@ -37,6 +41,7 @@ struct UsbAssignments {
   std::optional<std::string> serial;
   std::optional<std::string> audio_primary;
   std::optional<std::string> paging;
+  std::optional<AudioProfileTuple> audio_primary_profile;
 };
 
 /** Service runtime paths and options. */

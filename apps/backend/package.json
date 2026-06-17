@@ -18,10 +18,12 @@
     "@homepi/core-logging": "workspace:*",
     "@homepi/core-state": "workspace:*",
     "@homepi/core-transport": "workspace:*",
+    "mqtt": "^5.13.0",
     "ws": "^8.18.2"
   },
   "devDependencies": {
     "@homepi/tooling-schema-validation": "workspace:*",
+    "@types/mqtt": "^0.0.34",
     "@types/node": "^22.15.21",
     "@types/ws": "^8.18.1",
     "typescript": "^5.8.3",

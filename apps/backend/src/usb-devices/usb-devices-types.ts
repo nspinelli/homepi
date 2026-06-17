@@ -30,6 +30,18 @@ export interface UsbDevice {
 }
 
 /**
+ * Supported PCM profile tuple for a USB audio device.
+ */
+export interface AudioProfileTuple {
+  /** Sample rate in Hz. */
+  sampleRate: number;
+  /** Channel count. */
+  channels: number;
+  /** ALSA sample format. */
+  sampleFormat: "S16_LE" | "S32_LE";
+}
+
+/**
  * Role assignments for serial and audio outputs.
  */
 export interface UsbAssignments {
@@ -39,6 +51,22 @@ export interface UsbAssignments {
   audioPrimary: string | null;
   /** Primary paging output device id. */
   paging: string | null;
+  /** User-selected PCM profile for primary audio. */
+  audioPrimaryProfile?: AudioProfileTuple | null;
+}
+
+/**
+ * Audio capabilities for a USB device.
+ */
+export interface AudioCapabilities {
+  /** Device id. */
+  deviceId: string;
+  /** Supported profile tuples. */
+  supportedProfileTuples: AudioProfileTuple[];
+  /** Probe timestamp. */
+  probedAt?: string;
+  /** Probe error when capabilities are unavailable. */
+  probeError?: string;
 }
 
 /**

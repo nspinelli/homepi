@@ -1,7 +1,9 @@
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <string>
+#include <thread>
 
 namespace homepi::hifi_serial {
 
@@ -52,6 +54,8 @@ class SerialPort {
 
   int fd_ = -1;
   LineCallback line_callback_;
+  std::thread reader_thread_;
+  std::atomic<bool> reader_running_{false};
 };
 
 }  // namespace homepi::hifi_serial

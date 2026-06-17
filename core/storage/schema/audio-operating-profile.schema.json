@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/audio-operating-profile.schema.json",
+  "title": "Audio Operating Profile",
+  "description": "Authoritative PCM profile used by loopback, Shairport, and pcm-router.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "loopbackProfile", "profileRevision", "profileSource", "profileStatus"],
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": ["platform_loopback", "primary_audio"],
+      "description": "Profile role in storage."
+    },
+    "deviceId": {
+      "type": ["string", "null"],
+      "pattern": "^usb:",
+      "description": "Assigned device id when role is primary_audio."
+    },
+    "alsaDevice": {
+      "type": "string",
+      "description": "Resolved ALSA playback device, e.g. hw:HomePiPrimary,0."
+    },
+    "loopbackProfile": {
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
+    },
+    "dacProfile": {
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json",
+      "description": "DAC playback profile; equals loopbackProfile when primary audio is assigned."
+    },
+    "profileMode": {
+      "type": "string",
+      "enum": ["no_dac_assigned", "dac_assigned"]
+    },
+    "profileRevision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Monotonic revision bumped on every profile change."
+    },
+    "profileSource": {
+      "type": "string",
+      "enum": ["user_selected", "platform_policy"]
+    },
+    "profileStatus": {
+      "type": "string",
+      "enum": ["active", "paused_invalid"]
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

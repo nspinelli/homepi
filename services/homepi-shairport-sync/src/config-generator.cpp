@@ -88,7 +88,17 @@ std::string render_hook_script(const ServiceConfig& config, int airplay_source) 
       << "pcm_route() {\n"
       << "  local method=\"$1\"\n"
       << "  printf '{\"method\":\"%s\",\"zoneId\":%s}\\n' \"${method}\" \"${ZONE}\" | "
-      << "nc -U -w 1 \"${PCM_SOCKET}\" >/dev/null 2>&1 || true\n"
+      << "nc -U -w 1 \"${PCM_SOCKET}\" | head -1\n"
+      << "}\n"
+      << "pcm_owner_from_response() {\n"
+      << "  python3 -c \"import json,sys; d=json.loads(sys.argv[1]); "
+      << "print(d.get('payload',{}).get('ownerZoneId',0))\" \"$1\" 2>/dev/null || echo 0\n"
+      << "}\n"
+      << "pcm_route_zone() {\n"
+      << "  local method=\"$1\"\n"
+      << "  local zone_id=\"$2\"\n"
+      << "  printf '{\"method\":\"%s\",\"zoneId\":%s}\\n' \"${method}\" \"${zone_id}\" | "
+      << "nc -U -w 1 \"${PCM_SOCKET}\" | head -1\n"
       << "}\n"
       << "send_cmd() {\n"
       << "  local cmd=\"$1\"\n"
@@ -99,21 +109,35 @@ std::string render_hook_script(const ServiceConfig& config, int airplay_source) 
       << "send_cmd_async() {\n"
       << "  send_cmd \"$1\" &\n"
       << "}\n"
+      << "nqptp_play_begin() {\n"
+      << "  printf '/nqptp B\\n' | nc -u -w 1 127.0.0.1 9000 >/dev/null 2>&1 || true\n"
+      << "}\n"
+      << "pcm_handoff_on_zone_end() {\n"
+      << "  resp=\"$(pcm_route \"route_end\")\"\n"
+      << "  fallback_owner=\"$(pcm_owner_from_response \"${resp}\")\"\n"
+      << "  if [[ -n \"${fallback_owner}\" && \"${fallback_owner}\" != \"0\" && "
+      << "\"${fallback_owner}\" != \"${ZONE}\" ]]; then\n"
+      << "    nqptp_play_begin\n"
+      << "    send_cmd_async \"*Z${fallback_owner}POWER1\"\n"
+      << "    send_cmd_async \"*Z${fallback_owner}SRC${AIRPLAY_SOURCE}\"\n"
+      << "  fi\n"
+      << "}\n"
       << "case \"${ACTION}\" in\n"
       << "  activate)\n"
-      << "    pcm_route \"route_start\"\n"
       << "    send_cmd_async \"*Z${ZONE}POWER1\"\n"
       << "    send_cmd_async \"*Z${ZONE}SRC${AIRPLAY_SOURCE}\"\n"
       << "    ;;\n"
       << "  play_begin)\n"
-      << "    pcm_route \"route_join\"\n"
-      << "    ;;\n"
-      << "  deactivate)\n"
-      << "    pcm_route \"route_end\"\n"
-      << "    send_cmd_async \"*Z${ZONE}POWER0\"\n"
+      << "    pcm_route \"route_start\" >/dev/null || true\n"
+      << "    nqptp_play_begin\n"
+      << "    send_cmd_async \"*Z${ZONE}POWER1\"\n"
+      << "    send_cmd_async \"*Z${ZONE}SRC${AIRPLAY_SOURCE}\"\n"
       << "    ;;\n"
       << "  play_end)\n"
-      << "    pcm_route \"route_end\"\n"
+      << "    pcm_handoff_on_zone_end\n"
+      << "    ;;\n"
+      << "  deactivate)\n"
+      << "    send_cmd_async \"*Z${ZONE}POWER0\"\n"
       << "    ;;\n"
       << "  volume)\n"
       << "    db=\"${VOLUME_DB}\"\n"
@@ -141,7 +165,9 @@ ConfigGenerator::ConfigGenerator(ServiceConfig config) : config_(std::move(confi
 
 std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>& zones,
                                                      const std::vector<ZoneSettings>& settings,
-                                                     int airplay_source) const {
+                                                     int airplay_source,
+                                                     const homepi::storage::AudioProfileTuple&
+                                                         loopback_profile) const {
   std::map<int, std::string> hashes;
   const std::string hook_script = render_hook_script(config_, airplay_source);
   write_executable(fs::path(config_.hooks_dir) / "homepi-shairport-hook.sh", hook_script);
@@ -154,7 +180,7 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
       continue;
     }
     const ZoneSettings* zone_settings = settings_for(settings, zone.zone_number);
-    const double active_timeout = 0.0;
+    const double active_timeout = zone_settings ? zone_settings->active_state_timeout : 1.0;
     const int session_timeout = zone_settings ? zone_settings->session_timeout : 60;
     const int log_verbosity = zone_settings ? zone_settings->log_verbosity : 1;
     const std::string profile =
@@ -208,8 +234,9 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
          << "alsa =\n"
          << "{\n"
          << "  output_device = \"" << alsa_output_device(zone.zone_number) << "\";\n"
-         << "  output_rate = 44100;\n"
-         << "  output_format = \"S32_LE\";\n"
+         << "  output_rate = " << loopback_profile.sample_rate << ";\n"
+         << "  output_format = \"" << homepi::storage::sample_format_to_string(loopback_profile.sample_format)
+         << "\";\n"
          << "};\n\n"
          << "metadata =\n"
          << "{\n"
@@ -217,6 +244,7 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
          << "  include_cover_art = \"yes\";\n"
          << "  cover_art_cache_directory = \"\";\n"
          << "  pipe_name = \"/tmp/homepi-metadata-zone-" << zone.zone_number << "\";\n"
+         << "  progress_interval = 5.0;\n"
          << "};\n\n"
          << "mqtt =\n"
          << "{\n"

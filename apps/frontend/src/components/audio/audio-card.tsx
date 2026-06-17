@@ -21,6 +21,8 @@ export interface AudioCardProps {
   album?: string;
   /** Optional source label. */
   source?: string;
+  /** Optional album cover URL. */
+  coverUrl?: string;
   /** Service status labels when not playing. */
   serviceStatuses?: { label: string; status: string }[];
 }
@@ -35,6 +37,7 @@ export function AudioCard({
   artist,
   album,
   source,
+  coverUrl,
   serviceStatuses = [],
 }: AudioCardProps): React.JSX.Element {
   const showNowPlaying = isConnected && Boolean(currentTrack);
@@ -82,6 +85,15 @@ export function AudioCard({
                 Now Playing
               </p>
               <div className="flex items-center gap-4">
+                {coverUrl ? (
+                  <img
+                    src={coverUrl}
+                    alt=""
+                    width={56}
+                    height={56}
+                    className="h-14 w-14 shrink-0 rounded object-cover"
+                  />
+                ) : null}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-foreground">{currentTrack}</p>
                   {artist ? (

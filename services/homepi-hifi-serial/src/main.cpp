@@ -3,6 +3,8 @@
 #include <csignal>
 #include <cerrno>
 #include <cstring>
+#include <poll.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <filesystem>
@@ -87,8 +89,11 @@ int main(int argc, char* argv[]) {
     config_path = argv[1];
   }
 
-  std::signal(SIGINT, handle_signal);
-  std::signal(SIGTERM, handle_signal);
+  struct sigaction action {};
+  action.sa_handler = handle_signal;
+  sigemptyset(&action.sa_mask);
+  sigaction(SIGINT, &action, nullptr);
+  sigaction(SIGTERM, &action, nullptr);
 
   homepi::hifi_serial::ServiceConfig config;
   try {
@@ -432,7 +437,7 @@ int main(int argc, char* argv[]) {
   }
 
   while (g_running.load()) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    poll(nullptr, 0, 200);
   }
 
   logger.log(log_level, "core.runtime", "lifecycle_stopping", "shutdown",

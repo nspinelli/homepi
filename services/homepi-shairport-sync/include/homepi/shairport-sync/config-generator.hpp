@@ -4,6 +4,7 @@
 #include <string>
 
 #include "homepi/shairport-sync/types.hpp"
+#include "homepi/storage/audio-profile-types.hpp"
 
 namespace homepi::shairport_sync {
 
@@ -26,7 +27,8 @@ class ConfigGenerator {
    */
   std::map<int, std::string> generate(const std::vector<ZoneRow>& zones,
                                       const std::vector<ZoneSettings>& settings,
-                                      int airplay_source) const;
+                                      int airplay_source,
+                                      const homepi::storage::AudioProfileTuple& loopback_profile) const;
 
  private:
   ServiceConfig config_;

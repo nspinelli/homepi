@@ -4,7 +4,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-#include <atomic>
+#include <chrono>
 #include <cstring>
 #include <thread>
 
@@ -47,39 +47,19 @@ bool SerialPort::open(const std::string& path, int baud_rate) {
     return false;
   }
 
-  std::atomic<bool>* running = new std::atomic<bool>{true};
-  std::thread([this, running]() {
-    std::string buffer;
-    char chunk[256];
-    while (running->load()) {
-      const ssize_t n = ::read(fd_, chunk, sizeof(chunk));
-      if (n <= 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        continue;
-      }
-      buffer.append(chunk, static_cast<std::size_t>(n));
-      std::size_t pos = 0;
-      while ((pos = buffer.find('\n')) != std::string::npos) {
-        std::string line = buffer.substr(0, pos);
-        buffer.erase(0, pos + 1);
-        if (!line.empty() && line.back() == '\r') {
-          line.pop_back();
-        }
-        if (!line.empty() && line_callback_) {
-          line_callback_(line);
-        }
-      }
-    }
-    delete running;
-  }).detach();
-
+  reader_running_.store(true);
+  reader_thread_ = std::thread([this]() { reader_loop(); });
   return true;
 }
 
 void SerialPort::close() {
+  reader_running_.store(false);
   if (fd_ >= 0) {
     ::close(fd_);
     fd_ = -1;
+  }
+  if (reader_thread_.joinable()) {
+    reader_thread_.detach();
   }
 }
 
@@ -102,6 +82,32 @@ bool SerialPort::write_bytes(const std::string& data) {
 
 void SerialPort::set_line_callback(LineCallback callback) { line_callback_ = std::move(callback); }
 
-void SerialPort::reader_loop() {}
+void SerialPort::reader_loop() {
+  std::string buffer;
+  char chunk[256];
+  while (reader_running_.load()) {
+    if (fd_ < 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
+    const ssize_t n = ::read(fd_, chunk, sizeof(chunk));
+    if (n <= 0) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
+    buffer.append(chunk, static_cast<std::size_t>(n));
+    std::size_t pos = 0;
+    while ((pos = buffer.find('\n')) != std::string::npos) {
+      std::string line = buffer.substr(0, pos);
+      buffer.erase(0, pos + 1);
+      if (!line.empty() && line.back() == '\r') {
+        line.pop_back();
+      }
+      if (!line.empty() && line_callback_) {
+        line_callback_(line);
+      }
+    }
+  }
+}
 
 }  // namespace homepi::hifi_serial

@@ -111,6 +111,51 @@ inline std::string json_get_string(std::string_view json, std::string_view field
 }
 
 /**
+ * Extracts a JSON number or quoted string field value (simple parser).
+ * @param json JSON object text.
+ * @param field Field name.
+ * @return Field value as text or empty when missing.
+ */
+inline std::string json_get_scalar(std::string_view json, std::string_view field) {
+  const std::string quoted = json_get_string(json, field);
+  if (!quoted.empty()) {
+    return quoted;
+  }
+
+  const std::string key = "\"" + std::string(field) + "\"";
+  const auto key_pos = json.find(key);
+  if (key_pos == std::string_view::npos) {
+    return "";
+  }
+  const auto colon = json.find(':', key_pos + key.size());
+  if (colon == std::string_view::npos) {
+    return "";
+  }
+  auto pos = colon + 1;
+  while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) {
+    ++pos;
+  }
+  if (pos >= json.size() || json[pos] == 'n') {
+    return "";
+  }
+  if (json[pos] == '"') {
+    return json_get_string(json, field);
+  }
+
+  const std::size_t start = pos;
+  if (json[pos] == '-') {
+    ++pos;
+  }
+  while (pos < json.size() && json[pos] >= '0' && json[pos] <= '9') {
+    ++pos;
+  }
+  if (pos == start || (pos == start + 1 && json[start] == '-')) {
+    return "";
+  }
+  return std::string(json.substr(start, pos - start));
+}
+
+/**
  * Serializes a USB device to JSON object text.
  * @param device Device record.
  * @return JSON object.
@@ -165,6 +210,13 @@ inline std::string assignments_to_json(const UsbAssignments& assignments) {
   emit("audioPrimary", assignments.audio_primary);
   out << ",";
   emit("paging", assignments.paging);
+  if (assignments.audio_primary_profile.has_value()) {
+    const auto& tuple = *assignments.audio_primary_profile;
+    out << ",\"audioPrimaryProfile\":{"
+        << "\"sampleRate\":" << tuple.sample_rate << ",\"channels\":" << tuple.channels
+        << ",\"sampleFormat\":\"" << homepi::storage::sample_format_to_string(tuple.sample_format)
+        << "\"}";
+  }
   out << "}";
   return out.str();
 }

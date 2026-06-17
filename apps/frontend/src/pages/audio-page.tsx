@@ -9,6 +9,7 @@ import { AudioConfigurationCard } from "@/components/audio-configuration-card.js
 import { ZoneCard } from "@/components/audio/zone-card.js";
 import { ZoneEditSheet } from "@/components/audio/zone-edit-sheet.js";
 import { Button } from "@/components/ui/button.js";
+import { AudioPlayerBar } from "@/components/audio/audio-player-bar.js";
 import { AudioSectionTabsList } from "@/components/audio/audio-section-tabs.js";
 import { Tabs, TabsContent } from "@/components/ui/tabs.js";
 import {
@@ -37,8 +38,17 @@ function zoneCardVolume(zone: HifiZone, isStreamedTo: boolean): number {
  */
 export function AudioPage(): React.JSX.Element {
   const navigate = useNavigate();
-  const { state, saveZoneSettings, toggleZonePower, setZoneVolume, isZoneStreamedTo, isZoneSendingAudio } =
-    useAudioModule();
+  const {
+    state,
+    saveZoneSettings,
+    toggleZonePower,
+    setZoneVolume,
+    isZoneStreamedTo,
+    isZoneSendingAudio,
+    playback,
+    sendPlaybackCommand,
+    setPlaybackVolume,
+  } = useAudioModule();
   const [showDisabled, setShowDisabled] = useState(false);
   const [editZoneNumber, setEditZoneNumber] = useState<number | null>(null);
 
@@ -107,6 +117,13 @@ export function AudioPage(): React.JSX.Element {
       </div>
 
       <Tabs defaultValue="zones" className="w-full">
+        {playback?.visible ? (
+          <AudioPlayerBar
+            playback={playback}
+            onCommand={sendPlaybackCommand}
+            onVolumeChange={setPlaybackVolume}
+          />
+        ) : null}
         <AudioSectionTabsList />
 
         <TabsContent value="zones">

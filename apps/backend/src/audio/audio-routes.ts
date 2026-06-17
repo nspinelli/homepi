@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 import type { ServiceConfig } from "@homepi/core-config";
@@ -14,6 +15,8 @@ import {
   type ShairportZonePatch,
   type ZoneControllerPatch,
 } from "./hifi-zone-commands.js";
+import type { ShairportRemoteClient } from "./shairport-remote-client.js";
+import { percentToAppleDb } from "./volume-conversion.js";
 
 /**
  * Dependencies for audio configuration HTTP handlers.
@@ -23,6 +26,8 @@ export interface AudioRouteDeps {
   client: HifiSerialClient;
   /** PCM router socket client. */
   pcmClient: PcmRouterClient;
+  /** Shairport MQTT remote-control client. */
+  shairportRemote: ShairportRemoteClient;
   /** System status store. */
   statusStore: SystemStatusStore;
   /** Loaded service configuration. */
@@ -93,6 +98,155 @@ export class AudioRoutes {
       if (req.method === "GET" && pathname === "/api/audio/airplay-source") {
         const result = await this.deps.client.getAirplaySource(correlationId);
         sendJson(res, 200, createSuccessResponse({ correlationId, data: result }));
+        return true;
+      }
+
+      if (req.method === "POST" && pathname === "/api/audio/playback/remote") {
+        const body = JSON.parse(await readBody(req)) as {
+          zoneId?: number;
+          command?: string;
+        };
+        if (typeof body.command !== "string" || !this.deps.shairportRemote.isAllowedCommand(body.command)) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "command is required and must be valid" },
+            })
+          );
+          return true;
+        }
+
+        let zoneId = body.zoneId;
+        if (zoneId === undefined) {
+          const pcmSnapshot = await this.deps.pcmClient.getSnapshot(correlationId);
+          zoneId = pcmSnapshot?.ownerZoneId ?? 0;
+        }
+        if (typeof zoneId !== "number" || zoneId < 1 || zoneId > 16) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "zoneId must be 1-16" },
+            })
+          );
+          return true;
+        }
+
+        await this.deps.shairportRemote.publishRemoteCommand(zoneId, body.command);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: { zoneId, command: body.command },
+          })
+        );
+        return true;
+      }
+
+      if (req.method === "POST" && pathname === "/api/audio/playback/volume") {
+        const body = JSON.parse(await readBody(req)) as {
+          zoneId?: number;
+          volume?: number;
+        };
+        if (typeof body.volume !== "number") {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "volume is required" },
+            })
+          );
+          return true;
+        }
+
+        let zoneId = body.zoneId;
+        if (zoneId === undefined) {
+          const pcmSnapshot = await this.deps.pcmClient.getSnapshot(correlationId);
+          zoneId = pcmSnapshot?.ownerZoneId ?? 0;
+        }
+        if (typeof zoneId !== "number" || zoneId < 1 || zoneId > 16) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "zoneId must be 1-16" },
+            })
+          );
+          return true;
+        }
+
+        const clamped = Math.max(0, Math.min(100, Math.round(body.volume)));
+        await this.deps.client.patchZoneController(
+          zoneId,
+          { volume: clamped },
+          correlationId
+        );
+        for (const command of buildZoneControllerCommands(zoneId, { volume: clamped })) {
+          await this.deps.client.sendCommand(command, correlationId);
+        }
+
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: {
+              zoneId,
+              volume: clamped,
+              airplayDb: percentToAppleDb(clamped),
+            },
+          })
+        );
+        return true;
+      }
+
+      const coverMatch = pathname.match(/^\/api\/audio\/playback\/cover\/(\d+)$/);
+      if (req.method === "GET" && coverMatch) {
+        const zoneId = Number(coverMatch[1]);
+        if (zoneId < 1 || zoneId > 16) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "zone must be 1-16" },
+            })
+          );
+          return true;
+        }
+
+        let cover: Buffer | null = null;
+        const cachePath = `/opt/homepi/runtime/cache/cover-zone-${zoneId}`;
+        try {
+          const cached = await readFile(cachePath);
+          if (cached.length > 0) {
+            cover = cached;
+          }
+        } catch {
+          cover = null;
+        }
+        if (!cover) {
+          cover = await this.deps.shairportRemote.fetchCoverArt(zoneId);
+        }
+        if (!cover || cover.length === 0) {
+          res.writeHead(404, { "Content-Length": "0" });
+          res.end();
+          return true;
+        }
+
+        const contentType = detectCoverContentType(cover);
+        res.writeHead(200, {
+          "Content-Type": contentType,
+          "Content-Length": cover.length,
+          "Cache-Control": "no-cache",
+        });
+        res.end(cover);
         return true;
       }
 
@@ -187,12 +341,15 @@ export class AudioRoutes {
       );
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Audio request failed";
+      const raw = error instanceof Error ? error.message : "Audio request failed";
+      const message = raw.includes("ECONNREFUSED")
+        ? "A native audio service is restarting after configuration save. Please try again."
+        : raw;
       this.deps.logger.warn({
         module: "app.backend.audio",
         event: "request_failed",
         correlationId,
-        message,
+        message: raw,
       });
       sendJson(
         res,
@@ -234,4 +391,25 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+/**
+ * Detects JPEG or PNG cover art for the HTTP Content-Type header.
+ * @param cover - Raw cover image bytes.
+ * @returns MIME type for the response.
+ */
+function detectCoverContentType(cover: Buffer): string {
+  if (cover.length >= 3 && cover[0] === 0xff && cover[1] === 0xd8 && cover[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    cover.length >= 8 &&
+    cover[0] === 0x89 &&
+    cover[1] === 0x50 &&
+    cover[2] === 0x4e &&
+    cover[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  return "application/octet-stream";
 }

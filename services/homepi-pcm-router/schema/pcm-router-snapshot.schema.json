@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/services/pcm-router/pcm-router-snapshot.schema.json",
+  "title": "PCM Router Snapshot",
+  "description": "In-memory runtime snapshot emitted on subscribe and after routing/profile changes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ownerZoneId",
+    "activeStack",
+    "dacState",
+    "profileMode",
+    "profileStatus",
+    "loopbackProfile",
+    "profileRevision",
+    "profileSource",
+    "audioBridgeState"
+  ],
+  "properties": {
+    "ownerZoneId": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16
+    },
+    "activeStack": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 1, "maximum": 16 }
+    },
+    "dacState": {
+      "type": "string",
+      "enum": ["unassigned", "unavailable", "idle", "open", "paused"]
+    },
+    "profileMode": {
+      "type": "string",
+      "enum": ["no_dac_assigned", "dac_assigned"]
+    },
+    "profileStatus": {
+      "type": "string",
+      "enum": ["active", "paused_invalid"]
+    },
+    "loopbackProfile": {
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
+    },
+    "dacProfile": {
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
+    },
+    "alsaDacDevice": {
+      "type": "string"
+    },
+    "profileRevision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "profileSource": {
+      "type": "string",
+      "enum": ["user_selected", "platform_policy"]
+    },
+    "audioBridgeState": {
+      "type": "string",
+      "enum": ["stopped", "running", "paused", "degraded"]
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "captureXruns": { "type": "integer", "minimum": 0 },
+        "playbackXruns": { "type": "integer", "minimum": 0 },
+        "framesCopied": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

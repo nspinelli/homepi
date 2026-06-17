@@ -25,15 +25,15 @@ void SystemdController::stop_all_zones(int zone_count) const {
 
 void SystemdController::start_zones(const std::vector<int>& zone_numbers) const {
   for (int zone : zone_numbers) {
+    run_systemctl("stop homepi-metadata@" + std::to_string(zone) + ".service");
     run_systemctl("start homepi-shairport@" + std::to_string(zone) + ".service");
-    run_systemctl("start homepi-metadata@" + std::to_string(zone) + ".service");
   }
 }
 
 void SystemdController::restart_zones(const std::vector<int>& zone_numbers) const {
   for (int zone : zone_numbers) {
+    run_systemctl("stop homepi-metadata@" + std::to_string(zone) + ".service");
     run_systemctl("restart homepi-shairport@" + std::to_string(zone) + ".service");
-    run_systemctl("restart homepi-metadata@" + std::to_string(zone) + ".service");
   }
 }
 

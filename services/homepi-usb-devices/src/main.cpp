@@ -9,14 +9,20 @@
 #include <string>
 #include <thread>
 
+#include <sqlite3.h>
+
 #include "homepi/log.hpp"
 #include "homepi/usb-devices/artifact-writer.hpp"
 #include "homepi/usb-devices/assignment-repository.hpp"
+#include "homepi/usb-devices/audio-profile-service.hpp"
+#include "homepi/usb-devices/audio-profile-writer.hpp"
+#include "homepi/usb-devices/alsa-capability-probe.hpp"
 #include "homepi/usb-devices/config-loader.hpp"
 #include "homepi/usb-devices/device-scanner.hpp"
 #include "homepi/usb-devices/udev-monitor.hpp"
 #include "homepi/usb-devices/service-health-emitter.hpp"
 #include "homepi/usb-devices/unix-api-server.hpp"
+#include "homepi/usb-devices/usb-event-emitter.hpp"
 
 namespace {
 
@@ -25,6 +31,7 @@ std::mutex g_state_mutex;
 homepi::usb_devices::ServiceHealth g_health;
 homepi::usb_devices::AssignmentRepository* g_repository = nullptr;
 homepi::usb_devices::ArtifactWriter* g_artifacts = nullptr;
+homepi::usb_devices::AudioProfileService* g_audio_profiles = nullptr;
 homepi::usb_devices::UnixApiServer* g_server = nullptr;
 homepi::usb_devices::ServiceConfig g_config;
 
@@ -69,6 +76,10 @@ void refresh_devices() {
   g_repository->upsert_devices(scanned);
   const auto assignments = g_repository->get_assignments();
   const auto devices = g_repository->list_devices();
+  if (g_audio_profiles != nullptr) {
+    g_audio_profiles->refresh_audio_capabilities(devices);
+    g_audio_profiles->validate_active_profile(assignments, "hotplug");
+  }
   g_artifacts->regenerate(assignments, devices);
 
   std::lock_guard lock(g_state_mutex);
@@ -108,7 +119,8 @@ int main(int argc, char* argv[]) {
   logger.log(log_level, "core.runtime", "lifecycle_starting", "startup",
              "homepi-usb-devices starting");
 
-  const std::string migration_path = "storage/migrations/001-usb-devices.sql";
+  const std::string migration_sql = read_migration("storage/migrations/001-usb-devices.sql") +
+                                    read_migration("storage/migrations/002-audio-profiles.sql");
   {
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(g_config.database_path).parent_path(),
@@ -117,11 +129,23 @@ int main(int argc, char* argv[]) {
     std::filesystem::create_directories(g_config.socket_dir, ec);
   }
 
-  homepi::usb_devices::AssignmentRepository repository(g_config.database_path,
-                                                       read_migration(migration_path));
+  homepi::usb_devices::AssignmentRepository repository(g_config.database_path, migration_sql);
   homepi::usb_devices::ArtifactWriter artifacts(g_config);
+  homepi::usb_devices::AlsaCapabilityProbe probe;
+  homepi::usb_devices::AudioProfileWriter profile_writer(
+      static_cast<sqlite3*>(repository.db_handle()), g_config.generated_dir,
+      g_config.primary_audio_alsa_id);
+  homepi::usb_devices::UsbEventEmitter usb_events(
+      [&](const std::string& line) {
+        if (g_server != nullptr) {
+          g_server->broadcast(line);
+        }
+      });
+  homepi::usb_devices::AudioProfileService audio_profiles(
+      repository, profile_writer, probe, usb_events, g_config.database_path, g_config.generated_dir);
   g_repository = &repository;
   g_artifacts = &artifacts;
+  g_audio_profiles = &audio_profiles;
 
   refresh_devices();
 
@@ -145,6 +169,7 @@ int main(int argc, char* argv[]) {
   homepi::usb_devices::UnixApiServer server(homepi::usb_devices::ApiContext{
       .repository = &repository,
       .artifacts = &artifacts,
+      .audio_profiles = &audio_profiles,
       .config = g_config,
       .scan_fn = homepi::usb_devices::scan_usb_devices,
       .on_devices_changed = refresh_devices,

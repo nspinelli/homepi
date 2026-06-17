@@ -1,0 +1,45 @@
+#pragma once
+
+#include <cstdint>
+#include <string>
+
+namespace homepi::pcm_router {
+
+/** Maximum supported AirPlay zones. */
+constexpr int kMaxZones = 16;
+
+/** Max wait before promoting a joining zone to DAC owner. */
+constexpr int64_t kOwnerPromotionWaitMs = 750;
+
+/** Zone capture behavior. */
+enum class ZoneCaptureMode { Off, Drain, Buffer };
+
+/** DAC lifecycle for snapshots. */
+enum class DacLifecycleState { Unassigned, Unavailable, Idle, Open, Paused };
+
+/** Audio bridge runtime state. */
+enum class AudioBridgeState { Stopped, Running, Paused, Degraded };
+
+/** Runtime audio statistics. */
+struct AudioBridgeStats {
+  uint64_t capture_xruns = 0;
+  uint64_t playback_xruns = 0;
+  uint64_t frames_copied = 0;
+};
+
+/** Service configuration loaded from environment. */
+struct ServiceConfig {
+  std::string service = "homepi-pcm-router";
+  std::string log_level = "INFO";
+  std::string socket_path = "/run/homepi/pcm-router.sock";
+  std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
+  std::string artifact_path = "/opt/homepi/runtime/generated/audio/operating-profile.json";
+  std::string usb_devices_socket = "/run/homepi/usb-devices.sock";
+  std::string loopback_card_a = "HomePiZonesA";
+  std::string loopback_card_b = "HomePiZonesB";
+  int zone_count = 16;
+  uint32_t period_frames = 512;
+  uint32_t buffer_frames = 4096;
+};
+
+}  // namespace homepi::pcm_router

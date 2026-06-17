@@ -6,15 +6,16 @@
 namespace homepi::shairport_sync {
 
 /**
- * Controls systemd zone and metadata instances without auto-restart loops.
+ * Controls systemd zone instances without auto-restart loops.
+ * Metadata FIFO draining is handled by homepi-pcm-router.
  */
 class SystemdController {
  public:
-  /** Stops all homepi-shairport@ and homepi-metadata@ instances. */
+  /** Stops all homepi-shairport@ instances and legacy metadata@ instances. */
   void stop_all_zones(int zone_count) const;
 
   /**
-   * Starts zone and metadata instances for enabled zones.
+   * Starts zone instances for enabled zones.
    * @param zone_numbers Zone ids to start.
    */
   void start_zones(const std::vector<int>& zone_numbers) const;

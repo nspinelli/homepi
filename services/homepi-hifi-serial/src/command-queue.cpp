@@ -26,6 +26,9 @@ void CommandQueue::stop() {
   {
     std::lock_guard lock(mutex_);
     stop_ = true;
+    while (!queue_.empty()) {
+      queue_.pop();
+    }
   }
   cv_.notify_all();
   if (worker_.joinable()) {
@@ -39,7 +42,7 @@ void CommandQueue::worker_loop() {
     {
       std::unique_lock lock(mutex_);
       cv_.wait(lock, [this]() { return stop_ || !queue_.empty(); });
-      if (stop_ && queue_.empty()) {
+      if (stop_) {
         return;
       }
       command = std::move(queue_.front());

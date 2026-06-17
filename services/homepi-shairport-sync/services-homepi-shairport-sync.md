@@ -43,7 +43,7 @@ Shairport Sync is the program used to enable airplay2 capabilities for the audio
 |sessioncontrol|session_timeout|Editable: Default 60|
 |alsa|output_device|Static: This is based on the zone and alsa loopback|
 |alsa|output_rate|Staic: Default 44100 (This should match the PCM Router)|
-|alsa|output_format|Static: S16_LE (This should match the PCM Router)|
+|alsa|output_format|Static: S32_LE (This should match the PCM Router)|
 |metadata|enabled|Static: yes|
 |metadata|include_cover_art|Static: yes|
 |metadata|cover_art_cache_directory|Static: ""|

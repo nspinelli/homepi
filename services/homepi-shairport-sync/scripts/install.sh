@@ -96,6 +96,23 @@ if old not in text:
     raise SystemExit("clear_ptp_clock patch anchor not found")
 path.write_text(text.replace(old, new, 1))
 PY
+  log "Patching shairport-sync to skip NQPTP play-end on zone stop"
+  python3 - "${SRC_DIR}/player.c" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = '    ptp_send_control_message_string("E"); // signify play is "E"nding'
+new = (
+    "    // HomePi: one zone stopping must not send NQPTP 'E' or it deactivates the shared\n"
+    "    // master clock for every zone still playing on this host.\n"
+    "    // ptp_send_control_message_string(\"E\"); // signify play is \"E\"nding"
+)
+if old not in text:
+    raise SystemExit("ptp play-end patch anchor not found")
+path.write_text(text.replace(old, new, 1))
+PY
 }
 
 build_shairport_sync() {

@@ -20,36 +20,18 @@ require_root() {
 
 ensure_build_deps() {
   local missing=()
-  for cmd in cmake gcc pkg-config; do
+  for cmd in cmake g++ pkg-config; do
     command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
   done
-  for pkg in alsa libmosquitto sqlite3; do
+  for pkg in alsa; do
     if ! pkg-config --exists "${pkg}" 2>/dev/null; then
-      case "${pkg}" in
-        alsa) missing+=("libasound2-dev") ;;
-        libmosquitto) missing+=("libmosquitto-dev") ;;
-        sqlite3) missing+=("libsqlite3-dev") ;;
-      esac
+      missing+=("libasound2-dev")
     fi
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
     log "Installing build dependencies: ${missing[*]}"
     apt-get update -qq
-    apt-get install -y cmake gcc pkg-config libasound2-dev libmosquitto-dev libsqlite3-dev \
-      alsa-utils mosquitto mosquitto-clients
-  fi
-}
-
-ensure_mosquitto() {
-  if ! systemctl list-unit-files mosquitto.service >/dev/null 2>&1; then
-    log "Installing mosquitto broker"
-    apt-get update -qq
-    apt-get install -y mosquitto mosquitto-clients
-  fi
-  if ! systemctl is-enabled mosquitto.service >/dev/null 2>&1; then
-    log "Enabling mosquitto"
-    systemctl enable mosquitto.service
-    systemctl start mosquitto.service
+    apt-get install -y cmake g++ pkg-config libasound2-dev alsa-utils
   fi
 }
 
@@ -80,6 +62,8 @@ install_files() {
   install -d -m 0755 "${INSTALL_ROOT}/bin"
   install -d -m 0755 "${INSTALL_ROOT}/config"
   install -d -m 0755 "${INSTALL_ROOT}/env"
+  install -d -m 0755 "${RUNTIME_ROOT}/state"
+  install -d -m 0755 "${RUNTIME_ROOT}/generated/audio"
 
   install -m 0755 "${BUILD_DIR}/homepi-pcm-router" "${INSTALL_ROOT}/bin/homepi-pcm-router"
   install -m 0644 "${SERVICE_ROOT}/config/homepi-pcm-router.env.example" \
@@ -88,16 +72,6 @@ install_files() {
     install -m 0644 "${SERVICE_ROOT}/config/homepi-pcm-router.env.example" \
       "${INSTALL_ROOT}/env/.env"
   fi
-  install -d -m 0755 "${RUNTIME_ROOT}/state"
-}
-
-validate_alsa() {
-  log "Validating ALSA loopback substreams"
-  set -a
-  # shellcheck source=/dev/null
-  source "${INSTALL_ROOT}/env/.env"
-  set +a
-  "${INSTALL_ROOT}/bin/homepi-pcm-router" --validate-alsa
 }
 
 install_systemd() {
@@ -122,11 +96,9 @@ restart_backend() {
 main() {
   require_root
   ensure_build_deps
-  ensure_mosquitto
   install_alsa_loopback
   build_binary
   install_files
-  validate_alsa
   install_systemd
   try_start_service
   restart_backend

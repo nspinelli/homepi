@@ -12,7 +12,10 @@ import type {
   HifiGroup,
   HifiSource,
   HifiZone,
+  AudioPlaybackView,
   PcmMetadata,
+  PcmProfileTuple,
+  PlaybackRemoteCommand,
   ShairportZoneSettings,
   ZoneSettingsPatch,
 } from "@/types/audio-types.js";
@@ -29,13 +32,43 @@ export interface AudioModuleState {
   sseConnected: boolean;
 }
 
+const defaultPcmPlayback: AudioSnapshot["pcm"]["playback"] = {
+  playing: false,
+  positionMs: 0,
+  durationMs: 0,
+};
+
+/**
+ * Ensures PCM playback fields exist when loading snapshots from older backends.
+ * @param snapshot - Raw audio snapshot from the API or SSE.
+ * @returns Snapshot with normalized PCM playback state.
+ */
+function normalizeAudioSnapshot(snapshot: AudioSnapshot): AudioSnapshot {
+  return {
+    ...snapshot,
+    pcm: {
+      ...snapshot.pcm,
+      playback: {
+        ...defaultPcmPlayback,
+        ...snapshot.pcm.playback,
+      },
+    },
+  };
+}
+
 const initialSnapshot: AudioSnapshot = {
   controller: {},
   zones: [],
   sources: [],
   groups: [],
   shairportZoneSettings: [],
-  pcm: { ownerZoneId: 0, activeStack: [], dacState: "unknown", metadata: {} },
+  pcm: {
+    ownerZoneId: 0,
+    activeStack: [],
+    dacState: "unknown",
+    metadata: {},
+    playback: { playing: false, positionMs: 0, durationMs: 0 },
+  },
   services: {
     hifiSerial: "offline",
     shairport: "offline",
@@ -54,19 +87,6 @@ const initialSnapshot: AudioSnapshot = {
  */
 function pushPcmStack(stack: number[], zoneId: number): number[] {
   return [zoneId, ...stack.filter((zone) => zone !== zoneId)];
-}
-
-/**
- * Appends a zone to the PCM active stack when joining an existing session.
- * @param stack - Current stack.
- * @param zoneId - Zone joining the stack.
- * @returns Updated stack.
- */
-function joinPcmStack(stack: number[], zoneId: number): number[] {
-  if (stack.includes(zoneId)) {
-    return stack;
-  }
-  return [...stack, zoneId];
 }
 
 /**
@@ -96,6 +116,10 @@ function clearZoneFromPcmRouting(
     activeStack,
     ownerZoneId,
     metadata: ownerZoneId === 0 ? {} : pcm.metadata,
+    playback:
+      ownerZoneId === 0
+        ? { playing: false, positionMs: 0, durationMs: 0 }
+        : pcm.playback,
   };
 }
 
@@ -151,11 +175,16 @@ function patchPcmFromEvent(
   event: string,
   payload: Record<string, unknown>
 ): AudioSnapshot["pcm"] {
-  let activeStack = [...pcm.activeStack];
-  let ownerZoneId = pcm.ownerZoneId;
-  let dacState = pcm.dacState;
+  const normalizedPcm = {
+    ...pcm,
+    playback: pcm.playback ?? { ...defaultPcmPlayback },
+  };
+  let activeStack = [...normalizedPcm.activeStack];
+  let ownerZoneId = normalizedPcm.ownerZoneId;
+  let dacState = normalizedPcm.dacState;
+  pcm = normalizedPcm;
 
-  if (event === "pcm_router_snapshot") {
+  if (event === "routing_changed" || event === "pcm_router_snapshot") {
     if (Array.isArray(payload.activeStack)) {
       activeStack = payload.activeStack as number[];
     }
@@ -165,15 +194,121 @@ function patchPcmFromEvent(
     if (typeof payload.dacState === "string") {
       dacState = payload.dacState;
     }
-    return { ...pcm, ownerZoneId, activeStack, dacState };
+    const profileMode =
+      typeof payload.profileMode === "string" ? payload.profileMode : pcm.profileMode;
+    const profileStatus =
+      typeof payload.profileStatus === "string" ? payload.profileStatus : pcm.profileStatus;
+    const profileRevision =
+      typeof payload.profileRevision === "number"
+        ? payload.profileRevision
+        : pcm.profileRevision;
+    const profileSource =
+      typeof payload.profileSource === "string" ? payload.profileSource : pcm.profileSource;
+    const audioBridgeState =
+      typeof payload.audioBridgeState === "string"
+        ? payload.audioBridgeState
+        : pcm.audioBridgeState;
+    const parseTuple = (value: unknown): PcmProfileTuple | undefined => {
+      if (typeof value !== "object" || value === null) {
+        return undefined;
+      }
+      const tuple = value as Record<string, unknown>;
+      if (
+        typeof tuple.sampleRate !== "number" ||
+        typeof tuple.channels !== "number" ||
+        typeof tuple.sampleFormat !== "string"
+      ) {
+        return undefined;
+      }
+      return {
+        sampleRate: tuple.sampleRate,
+        channels: tuple.channels,
+        sampleFormat: tuple.sampleFormat,
+      };
+    };
+    const loopbackProfile = parseTuple(payload.loopbackProfile) ?? pcm.loopbackProfile;
+    const dacProfile = parseTuple(payload.dacProfile) ?? pcm.dacProfile;
+    return {
+      ...pcm,
+      ownerZoneId,
+      activeStack,
+      dacState,
+      profileMode,
+      profileStatus,
+      loopbackProfile,
+      dacProfile,
+      profileRevision,
+      profileSource,
+      audioBridgeState,
+    };
+  }
+
+  if (event === "pcm_cover_updated") {
+    const zoneId =
+      typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : typeof payload.zone === "number"
+          ? payload.zone
+          : null;
+    if (zoneId === null || zoneId !== getDacOwnerZoneId({ ...pcm, ownerZoneId, activeStack })) {
+      return pcm;
+    }
+    return { ...pcm, hasCoverArt: true };
+  }
+
+  if (event === "playback_state_changed") {
+    const zoneId =
+      typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : typeof payload.zone === "number"
+          ? payload.zone
+          : null;
+    if (zoneId === null || zoneId !== getDacOwnerZoneId({ ...pcm, ownerZoneId, activeStack })) {
+      return pcm;
+    }
+    const playing = payload.playing === true;
+    return {
+      ...pcm,
+      playback: { ...pcm.playback, playing },
+    };
+  }
+
+  if (event === "pcm_progress_updated") {
+    const zoneId =
+      typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : typeof payload.zone === "number"
+          ? payload.zone
+          : null;
+    if (zoneId === null || zoneId !== getDacOwnerZoneId({ ...pcm, ownerZoneId, activeStack })) {
+      return pcm;
+    }
+    const playback = { ...pcm.playback };
+    if (typeof payload.positionMs === "number") {
+      playback.positionMs = payload.positionMs;
+    }
+    if (typeof payload.durationMs === "number") {
+      playback.durationMs = payload.durationMs;
+    }
+    playback.progressSyncedAt = Date.now();
+    return { ...pcm, playback };
   }
 
   if (event === "owner_cleared") {
-    return { ...pcm, ownerZoneId: 0, activeStack: [], metadata: {} };
+    return {
+      ...pcm,
+      ownerZoneId: 0,
+      activeStack: [],
+      metadata: {},
+      playback: { playing: false, positionMs: 0, durationMs: 0 },
+    };
   }
 
   if (event === "owner_changed") {
-    if (typeof payload.ownerZoneId === "number") {
+    if (Array.isArray(payload.activeStack)) {
+      activeStack = payload.activeStack as number[];
+      ownerZoneId = activeStack[0] ?? 0;
+    } else if (typeof payload.ownerZoneId === "number") {
       ownerZoneId = payload.ownerZoneId;
       if (ownerZoneId === 0) {
         activeStack = [];
@@ -181,36 +316,11 @@ function patchPcmFromEvent(
         activeStack = pushPcmStack(activeStack, ownerZoneId);
       }
     }
-    if (Array.isArray(payload.activeStack)) {
-      activeStack = payload.activeStack as number[];
-    }
     return { ...pcm, ownerZoneId, activeStack };
   }
 
   if (event === "zone_updated") {
-    const zoneId =
-      typeof payload.zoneId === "number"
-        ? payload.zoneId
-        : typeof payload.zone === "number"
-          ? payload.zone
-          : null;
-    if (zoneId === null) {
-      return pcm;
-    }
-
-    const joined = payload.joined === true;
-    const active = payload.active !== false;
-
-    if (active && joined) {
-      activeStack = joinPcmStack(activeStack, zoneId);
-    } else if (active) {
-      activeStack = pushPcmStack(activeStack, zoneId);
-    } else {
-      activeStack = removePcmStack(activeStack, zoneId);
-    }
-
-    ownerZoneId = activeStack[0] ?? 0;
-    return { ...pcm, ownerZoneId, activeStack };
+    return pcm;
   }
 
   return pcm;
@@ -312,6 +422,9 @@ export function useAudioModule(): {
   isZoneStreamedTo: (zoneNumber: number) => boolean;
   isZoneSendingAudio: (zoneNumber: number) => boolean;
   nowPlaying: { track?: string; artist?: string; album?: string; source?: string } | null;
+  playback: AudioPlaybackView | null;
+  sendPlaybackCommand: (command: PlaybackRemoteCommand) => Promise<void>;
+  setPlaybackVolume: (volume: number) => Promise<void>;
 } {
   const [state, setState] = useState<AudioModuleState>({
     snapshot: null,
@@ -405,7 +518,11 @@ export function useAudioModule(): {
           snapshot.pcm.ownerZoneId === 0 &&
           snapshot.pcm.activeStack.length === 0
         ) {
-          snapshot.pcm = { ...snapshot.pcm, metadata: {} };
+          snapshot.pcm = {
+            ...snapshot.pcm,
+            metadata: {},
+            playback: { playing: false, positionMs: 0, durationMs: 0 },
+          };
         }
 
         const metaField =
@@ -446,7 +563,7 @@ export function useAudioModule(): {
       );
       setState((current) => ({
         ...current,
-        snapshot: data,
+        snapshot: normalizeAudioSnapshot(data),
         loading: false,
         error: null,
       }));
@@ -713,6 +830,89 @@ export function useAudioModule(): {
     };
   })();
 
+  const playback = ((): AudioPlaybackView | null => {
+    const snapshot = state.snapshot;
+    if (!snapshot) {
+      return null;
+    }
+    const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
+    if (ownerZoneId <= 0) {
+      return null;
+    }
+
+    const ownerZone = snapshot.zones.find((zone) => zone.zoneNumber === ownerZoneId);
+    const airplaySource = snapshot.sources.find((source) => source.isAirplay === 1);
+    const { title, artist, album, clientName } = snapshot.pcm.metadata;
+    const sourceParts: string[] = [];
+    if (airplaySource?.sourceNumber !== undefined) {
+      sourceParts.push(`Source ${airplaySource.sourceNumber}`);
+    }
+    if (clientName) {
+      sourceParts.push(clientName);
+    } else if (airplaySource?.name) {
+      sourceParts.push(airplaySource.name);
+    }
+
+    const config = getAppConfig();
+    const coverUrl = snapshot.pcm.hasCoverArt
+      ? `${config.apiBaseUrl}/api/audio/playback/cover/${ownerZoneId}?v=${snapshot.pcm.playback?.progressSyncedAt ?? Date.now()}`
+      : undefined;
+
+    return {
+      visible: true,
+      zoneId: ownerZoneId,
+      zoneName: ownerZone?.name ?? `Zone ${ownerZoneId}`,
+      track: title,
+      artist,
+      album,
+      sourceLabel: sourceParts.length > 0 ? sourceParts.join(" • ") : undefined,
+      playing: snapshot.pcm.playback?.playing ?? false,
+      positionMs: snapshot.pcm.playback?.positionMs ?? 0,
+      durationMs: snapshot.pcm.playback?.durationMs ?? 0,
+      progressSyncedAt: snapshot.pcm.playback?.progressSyncedAt ?? Date.now(),
+      volume: ownerZone?.volume ?? 0,
+      coverUrl,
+    };
+  })();
+
+  const sendPlaybackCommand = useCallback(
+    async (command: PlaybackRemoteCommand) => {
+      const snapshot = state.snapshot;
+      const ownerZoneId = snapshot ? getDacOwnerZoneId(snapshot.pcm) : 0;
+      if (ownerZoneId <= 0) {
+        return;
+      }
+
+      const config = getAppConfig();
+      try {
+        const response = await fetch(`${config.apiBaseUrl}/api/audio/playback/remote`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ zoneId: ownerZoneId, command }),
+        });
+        const body = (await response.json()) as AudioApiResponse<{ zoneId: number; command: string }>;
+        if (!body.ok) {
+          throw new Error(body.error?.message ?? "Playback command failed");
+        }
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Playback command failed", "error");
+      }
+    },
+    [state.snapshot]
+  );
+
+  const setPlaybackVolume = useCallback(
+    async (volume: number) => {
+      const snapshot = state.snapshot;
+      const ownerZoneId = snapshot ? getDacOwnerZoneId(snapshot.pcm) : 0;
+      if (ownerZoneId <= 0) {
+        return;
+      }
+      await setZoneVolume(ownerZoneId, volume);
+    },
+    [state.snapshot, setZoneVolume]
+  );
+
   return {
     state,
     refresh,
@@ -722,6 +922,9 @@ export function useAudioModule(): {
     isZoneStreamedTo,
     isZoneSendingAudio,
     nowPlaying,
+    playback,
+    sendPlaybackCommand,
+    setPlaybackVolume,
   };
 }
 

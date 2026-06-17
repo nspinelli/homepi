@@ -60,12 +60,16 @@ describe("service-status-mappers", () => {
   });
 
   it("maps PCM router DAC states", () => {
+    expect(mapPcmRouterFromDacState("open")).toBe("healthy");
+    expect(mapPcmRouterFromDacState("idle")).toBe("healthy");
     expect(mapPcmRouterFromDacState("DAC_OPEN")).toBe("healthy");
     expect(mapPcmRouterFromDacState("DAC_IDLE")).toBe("healthy");
+    expect(mapPcmRouterFromDacState("unassigned")).toBe("degraded");
+    expect(mapPcmRouterFromDacState("unavailable")).toBe("degraded");
     expect(mapPcmRouterFromDacState("DAC_UNASSIGNED")).toBe("degraded");
     expect(mapPcmRouterFromDacState("DAC_UNAVAILABLE")).toBe("degraded");
     expect(
-      mapPcmRouterFromPayload({ dacState: "DAC_IDLE" }, "pcm_router_snapshot")
+      mapPcmRouterFromPayload({ dacState: "idle" }, "pcm_router_snapshot")
     ).toBe("healthy");
   });
 

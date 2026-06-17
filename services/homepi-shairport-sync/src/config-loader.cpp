@@ -89,7 +89,11 @@ ServiceConfig load_service_config(const std::string& config_path) {
   config.shairport_binary = config.install_root + "/bin/shairport-sync";
   config.hifi_socket_path = config.socket_dir + "/hifi-serial.sock";
   config.pcm_router_socket_path = config.socket_dir + "/pcm-router.sock";
+  config.usb_devices_socket_path = config.socket_dir + "/usb-devices.sock";
   config.supervisor_socket_path = config.socket_dir + "/shairport-supervisor.sock";
+
+  const std::string generated_dir = env_or("HOMEPI_GENERATED_DIR", "/opt/homepi/runtime/generated");
+  config.artifact_path = generated_dir + "/audio/operating-profile.json";
 
   config.upstream_version = json_get_string(shairport_section, "upstreamVersion");
   if (config.upstream_version.empty()) {

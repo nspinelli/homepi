@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json",
+  "title": "Supported Audio Profile Tuple",
+  "description": "A single ALSA-legal combination of sample rate, channel count, and sample format probed from a DAC.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sampleRate", "channels", "sampleFormat"],
+  "properties": {
+    "sampleRate": {
+      "type": "integer",
+      "minimum": 8000,
+      "maximum": 384000,
+      "description": "Sample rate in Hz."
+    },
+    "channels": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "description": "Channel count."
+    },
+    "sampleFormat": {
+      "type": "string",
+      "enum": ["S16_LE", "S32_LE"],
+      "description": "Interleaved little-endian PCM sample format."
+    }
+  }
+}

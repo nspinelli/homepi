@@ -16,6 +16,10 @@
     "paging": {
       "type": ["string", "null"],
       "description": "deviceId for Primary Paging Output."
+    },
+    "audioPrimaryProfile": {
+      "description": "User-selected PCM profile tuple for Primary Audio Output.",
+      "$ref": "https://homepi.local/schema/core/storage/supported-audio-profile-tuple.schema.json"
     }
   }
 }

@@ -1,38 +1,30 @@
 {
   "service": "homepi-metadata",
-  "displayName": "HomePi Metadata Reader",
-  "description": "Shairport Sync metadata pipe reader (upstream shairport-sync-metadata-reader wrapper).",
-  "version": "1.0.0",
-  "type": "external",
-  "owner": "service",
+  "displayName": "HomePi Metadata",
+  "description": "Efficient PCM-owner metadata daemon for Shairport Sync FIFO pipes.",
+  "version": "2.0.0",
+  "type": "cpp",
+  "enabled": true,
+  "dependencies": [
+    "homepi-pcm-router",
+    "homepi-shairport-supervisor"
+  ],
   "runtime": {
-    "execStart": "/opt/homepi/services/metadata/bin/run-metadata-reader.sh",
+    "execStart": "/opt/homepi/services/metadata/bin/homepi-metadata",
     "workingDirectory": "/opt/homepi/services/metadata",
-    "environmentFile": "/opt/homepi/services/metadata/env/.env",
-    "socketPaths": []
+    "user": "homepi",
+    "group": "homepi",
+    "socketPaths": [
+      "/run/homepi/metadata.sock"
+    ]
   },
   "systemd": {
     "unitName": "homepi-metadata.service",
     "after": [
-      "network-online.target"
+      "homepi-pcm-router.service"
     ],
     "wants": [
-      "network-online.target"
-    ],
-    "requires": [],
-    "restart": "on-failure",
-    "restartSec": 5,
-    "wantedBy": "multi-user.target"
-  },
-  "permissions": {
-    "user": "homepi",
-    "group": "homepi",
-    "supplementaryGroups": [],
-    "requiresRoot": false
-  },
-  "health": {
-    "enabled": true,
-    "mode": "systemd",
-    "intervalMs": 30000
+      "homepi-pcm-router.service"
+    ]
   }
 }

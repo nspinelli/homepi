@@ -57,7 +57,7 @@ function DeviceSelectRow({
  * Audio Configuration settings card for USB role assignments.
  */
 export function AudioConfigurationCard(): React.JSX.Element {
-  const { state, setDraft, setAirplaySource, save } = useUsbDeviceSettings();
+  const { state, setDraft, save } = useUsbDeviceSettings();
 
   const pluggedIn = state.devices.filter((device) => device.present);
   const serialOptions = pluggedIn.filter((device) => device.kind === "serial");
@@ -68,7 +68,8 @@ export function AudioConfigurationCard(): React.JSX.Element {
       <div className="border-b border-border px-6 py-4">
         <h2 className="font-medium text-card-foreground">Audio Configuration</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Assign USB serial and audio devices for HomePi services
+          Assign USB serial and audio devices for HomePi services. Configure AirPlay source under
+          Sources.
         </p>
       </div>
 
@@ -172,25 +173,6 @@ export function AudioConfigurationCard(): React.JSX.Element {
           disabled={state.loading || state.saving}
           onChange={(deviceId) => setDraft({ paging: deviceId })}
         />
-
-        <label className="grid gap-2">
-          <span className="text-sm font-medium text-foreground">AirPlay Source</span>
-          <select
-            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground"
-            value={state.draftAirplaySource ?? ""}
-            disabled={state.loading || state.saving}
-            onChange={(event) =>
-              setAirplaySource(event.target.value ? Number(event.target.value) : null)
-            }
-          >
-            {state.sources.map((source) => (
-              <option key={source.sourceNumber} value={source.sourceNumber}>
-                Source {source.sourceNumber}
-                {source.name ? `: ${source.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
 
         <div className="flex flex-col items-end gap-2 pt-2 sm:flex-row sm:items-center sm:justify-end">
           {!state.saveSuccess && !state.saveError && state.isDirty && !state.saving ? (

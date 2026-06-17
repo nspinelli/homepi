@@ -1,15 +1,14 @@
 [Unit]
-Description=HomePi Shairport Sync Metadata Reader
-Wants=network-online.target
-After=network.target network-online.target homepi-nqptp.service
-Before=shairport-sync.service
+Description=HomePi Metadata Service
+After=homepi-pcm-router.service homepi-shairport-supervisor.service mosquitto.service
+Wants=homepi-pcm-router.service mosquitto.service
 
 [Service]
 Type=simple
 User=homepi
 Group=homepi
 WorkingDirectory=/opt/homepi/services/metadata
-ExecStart=/opt/homepi/services/metadata/bin/run-metadata-reader.sh
+ExecStart=/opt/homepi/services/metadata/bin/homepi-metadata
 Restart=on-failure
 RestartSec=5
 EnvironmentFile=-/opt/homepi/services/metadata/env/.env

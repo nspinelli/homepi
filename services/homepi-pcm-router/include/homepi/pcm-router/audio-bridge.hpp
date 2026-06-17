@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -53,7 +54,11 @@ class AudioBridge {
   void close_devices();
   size_t bytes_per_frame() const;
   void request_dac_idle();
-  bool write_silence_to_dac(uint8_t* buffer);
+  void end_session_idle();
+  bool ensure_dac_open_locked();
+  void drop_and_close_dac_locked();
+  void discard_stale_owner_frames(int owner, FrameRing& ring, uint8_t* buffer);
+  bool playback_owner_unchanged(int owner, uint64_t revision) const;
 
   ServiceConfig config_;
   ActiveAudioConfig active_config_;
@@ -69,6 +74,7 @@ class AudioBridge {
   std::atomic<AudioBridgeState> bridge_state_{AudioBridgeState::Stopped};
   AudioBridgeStats stats_{};
 
+  std::mutex dac_mutex_;
   _snd_pcm* dac_handle_ = nullptr;
   std::vector<_snd_pcm*> capture_handles_;
   std::vector<std::unique_ptr<FrameRing>> rings_;

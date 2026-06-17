@@ -72,7 +72,7 @@ export class StatusUpdateCoordinator {
    * @param source - Bridge source label.
    */
   markServiceOffline(
-    field: "usbDevices" | "hifiSerial" | "pcmRouter",
+    field: "usbDevices" | "hifiSerial" | "pcmRouter" | "metadata",
     source: string
   ): void {
     this.patchAndBroadcast({ [field]: "offline" }, source);

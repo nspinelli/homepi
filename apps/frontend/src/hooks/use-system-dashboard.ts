@@ -53,7 +53,7 @@ function prependRecentEvent(events: EventEnvelope[], envelope: EventEnvelope): E
  * Loads REST status and maintains SSE/WebSocket live connections.
  * @returns Dashboard state and refresh handler.
  */
-export function useSystemDashboard(): {
+export function useSystemDashboardState(): {
   state: SystemDashboardState;
   refresh: () => Promise<void>;
 } {

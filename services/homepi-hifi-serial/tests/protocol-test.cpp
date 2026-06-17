@@ -176,6 +176,12 @@ int main() {
   assert(found_z9_disabled);
   assert(found_z8_enabled);
 
+  assert(cmd_source_name_set(3, "Radio") == "*S3NAME\"Radio\"\r");
+  assert(cmd_source_name_set(1, "Line \"A\"") == "*S1NAME\"Line \\\"A\\\"\"\r");
+  assert(cmd_source_enable_set(2, 1) == "*S2ENABLE1\r");
+  assert(cmd_source_ingain_set(4, 12) == "*S4INGAIN12\r");
+  assert(cmd_source_displine_set(5, "Now Playing") == "*S5DISPLINE\"Now Playing\"\r");
+
   std::cout << "protocol tests passed\n";
   return 0;
 }

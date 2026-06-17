@@ -150,4 +150,22 @@ std::string cmd_zone_group_set(int zone, int group) {
   return build_command("Z" + std::to_string(zone) + "GROUP" + std::to_string(group));
 }
 
+std::string cmd_source_name_set(int source, const std::string& name) {
+  return build_command("S" + std::to_string(source) + "NAME\"" + escape_protocol_string(name) +
+                       "\"");
+}
+
+std::string cmd_source_enable_set(int source, int enabled) {
+  return build_command("S" + std::to_string(source) + "ENABLE" + std::to_string(enabled));
+}
+
+std::string cmd_source_ingain_set(int source, int gain) {
+  return build_command("S" + std::to_string(source) + "INGAIN" + std::to_string(gain));
+}
+
+std::string cmd_source_displine_set(int source, const std::string& line) {
+  return build_command("S" + std::to_string(source) + "DISPLINE\"" +
+                       escape_protocol_string(line) + "\"");
+}
+
 }  // namespace homepi::hifi_serial

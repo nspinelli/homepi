@@ -112,13 +112,11 @@ export function createStartupSnapshotLoaders(deps: StartupSnapshotDeps): Startup
       name: "metadata",
       load: async () => {
         try {
-          const [supervisor, pcmRouter] = await Promise.all([
-            getSystemdUnitActiveState("homepi-shairport-supervisor"),
-            getSystemdUnitActiveState("homepi-pcm-router"),
-          ]);
-          const next =
-            supervisor === "active" && pcmRouter === "active" ? "healthy" : "offline";
-          coordinator.patchAndBroadcast({ metadata: next }, "startup-snapshot");
+          const state = await getSystemdUnitActiveState("homepi-metadata");
+          coordinator.patchAndBroadcast(
+            { metadata: mapSystemdServiceStatus(state) },
+            "startup-snapshot"
+          );
         } catch {
           coordinator.patchAndBroadcast({ metadata: "offline" }, "startup-snapshot");
         }

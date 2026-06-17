@@ -3,6 +3,7 @@ import type { EventEnvelope } from "@homepi/core-events";
 import type { SystemStatusSnapshot } from "../types/system-status-types.js";
 import {
   mapHifiSerialFromPayload,
+  mapMetadataFromPayload,
   mapPcmRouterFromDacState,
   mapPcmRouterFromPayload,
   mapUsbDevicesFromPayload,
@@ -32,6 +33,10 @@ export function mapEnvelopeToStatusPatch(
     if (envelope.source === "homepi-pcm-router") {
       const pcm = mapPcmRouterFromPayload(payload, envelope.event);
       return pcm ? { pcmRouter: pcm } : null;
+    }
+    if (envelope.source === "homepi-metadata") {
+      const metadata = mapMetadataFromPayload(payload, envelope.event);
+      return metadata ? { metadata } : null;
     }
   }
 

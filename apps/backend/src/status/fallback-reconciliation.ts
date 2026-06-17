@@ -24,6 +24,8 @@ export interface BridgeConnectionState {
   hifiSerial: boolean;
   /** PCM router event bridge connected. */
   pcmRouter: boolean;
+  /** Metadata event bridge connected. */
+  metadata: boolean;
 }
 
 /**
@@ -150,12 +152,8 @@ export class FallbackReconciliation {
   private async reconcileMetadata(): Promise<void> {
     const before = this.options.statusStore.getStatus().metadata;
     try {
-      const [supervisor, pcmRouter] = await Promise.all([
-        getSystemdUnitActiveState("homepi-shairport-supervisor"),
-        getSystemdUnitActiveState("homepi-pcm-router"),
-      ]);
-      const next =
-        supervisor === "active" && pcmRouter === "active" ? "healthy" : "offline";
+      const state = await getSystemdUnitActiveState("homepi-metadata");
+      const next = mapSystemdServiceStatus(state);
       if (next !== before) {
         this.options.coordinator.patchAndBroadcast(
           { metadata: next },

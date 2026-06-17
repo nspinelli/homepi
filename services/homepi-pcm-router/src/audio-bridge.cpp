@@ -78,31 +78,82 @@ AudioBridgeStats AudioBridge::stats() const { return stats_; }
 ActiveAudioConfig AudioBridge::active_config() const { return active_config_; }
 
 void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones + 1>& modes) {
-  for (int i = 0; i <= kMaxZones; ++i) {
+  for (int i = 1; i <= kMaxZones; ++i) {
+    const ZoneCaptureMode previous = zone_modes_[i].load();
+    if (previous == ZoneCaptureMode::Buffer && modes[i] == ZoneCaptureMode::Drain && i <= config_.zone_count) {
+      rings_[static_cast<size_t>(i - 1)]->clear();
+    }
     zone_modes_[i].store(modes[i]);
   }
   routing_revision_.fetch_add(1, std::memory_order_relaxed);
 }
 
 void AudioBridge::request_dac_idle() {
+  playback_owner_.store(0);
+  owner_handoff_at_ms_.store(0);
+  dac_idle_requested_.store(true);
+  routing_revision_.fetch_add(1, std::memory_order_relaxed);
   for (std::unique_ptr<FrameRing>& ring : rings_) {
     if (ring != nullptr) {
       ring->clear();
     }
   }
-  playback_owner_.store(0);
-  owner_handoff_at_ms_.store(0);
-  dac_idle_requested_.store(true);
-  routing_revision_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void AudioBridge::drop_and_close_dac_locked() {
+  if (dac_handle_ != nullptr) {
+    snd_pcm_drop(dac_handle_);
+    snd_pcm_close(dac_handle_);
+    dac_handle_ = nullptr;
+  }
+  dac_state_.store(DacLifecycleState::Idle);
+}
+
+bool AudioBridge::ensure_dac_open_locked() {
+  if (dac_handle_ != nullptr) {
+    return true;
+  }
+  if (active_config_.mode != ProfileMode::DacAssigned || !active_config_.dac_profile.has_value() ||
+      active_config_.alsa_dac_device.empty()) {
+    return false;
+  }
+  if (snd_pcm_open(&dac_handle_, active_config_.alsa_dac_device.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0) {
+    dac_state_.store(DacLifecycleState::Unavailable);
+    return false;
+  }
+  std::string error;
+  if (!configure_pcm(dac_handle_, *active_config_.dac_profile, config_.period_frames,
+                     config_.buffer_frames, error)) {
+    snd_pcm_close(dac_handle_);
+    dac_handle_ = nullptr;
+    dac_state_.store(DacLifecycleState::Unavailable);
+    return false;
+  }
+  dac_state_.store(DacLifecycleState::Open);
+  return true;
+}
+
+void AudioBridge::end_session_idle() {
+  request_dac_idle();
+  std::lock_guard lock(dac_mutex_);
+  drop_and_close_dac_locked();
+  dac_idle_requested_.store(false);
 }
 
 void AudioBridge::set_playback_owner(int zone_id) {
   if (zone_id <= 0) {
-    request_dac_idle();
+    end_session_idle();
     return;
   }
   dac_idle_requested_.store(false);
   const int previous_owner = playback_owner_.load();
+  {
+    std::lock_guard lock(dac_mutex_);
+    if (!ensure_dac_open_locked()) {
+      playback_owner_.store(0);
+      return;
+    }
+  }
   playback_owner_.store(zone_id);
   if (previous_owner != zone_id) {
     owner_handoff_at_ms_.store(steady_now_ms());
@@ -126,6 +177,21 @@ size_t AudioBridge::zone_available_frames(int zone_id) const {
     return 0;
   }
   return rings_[static_cast<size_t>(zone_id - 1)]->available_frames();
+}
+
+void AudioBridge::discard_stale_owner_frames(int owner, FrameRing& ring, uint8_t* buffer) {
+  const int64_t last_buffered_at = last_buffered_at_ms_[owner].load();
+  if (last_buffered_at <= 0 || steady_now_ms() - last_buffered_at <= kCaptureStaleMs) {
+    return;
+  }
+  while (ring.available_frames() >= config_.period_frames) {
+    ring.read(buffer, config_.period_frames);
+  }
+}
+
+bool AudioBridge::playback_owner_unchanged(int owner, uint64_t revision) const {
+  return owner > 0 && playback_owner_.load() == owner &&
+         routing_revision_.load(std::memory_order_relaxed) == revision;
 }
 
 bool AudioBridge::open_devices(const ActiveAudioConfig& config) {
@@ -157,21 +223,11 @@ bool AudioBridge::open_devices(const ActiveAudioConfig& config) {
 
   if (config.mode == ProfileMode::DacAssigned && config.dac_profile.has_value() &&
       !config.alsa_dac_device.empty()) {
-    if (snd_pcm_open(&dac_handle_, config.alsa_dac_device.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0) {
-      dac_state_.store(DacLifecycleState::Unavailable);
+    std::lock_guard lock(dac_mutex_);
+    if (!ensure_dac_open_locked()) {
       bridge_state_.store(AudioBridgeState::Degraded);
       return true;
     }
-    std::string error;
-    if (!configure_pcm(dac_handle_, *config.dac_profile, config_.period_frames, config_.buffer_frames,
-                       error)) {
-      snd_pcm_close(dac_handle_);
-      dac_handle_ = nullptr;
-      dac_state_.store(DacLifecycleState::Unavailable);
-      bridge_state_.store(AudioBridgeState::Degraded);
-      return true;
-    }
-    dac_state_.store(playback_owner_.load() > 0 ? DacLifecycleState::Open : DacLifecycleState::Idle);
   } else {
     dac_state_.store(DacLifecycleState::Unassigned);
   }
@@ -185,10 +241,8 @@ void AudioBridge::close_devices() {
     }
   }
   capture_handles_.assign(config_.zone_count, nullptr);
-  if (dac_handle_ != nullptr) {
-    snd_pcm_close(dac_handle_);
-    dac_handle_ = nullptr;
-  }
+  std::lock_guard lock(dac_mutex_);
+  drop_and_close_dac_locked();
 }
 
 AudioBridge::StartResult AudioBridge::start(const ActiveAudioConfig& config) {
@@ -276,14 +330,16 @@ void AudioBridge::capture_loop(int zone_index) {
 void AudioBridge::playback_loop() {
   std::vector<uint8_t> buffer(config_.period_frames * bytes_per_frame_);
   while (!stop_requested_.load()) {
-    if (dac_idle_requested_.exchange(false) && dac_handle_ != nullptr) {
-      snd_pcm_drop(dac_handle_);
-      snd_pcm_prepare(dac_handle_);
-      dac_state_.store(DacLifecycleState::Idle);
+    if (dac_idle_requested_.exchange(false)) {
+      std::lock_guard lock(dac_mutex_);
+      drop_and_close_dac_locked();
     }
-    if (dac_handle_ == nullptr) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      continue;
+    {
+      std::lock_guard lock(dac_mutex_);
+      if (dac_handle_ == nullptr) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        continue;
+      }
     }
     const int owner = playback_owner_.load();
     const uint64_t revision = routing_revision_.load(std::memory_order_relaxed);
@@ -292,10 +348,17 @@ void AudioBridge::playback_loop() {
       continue;
     }
     FrameRing& ring = *rings_[owner - 1];
+    discard_stale_owner_frames(owner, ring, buffer.data());
+    const int64_t last_buffered_at = last_buffered_at_ms_[owner].load();
+    const bool capture_stale =
+        last_buffered_at > 0 && steady_now_ms() - last_buffered_at > kCaptureStaleMs;
+    if (capture_stale) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      continue;
+    }
     const int64_t handoff_at = owner_handoff_at_ms_.load();
     const int64_t now_ms = steady_now_ms();
-    const bool recent_handoff =
-        handoff_at > 0 && now_ms - handoff_at <= 2000;
+    const bool recent_handoff = handoff_at > 0 && now_ms - handoff_at <= 2000;
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(recent_handoff ? 750 : 250);
     while (ring.available_frames() < config_.period_frames && !stop_requested_.load()) {
@@ -308,13 +371,18 @@ void AudioBridge::playback_loop() {
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    if (playback_owner_.load() != owner ||
-        routing_revision_.load(std::memory_order_relaxed) != revision) {
+    if (!playback_owner_unchanged(owner, revision)) {
       continue;
     }
-    bool wrote = false;
     if (ring.available_frames() >= config_.period_frames &&
         ring.read(buffer.data(), config_.period_frames) >= config_.period_frames) {
+      if (!playback_owner_unchanged(owner, revision)) {
+        continue;
+      }
+      std::lock_guard lock(dac_mutex_);
+      if (dac_handle_ == nullptr) {
+        continue;
+      }
       const snd_pcm_sframes_t written =
           snd_pcm_writei(dac_handle_, buffer.data(), config_.period_frames);
       if (written < 0) {
@@ -323,30 +391,11 @@ void AudioBridge::playback_loop() {
       } else {
         stats_.frames_copied += config_.period_frames;
         dac_state_.store(DacLifecycleState::Open);
-        wrote = true;
       }
-    }
-    if (!wrote) {
-      if (ring.available_frames() < config_.period_frames) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        continue;
-      }
-      std::memset(buffer.data(), 0, config_.period_frames * bytes_per_frame_);
-      write_silence_to_dac(buffer.data());
+    } else {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
-}
-
-bool AudioBridge::write_silence_to_dac(uint8_t* buffer) {
-  const snd_pcm_sframes_t written =
-      snd_pcm_writei(dac_handle_, buffer, config_.period_frames);
-  if (written < 0) {
-    snd_pcm_recover(dac_handle_, static_cast<int>(written), 1);
-    stats_.playback_xruns++;
-    return false;
-  }
-  dac_state_.store(DacLifecycleState::Open);
-  return true;
 }
 
 }  // namespace homepi::pcm_router

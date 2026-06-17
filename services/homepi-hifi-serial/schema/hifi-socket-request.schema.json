@@ -13,6 +13,7 @@
         "syncController",
         "sendCommand",
         "patchZoneController",
+        "patchSource",
         "getSnapshot",
         "getController",
         "getZones",

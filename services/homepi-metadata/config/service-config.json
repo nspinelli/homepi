@@ -1,6 +1,6 @@
 {
   "service": "homepi-metadata",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "environment": "production",
   "enabled": true,
   "logging": {
@@ -18,8 +18,9 @@
     }
   },
   "metadata": {
-    "upstreamVersion": "1.0.3",
-    "metadataPipe": "/tmp/shairport-sync-metadata",
-    "rawOutput": false
+    "pipePrefix": "/tmp/homepi-metadata-zone-",
+    "zoneCount": 16,
+    "pcmRouterSocket": "/run/homepi/pcm-router.sock",
+    "databasePath": "/opt/homepi/runtime/state/metadata.db"
   }
 }

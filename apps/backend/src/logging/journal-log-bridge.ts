@@ -21,7 +21,7 @@ const JOURNAL_UNITS = [
   "homepi-nqptp.service",
   "homepi-shairport-supervisor.service",
   "homepi-shairport@.service",
-  "homepi-metadata@.service",
+  "homepi-metadata.service",
 ] as const;
 
 const LOG_LEVELS: LogLevel[] = ["DEBUG", "INFO", "WARN", "ERROR"];

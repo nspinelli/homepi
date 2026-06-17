@@ -1,22 +1,16 @@
 #!/usr/bin/env bash
-# Installs homepi-metadata: build upstream metadata reader, /opt layout, systemd, verify.
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SERVICE_NAME="homepi-metadata"
 INSTALL_ROOT="/opt/homepi/services/metadata"
+RUNTIME_ROOT="/opt/homepi/runtime"
 BUILD_DIR="${SERVICE_ROOT}/build"
-SRC_DIR="${BUILD_DIR}/metadata-reader-src"
-UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}@.service"
-UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}@.service"
-LEGACY_UNIT="${SERVICE_NAME}.service"
-WRAPPER_SRC="${SERVICE_ROOT}/scripts/run-metadata-reader.sh"
-UPSTREAM_REPO="https://github.com/mikebrady/shairport-sync-metadata-reader.git"
-UPSTREAM_VERSION="1.0.3"
+UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}.service"
+UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+LEGACY_TEMPLATE_UNIT="/etc/systemd/system/homepi-metadata@.service"
 
-log() {
-  echo "==> $*"
-}
+log() { echo "==> $*"; }
 
 require_root() {
   if [[ "${EUID}" -ne 0 ]]; then
@@ -27,120 +21,75 @@ require_root() {
 
 ensure_build_deps() {
   local missing=()
-  for cmd in git autoconf automake libtool pkg-config make gcc; do
+  for cmd in cmake g++ pkg-config; do
     command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
   done
+  if ! pkg-config --exists libmosquitto 2>/dev/null; then
+    missing+=("libmosquitto-dev")
+  fi
   if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies"
+    log "Installing build dependencies: ${missing[*]}"
     apt-get update -qq
-    apt-get install -y git autoconf automake libtool pkg-config build-essential
+    apt-get install -y cmake g++ libsqlite3-dev pkg-config libmosquitto-dev
   fi
 }
 
-fetch_upstream() {
-  log "Fetching shairport-sync-metadata-reader (v${UPSTREAM_VERSION})"
-  rm -rf "${SRC_DIR}"
+build_binary() {
+  log "Building ${SERVICE_NAME}"
   mkdir -p "${BUILD_DIR}"
-  git clone --depth 1 "${UPSTREAM_REPO}" "${SRC_DIR}"
-  log "Applying HomePi FIFO busy-wait fix"
-  python3 - "${SRC_DIR}/shairport-sync-metadata-reader.c" <<'PY'
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-text = path.read_text()
-anchor = "      fflush(stdout);\n    }\n  }\n  return 0;"
-replacement = (
-    "      fflush(stdout);\n"
-    "    } else {\n"
-    "      if (feof(stdin)) {\n"
-    "        clearerr(stdin);\n"
-    "      }\n"
-    "      usleep(100000);\n"
-    "    }\n"
-    "  }\n"
-    "  return 0;"
-)
-if anchor not in text:
-    raise SystemExit("metadata reader busy-wait anchor not found")
-path.write_text(text.replace(anchor, replacement, 1))
-PY
+  cmake -S "${SERVICE_ROOT}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
+  cmake --build "${BUILD_DIR}" --parallel "$(nproc 2>/dev/null || echo 2)"
+  ctest --test-dir "${BUILD_DIR}" --output-on-failure -R "test_metadata_parser|test_progress_parser"
 }
 
-build_metadata_reader() {
-  log "Building metadata reader into ${INSTALL_ROOT}"
-  cd "${SRC_DIR}"
-  autoreconf -i -f
-  ./configure --prefix="${INSTALL_ROOT}"
-  make -j"$(nproc 2>/dev/null || echo 2)"
-  make install
-  if [[ ! -x "${INSTALL_ROOT}/bin/shairport-sync-metadata-reader" ]]; then
-    echo "Build failed: ${INSTALL_ROOT}/bin/shairport-sync-metadata-reader not found" >&2
-    exit 1
-  fi
-}
-
-install_homepi_files() {
-  log "Installing HomePi config, wrapper, and env layout"
+install_files() {
+  log "Installing to ${INSTALL_ROOT}"
+  install -d -m 0755 "${INSTALL_ROOT}/bin"
   install -d -m 0755 "${INSTALL_ROOT}/config"
   install -d -m 0755 "${INSTALL_ROOT}/env"
-  install -m 0644 "${SERVICE_ROOT}/config/service-config.json" \
-    "${INSTALL_ROOT}/config/service-config.json"
-  install -m 0755 "${WRAPPER_SRC}" "${INSTALL_ROOT}/bin/run-metadata-reader.sh"
-  install -m 0755 "${SERVICE_ROOT}/scripts/metadata-zone-handler.py" \
-    "${INSTALL_ROOT}/bin/metadata-zone-handler.py"
+  install -d -m 0755 "${RUNTIME_ROOT}/state"
+  install -d -m 0755 "${RUNTIME_ROOT}/cache"
+  install -d -m 0755 /run/homepi
+
+  install -m 0755 "${BUILD_DIR}/homepi-metadata" "${INSTALL_ROOT}/bin/homepi-metadata"
+  install -m 0644 "${SERVICE_ROOT}/config/service-config.json" "${INSTALL_ROOT}/config/service-config.json"
+  install -m 0644 "${SERVICE_ROOT}/config/homepi-metadata.env.example" \
+    "${INSTALL_ROOT}/env/.env.example"
+  if [[ ! -f "${INSTALL_ROOT}/env/.env" ]]; then
+    install -m 0644 "${SERVICE_ROOT}/config/homepi-metadata.env.example" \
+      "${INSTALL_ROOT}/env/.env"
+  fi
+}
+
+disable_legacy_units() {
+  log "Disabling legacy per-zone metadata units"
+  systemctl stop "homepi-metadata@".service 2>/dev/null || true
+  for unit in /etc/systemd/system/homepi-metadata@*.service; do
+    [[ -e "${unit}" ]] || continue
+    systemctl disable "$(basename "${unit}")" 2>/dev/null || true
+  done
+  if [[ -f "${LEGACY_TEMPLATE_UNIT}" ]]; then
+    systemctl disable homepi-metadata@.service 2>/dev/null || true
+    rm -f "${LEGACY_TEMPLATE_UNIT}"
+  fi
 }
 
 install_systemd() {
-  log "Installing systemd template unit"
-  if systemctl list-unit-files "${LEGACY_UNIT}" >/dev/null 2>&1; then
-    systemctl stop "${LEGACY_UNIT}" 2>/dev/null || true
-    systemctl disable "${LEGACY_UNIT}" 2>/dev/null || true
-    rm -f "/etc/systemd/system/${LEGACY_UNIT}"
-  fi
+  log "Installing systemd unit"
   install -m 0644 "${UNIT_SRC}" "${UNIT_DEST}"
   systemctl daemon-reload
-}
-
-restart_backend() {
-  if systemctl is-enabled homepi-backend >/dev/null 2>&1; then
-    log "Restarting homepi-backend"
-    systemctl restart homepi-backend
-  else
-    log "homepi-backend not installed; skip backend restart"
-  fi
-}
-
-verify_install() {
-  log "Verifying installation"
-  if [[ ! -x "${INSTALL_ROOT}/bin/shairport-sync-metadata-reader" ]]; then
-    echo "Binary missing after install" >&2
-    exit 1
-  fi
-  echo "  OK  ${SERVICE_NAME}@.service template installed (instances started by shairport supervisor)"
+  systemctl enable "${SERVICE_NAME}.service"
+  systemctl restart "${SERVICE_NAME}.service"
 }
 
 main() {
   require_root
   ensure_build_deps
-  fetch_upstream
-  build_metadata_reader
-  install_homepi_files
-  if id homepi >/dev/null 2>&1; then
-    chown -R homepi:homepi /opt/homepi
-  fi
+  build_binary
+  install_files
+  disable_legacy_units
   install_systemd
-  restart_backend
-  verify_install
-
-  echo ""
-  echo "${SERVICE_NAME} installed (shairport-sync-metadata-reader ${UPSTREAM_VERSION})."
-  echo "  Binary:  ${INSTALL_ROOT}/bin/shairport-sync-metadata-reader"
-  echo "  Wrapper: ${INSTALL_ROOT}/bin/run-metadata-reader.sh"
-  echo "  Logs:    journalctl -u ${SERVICE_NAME}.service -f"
-  echo ""
-  echo "Configure Shairport Sync metadata pipe per zone:"
-  echo "  /tmp/homepi-metadata-zone-<1-16>"
+  log "${SERVICE_NAME} installed and started"
 }
 
 main "$@"

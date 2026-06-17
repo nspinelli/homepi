@@ -11,16 +11,6 @@ import type {
 } from "../types/dashboard-types.js";
 
 /**
- * HiFi source option for AirPlay mapping.
- */
-export interface HifiSourceOption {
-  /** Source slot number 1-8. */
-  sourceNumber: number;
-  /** Optional display name. */
-  name?: string;
-}
-
-/**
  * State for the Audio Configuration settings panel.
  */
 export interface UsbDeviceSettingsState {
@@ -32,12 +22,6 @@ export interface UsbDeviceSettingsState {
   draft: UsbAssignments;
   /** Supported profile tuples for the selected primary audio device. */
   supportedProfileTuples: AudioProfileTuple[];
-  /** Available HiFi sources. */
-  sources: HifiSourceOption[];
-  /** Saved AirPlay source number. */
-  savedAirplaySource: number | null;
-  /** Draft AirPlay source number. */
-  draftAirplaySource: number | null;
   /** Whether data is loading. */
   loading: boolean;
   /** Whether a save is in progress. */
@@ -74,13 +58,47 @@ export function formatProfileTuple(tuple: AudioProfileTuple): string {
 }
 
 /**
+ * Waits briefly for a fetch response, retrying transient service restarts.
+ * @param url - Request URL.
+ * @param init - Fetch init options.
+ * @param attempts - Maximum attempts.
+ * @returns Successful response.
+ */
+async function fetchWithServiceRetry(
+  url: string,
+  init: RequestInit,
+  attempts = 15
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      const clone = response.clone();
+      const body = (await clone.json()) as ApiResponse<unknown>;
+      const message = body.error?.message ?? "";
+      const transient =
+        message.includes("ECONNREFUSED") ||
+        message.includes("AUDIO_UNAVAILABLE") ||
+        response.status === 503;
+      if (!transient || response.ok) {
+        return response;
+      }
+      lastError = new Error(message || `Request failed with status ${response.status}`);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Request failed");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw lastError ?? new Error("Request failed");
+}
+
+/**
  * Loads USB devices and assignments and exposes save handling.
  * @returns Settings state and actions.
  */
 export function useUsbDeviceSettings(): {
   state: UsbDeviceSettingsState;
   setDraft: (patch: Partial<UsbAssignments>) => void;
-  setAirplaySource: (sourceNumber: number | null) => void;
   save: () => Promise<void>;
   reload: () => Promise<void>;
 } {
@@ -88,9 +106,6 @@ export function useUsbDeviceSettings(): {
   const [saved, setSaved] = useState<UsbAssignments>(emptyAssignments);
   const [draft, setDraftState] = useState<UsbAssignments>(emptyAssignments);
   const [supportedProfileTuples, setSupportedProfileTuples] = useState<AudioProfileTuple[]>([]);
-  const [sources, setSources] = useState<HifiSourceOption[]>([]);
-  const [savedAirplaySource, setSavedAirplaySource] = useState<number | null>(5);
-  const [draftAirplaySource, setDraftAirplaySource] = useState<number | null>(5);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -147,40 +162,6 @@ export function useUsbDeviceSettings(): {
       setLoadError(err instanceof Error ? err.message : "Failed to load audio settings");
     } finally {
       setLoading(false);
-    }
-
-    const defaultSources = Array.from({ length: 8 }, (_, index) => ({
-      sourceNumber: index + 1,
-    }));
-
-    try {
-      const [sourcesRes, airplayRes] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/hifi-serial/sources`),
-        fetch(`${apiBaseUrl}/api/audio/airplay-source`),
-      ]);
-
-      const sourcesJson = (await sourcesRes.json()) as ApiResponse<{
-        sources: Array<{ sourceNumber: number; name?: string }>;
-      }>;
-      const airplayJson = (await airplayRes.json()) as ApiResponse<{
-        sourceNumber: number | null;
-      }>;
-
-      const nextSources =
-        sourcesJson.ok && sourcesJson.data?.sources
-          ? sourcesJson.data.sources.map((source) => ({
-              sourceNumber: source.sourceNumber,
-              name: source.name,
-            }))
-          : defaultSources;
-      const nextAirplay =
-        airplayJson.ok && airplayJson.data ? airplayJson.data.sourceNumber ?? 5 : 5;
-
-      setSources(nextSources);
-      setSavedAirplaySource(nextAirplay);
-      setDraftAirplaySource(nextAirplay);
-    } catch {
-      setSources(defaultSources);
     }
   }, [loadCapabilities]);
 
@@ -241,12 +222,6 @@ export function useUsbDeviceSettings(): {
     [loadCapabilities]
   );
 
-  const setAirplaySource = useCallback((sourceNumber: number | null) => {
-    setDraftAirplaySource(sourceNumber);
-    setSaveSuccess(null);
-    setSaveError(null);
-  }, []);
-
   const profileSelectionRequired = Boolean(draft.audioPrimary && !draft.audioPrimaryProfile);
 
   const isDirty = useMemo(() => {
@@ -257,45 +232,9 @@ export function useUsbDeviceSettings(): {
       draft.serial !== saved.serial ||
       draft.audioPrimary !== saved.audioPrimary ||
       draft.paging !== saved.paging ||
-      profileChanged ||
-      draftAirplaySource !== savedAirplaySource
+      profileChanged
     );
-  }, [draft, saved, draftAirplaySource, savedAirplaySource]);
-
-/**
- * Waits briefly for a fetch response, retrying transient service restarts.
- * @param url - Request URL.
- * @param init - Fetch init options.
- * @param attempts - Maximum attempts.
- * @returns Successful response.
- */
-async function fetchWithServiceRetry(
-  url: string,
-  init: RequestInit,
-  attempts = 15
-): Promise<Response> {
-  let lastError: Error | null = null;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, init);
-      const clone = response.clone();
-      const body = (await clone.json()) as ApiResponse<unknown>;
-      const message = body.error?.message ?? "";
-      const transient =
-        message.includes("ECONNREFUSED") ||
-        message.includes("AUDIO_UNAVAILABLE") ||
-        response.status === 503;
-      if (!transient || response.ok) {
-        return response;
-      }
-      lastError = new Error(message || `Request failed with status ${response.status}`);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("Request failed");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw lastError ?? new Error("Request failed");
-}
+  }, [draft, saved]);
 
   const save = useCallback(async () => {
     if (profileSelectionRequired) {
@@ -322,22 +261,9 @@ async function fetchWithServiceRetry(
         throw new Error(assignmentsJson.error?.message ?? "Failed to save assignments");
       }
 
-      if (draftAirplaySource !== null) {
-        const airplayRes = await fetchWithServiceRetry(`${apiBaseUrl}/api/audio/airplay-source`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sourceNumber: draftAirplaySource }),
-        });
-        const airplayJson = (await airplayRes.json()) as ApiResponse<{ sourceNumber: number }>;
-        if (!airplayRes.ok || !airplayJson.ok) {
-          throw new Error(airplayJson.error?.message ?? "Failed to save AirPlay source");
-        }
-      }
-
       const nextSaved = assignmentsJson.data ?? draft;
       setSaved(nextSaved);
       setDraftState(nextSaved);
-      setSavedAirplaySource(draftAirplaySource);
       setProfileAlert(null);
       setSaveSuccess("Audio configuration saved.");
     } catch (err) {
@@ -345,7 +271,7 @@ async function fetchWithServiceRetry(
     } finally {
       setSaving(false);
     }
-  }, [draft, draftAirplaySource, profileSelectionRequired]);
+  }, [draft, profileSelectionRequired]);
 
   return {
     state: {
@@ -353,9 +279,6 @@ async function fetchWithServiceRetry(
       saved,
       draft,
       supportedProfileTuples,
-      sources,
-      savedAirplaySource,
-      draftAirplaySource,
       loading,
       saving,
       loadError,
@@ -366,7 +289,6 @@ async function fetchWithServiceRetry(
       profileAlert,
     },
     setDraft,
-    setAirplaySource,
     save,
     reload,
   };

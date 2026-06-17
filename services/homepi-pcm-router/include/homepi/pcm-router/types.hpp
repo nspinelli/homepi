@@ -11,6 +11,9 @@ constexpr int kMaxZones = 16;
 /** Max wait before promoting a joining zone to DAC owner. */
 constexpr int64_t kOwnerPromotionWaitMs = 750;
 
+/** Discard buffered PCM not refreshed within this window (stream ended). */
+constexpr int64_t kCaptureStaleMs = 80;
+
 /** Zone capture behavior. */
 enum class ZoneCaptureMode { Off, Drain, Buffer };
 

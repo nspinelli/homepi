@@ -117,4 +117,16 @@ std::string cmd_zone_pgvol_set(int zone, int volume);
 /** Sets zone group number. */
 std::string cmd_zone_group_set(int zone, int group);
 
+/** Sets source name. */
+std::string cmd_source_name_set(int source, const std::string& name);
+
+/** Sets source enabled flag. */
+std::string cmd_source_enable_set(int source, int enabled);
+
+/** Sets source input gain. */
+std::string cmd_source_ingain_set(int source, int gain);
+
+/** Sets source display line. */
+std::string cmd_source_displine_set(int source, const std::string& line);
+
 }  // namespace homepi::hifi_serial

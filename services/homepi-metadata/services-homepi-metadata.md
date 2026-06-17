@@ -1,43 +1,77 @@
 # HomePi Metadata
 
-Wrapper service that builds, installs, and supervises [shairport-sync-metadata-reader](https://github.com/mikebrady/shairport-sync-metadata-reader) as part of the HomePi platform.
+Single C++ daemon that drains all Shairport metadata FIFOs (so pipes never block) and consumes parsed MQTT metadata for the PCM router owner zone.
 
 ## Purpose
 
-The upstream tool reads metadata from the FIFO that [Shairport Sync](https://github.com/mikebrady/shairport-sync) writes when `metadata` is enabled in its config. HomePi runs it as a long-lived service with stdin attached to the metadata pipe (default `/tmp/shairport-sync-metadata`).
+Shairport Sync writes metadata to per-zone pipes (`/tmp/homepi-metadata-zone-N`) and publishes parsed fields to MQTT (`shairport/zone/N/...`). The metadata service:
 
-## Requirements
+- Subscribes to `homepi-pcm-router` for `ownerZoneId`
+- Drains every zone pipe via one `epoll` loop (non-blocking, no FIFO parsing)
+- Subscribes to Shairport MQTT topics for the active PCM owner zone
+- Emits `core/events` envelopes on `/run/homepi/metadata.sock`
+- Persists now-playing state via `core/storage` (SQLite)
 
-- Shairport Sync configured to write metadata to the same pipe path
-- Pipe readable by the `homepi` user
-- Optional: `homepi-nqptp` for AirPlay 2 timing before Shairport starts
+## MQTT topics (owner zone)
+
+| Topic suffix | Maps to |
+|--------------|---------|
+| `title`, `artist`, `album`, `client_name` | Now-playing text fields |
+| `playing` | Playback state (`1` / `0`) |
+| `cover` | Album art (binary) |
+| `frame_position_and_time` | Progress position (with `first_frame_position_and_time`) |
+| `ssnc/prgr`, `core/astm` | Progress position + duration (requires `publish_raw = yes` on Shairport) |
+| `active_start` | Clear track metadata for new session |
+| `active_end`, `play_end` | Session cleared |
+
+## Core modules
+
+| Module | Usage |
+|--------|--------|
+| `core/logging` | Structured service lifecycle logs |
+| `core/events` | NDJSON event envelopes to backend SSE bridge |
+| `core/storage` | SQLite persistence for owner-zone now-playing |
 
 ## Runtime layout
 
 ```text
 /opt/homepi/services/metadata/
-├── bin/shairport-sync-metadata-reader
-├── bin/run-metadata-reader.sh
+├── bin/homepi-metadata
 ├── config/service-config.json
-└── env/.env                 # HOMEPPI_METADATA_PIPE, HOMEPPI_METADATA_RAW
+└── env/.env
 ```
 
 ## Environment variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOMEPPI_METADATA_PIPE` | `/tmp/shairport-sync-metadata` | Shairport metadata FIFO path |
-| `HOMEPPI_METADATA_RAW` | `0` | Set to `1` for `--raw` output |
-| `HOMEPPI_METADATA_PIPE_WAIT_SECS` | `120` | Seconds to wait for pipe before creating FIFO |
+| `HOMEPI_EVENT_SOCKET` | `/run/homepi/metadata.sock` | Metadata Unix API socket |
+| `HOMEPI_PCM_ROUTER_SOCKET` | `/run/homepi/pcm-router.sock` | PCM router subscription |
+| `HOMEPI_DATABASE_PATH` | `/opt/homepi/runtime/state/metadata.db` | SQLite state database |
+| `HOMEPI_CACHE_DIR` | `/opt/homepi/runtime/cache` | Cover art cache directory |
+| `HOMEPI_METADATA_PIPE_PREFIX` | `/tmp/homepi-metadata-zone-` | Shairport FIFO prefix |
+| `HOMEPI_ZONE_COUNT` | `16` | Number of zone pipes to monitor |
+| `MQTT_HOST` | `127.0.0.1` | Mosquitto broker hostname |
+| `MQTT_PORT` | `1883` | Mosquitto broker port |
+| `MQTT_TOPIC_PREFIX` | `shairport/zone` | Shairport MQTT topic prefix before zone id |
+| `LOG_LEVEL` | `INFO` | Log verbosity |
 
-## Observability
+## Events
 
-| Interface | Details |
-|-----------|---------|
-| systemd | `homepi-metadata.service` |
-| Logs | `journalctl -u homepi-metadata` (parsed metadata lines) |
-| Dashboard | `GET /api/core/status` → `system.metadata` |
+| topic | event | When |
+|-------|-------|------|
+| `modules.metadata.snapshot` | `metadata_snapshot` | Subscribe + owner change |
+| `modules.metadata.now_playing` | `metadata_field_updated` | Owner zone title/artist/album/client |
+| `modules.metadata.progress` | `metadata_progress_updated` | Owner zone progress |
+| `modules.metadata.cover_art` | `metadata_cover_updated` | Owner zone cover art |
+| `modules.metadata.now_playing` | `metadata_cleared` | Owner cleared or session end |
+
+## systemd
+
+`homepi-metadata.service` — single unit (replaces legacy `homepi-metadata@N` template).
 
 ## Install
 
-See [services-homepi-metadata-install-readme.md](services-homepi-metadata-install-readme.md).
+```bash
+sudo bash services/homepi-metadata/scripts/install.sh
+```

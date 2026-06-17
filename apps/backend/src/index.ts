@@ -10,6 +10,7 @@ import { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import { AudioRoutes } from "./audio/audio-routes.js";
 import { ShairportRemoteClient } from "./audio/shairport-remote-client.js";
+import { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -63,13 +64,16 @@ const usbRoutes = new UsbDevicesRoutes({ client: usbDevicesClient, logger });
 
 const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.sock`;
 const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
+const metadataSocketPath = `${serviceConfig.runtime.paths.socketDir}/metadata.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
+const metadataClient = new MetadataClient({ socketPath: metadataSocketPath });
 const shairportRemoteClient = new ShairportRemoteClient();
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
+  metadataClient,
   shairportRemote: shairportRemoteClient,
   statusStore,
   config: serviceConfig,
@@ -99,10 +103,12 @@ const server = createHttpServer({
   audioRoutes,
   hifiSerialSocketPath: hifiSocketPath,
   pcmRouterSocketPath,
+  metadataSocketPath,
   usbDevicesSocketPath: usbSocketPath,
   usbDevicesClient,
   hifiSerialClient,
   pcmRouterClient,
+  metadataClient,
 });
 
 process.on("SIGINT", () => {

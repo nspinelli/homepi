@@ -1,6 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app.js";
+import { AudioModuleProvider } from "./hooks/audio-module-provider.js";
+import { SystemDashboardProvider } from "./hooks/system-dashboard-provider.js";
 import { UserSettingsProvider } from "./hooks/use-user-settings.js";
 import "./styles/globals.css";
 
@@ -12,7 +14,11 @@ if (!root) {
 createRoot(root).render(
   <StrictMode>
     <UserSettingsProvider>
-      <App />
+      <SystemDashboardProvider>
+        <AudioModuleProvider>
+          <App />
+        </AudioModuleProvider>
+      </SystemDashboardProvider>
     </UserSettingsProvider>
   </StrictMode>
 );

@@ -17,7 +17,7 @@ import {
   type LogLevel,
   type ServiceVisualStatus,
 } from "@/lib/status-display.js";
-import { useSystemDashboard } from "@/hooks/use-system-dashboard.js";
+import { useSystemDashboard } from "@/hooks/system-dashboard-provider.js";
 
 const STATUS_COLORS: Record<ServiceVisualStatus, string> = {
   online: "bg-emerald-500",

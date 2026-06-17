@@ -1,5 +1,6 @@
 import { AudioCard } from "@/components/audio/audio-card.js";
-import { useAudioModule } from "@/hooks/use-audio-module.js";
+import { AudioCardSkeleton } from "@/components/audio/audio-card-skeleton.js";
+import { useAudioModule } from "@/hooks/audio-module-provider.js";
 
 /**
  * Home dashboard with module cards.
@@ -22,6 +23,9 @@ export function HomePage(): React.JSX.Element {
     <main className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-semibold text-foreground">Dashboard</h1>
       <div className="grid gap-4 md:grid-cols-2">
+        {state.loading && snapshot === null ? (
+          <AudioCardSkeleton />
+        ) : (
         <AudioCard
           name="Home Audio"
           isConnected={connected}
@@ -32,6 +36,7 @@ export function HomePage(): React.JSX.Element {
           coverUrl={playback?.coverUrl}
           serviceStatuses={nowPlaying ? undefined : serviceStatuses}
         />
+        )}
       </div>
     </main>
   );

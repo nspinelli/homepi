@@ -287,6 +287,15 @@ int main(int argc, char* argv[]) {
           return ok("{\"patched\":true}");
         }
 
+        if (method == "patchSource") {
+          const int source_number = homepi::hifi_serial::json_get_int(line, "sourceNumber");
+          if (source_number < 1 || source_number > 8) {
+            return err("sourceNumber must be between 1 and 8");
+          }
+          repository.patch_source(source_number, line);
+          return ok("{\"patched\":true}");
+        }
+
         if (method == "getAirplaySource") {
           const auto source = repository.airplay_source_number();
           if (!source.has_value()) {
@@ -339,6 +348,15 @@ int main(int argc, char* argv[]) {
             return err("sourceNumber must be between 1 and 8");
           }
           repository.set_airplay_source(source_number);
+          if (g_events) {
+            homepi::hifi_serial::ParsedUpdate update{
+                .event_name = "source_airplay_changed",
+                .topic = "modules.audio.source",
+                .payload_json =
+                    "{\"sourceNumber\":" + std::to_string(source_number) + "}",
+            };
+            g_events->publish(update, correlation_id);
+          }
           return ok("{\"sourceNumber\":" + std::to_string(source_number) + "}");
         }
 

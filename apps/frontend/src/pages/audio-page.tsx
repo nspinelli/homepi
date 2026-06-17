@@ -1,23 +1,29 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 
+import { isSourceEnabled } from "@/lib/is-source-enabled.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
 import { zoneInitialVolume } from "@/lib/zone-initial-volume.js";
 import { Link, useNavigate } from "react-router-dom";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
+import {
+  AudioListSectionSkeleton,
+  AudioZonesGridSkeleton,
+} from "@/components/audio/audio-page-skeletons.js";
+import { AudioBottomNav } from "@/components/audio/audio-bottom-nav.js";
+import { SourceCard } from "@/components/audio/source-card.js";
+import { SourceEditSheet } from "@/components/audio/source-edit-sheet.js";
 import { ZoneCard } from "@/components/audio/zone-card.js";
 import { ZoneEditSheet } from "@/components/audio/zone-edit-sheet.js";
 import { Button } from "@/components/ui/button.js";
-import { AudioPlayerBar } from "@/components/audio/audio-player-bar.js";
-import { AudioSectionTabsList } from "@/components/audio/audio-section-tabs.js";
 import { Tabs, TabsContent } from "@/components/ui/tabs.js";
 import {
   getShairportSettingsForZone,
   getZoneActivityPriority,
-  useAudioModule,
 } from "@/hooks/use-audio-module.js";
-import type { HifiZone } from "@/types/audio-types.js";
+import { useAudioModule } from "@/hooks/audio-module-provider.js";
+import type { HifiSource, HifiZone } from "@/types/audio-types.js";
 
 /**
  * Volume shown on the zone card slider (live when on or streamed, initial when off).
@@ -34,6 +40,21 @@ function zoneCardVolume(zone: HifiZone, isStreamedTo: boolean): number {
 }
 
 /**
+ * Sort priority for source cards: AirPlay first, then enabled, then disabled.
+ * @param source - Hi-Fi source row.
+ * @returns Lower values sort first.
+ */
+function getSourceSortPriority(source: HifiSource): number {
+  if (source.isAirplay === 1) {
+    return 0;
+  }
+  if (isSourceEnabled(source)) {
+    return 1;
+  }
+  return 2;
+}
+
+/**
  * Audio module detail page with zones, sources, groups, paging, and settings tabs.
  */
 export function AudioPage(): React.JSX.Element {
@@ -41,19 +62,20 @@ export function AudioPage(): React.JSX.Element {
   const {
     state,
     saveZoneSettings,
+    saveSourceSettings,
     toggleZonePower,
     setZoneVolume,
     isZoneStreamedTo,
     isZoneSendingAudio,
-    playback,
-    sendPlaybackCommand,
-    setPlaybackVolume,
   } = useAudioModule();
   const [showDisabled, setShowDisabled] = useState(false);
+  const [showDisabledSources, setShowDisabledSources] = useState(false);
   const [editZoneNumber, setEditZoneNumber] = useState<number | null>(null);
+  const [editSourceNumber, setEditSourceNumber] = useState<number | null>(null);
 
   const snapshot = state.snapshot;
   const zones = snapshot?.zones ?? [];
+  const sources = snapshot?.sources ?? [];
   const sortedZones = useMemo(() => {
     const visible = showDisabled ? zones : zones.filter((zone) => isZoneEnabled(zone));
 
@@ -77,19 +99,36 @@ export function AudioPage(): React.JSX.Element {
     });
   }, [zones, showDisabled, isZoneSendingAudio, isZoneStreamedTo]);
 
+  const sortedSources = useMemo(() => {
+    const visible = showDisabledSources
+      ? sources
+      : sources.filter((source) => isSourceEnabled(source));
+
+    return [...visible].sort((sourceA, sourceB) => {
+      const priorityA = getSourceSortPriority(sourceA);
+      const priorityB = getSourceSortPriority(sourceB);
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      return sourceA.sourceNumber - sourceB.sourceNumber;
+    });
+  }, [sources, showDisabledSources]);
+
   const editZone: HifiZone | null =
     editZoneNumber !== null
       ? (zones.find((z) => z.zoneNumber === editZoneNumber) ?? null)
+      : null;
+
+  const editSource: HifiSource | null =
+    editSourceNumber !== null
+      ? (sources.find((s) => s.sourceNumber === editSourceNumber) ?? null)
       : null;
 
   const editShairport = editZone
     ? getShairportSettingsForZone(snapshot?.shairportZoneSettings ?? [], editZone.zoneNumber)
     : null;
 
-  const airplaySource = useMemo(
-    () => snapshot?.sources.find((s) => s.isAirplay === 1)?.sourceNumber ?? null,
-    [snapshot?.sources]
-  );
+  const isInitialLoad = state.loading && snapshot === null;
 
   return (
     <>
@@ -111,27 +150,18 @@ export function AudioPage(): React.JSX.Element {
             {state.error}
           </p>
         ) : null}
-        {state.loading ? (
-          <p className="mt-2 text-sm text-muted-foreground">Loading audio state…</p>
-        ) : null}
       </div>
 
       <Tabs defaultValue="zones" className="w-full">
-        {playback?.visible ? (
-          <AudioPlayerBar
-            playback={playback}
-            onCommand={sendPlaybackCommand}
-            onVolumeChange={setPlaybackVolume}
-          />
-        ) : null}
-        <AudioSectionTabsList />
-
-        <TabsContent value="zones">
+        <div className="pb-28">
+          <TabsContent value="zones">
           <div className="mb-6 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <h2 className="text-lg font-medium text-foreground">Audio Zones</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {sortedZones.length} of {zones.length} zones shown
+                {isInitialLoad
+                  ? "Loading zones…"
+                  : `${sortedZones.length} of ${zones.length} zones shown`}
               </p>
             </div>
             <Button
@@ -141,6 +171,7 @@ export function AudioPage(): React.JSX.Element {
               className="shrink-0 self-center"
               aria-label={showDisabled ? "Hide disabled zones" : "Show disabled zones"}
               aria-pressed={showDisabled}
+              disabled={isInitialLoad}
               onClick={() => setShowDisabled((value) => !value)}
             >
               {showDisabled ? (
@@ -150,6 +181,9 @@ export function AudioPage(): React.JSX.Element {
               )}
             </Button>
           </div>
+          {isInitialLoad ? (
+            <AudioZonesGridSkeleton count={8} />
+          ) : (
           <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
             {sortedZones.map((zone) => {
               const streamedTo = isZoneStreamedTo(zone.zoneNumber);
@@ -172,38 +206,62 @@ export function AudioPage(): React.JSX.Element {
             );
             })}
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="sources">
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-medium text-foreground">Sources</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              AirPlay source slot: {airplaySource ?? "not configured"}
-            </p>
-            <ul className="mt-4 grid gap-2">
-              {(snapshot?.sources ?? []).map((source) => (
-                <li
-                  key={source.sourceNumber}
-                  className="flex items-center justify-between rounded-md border border-border px-3 py-2 text-sm"
-                >
-                  <span>
-                    {source.sourceNumber}. {source.name ?? "Unnamed"}
-                    {source.isAirplay === 1 ? " (AirPlay)" : ""}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {source.enabled === 1 ? "enabled" : "disabled"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Source editing via REST will be expanded in a follow-up; use Settings → sync or
-              controller UI for now.
-            </p>
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-lg font-medium text-foreground">Sources</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {isInitialLoad
+                  ? "Loading sources…"
+                  : `${sortedSources.length} of ${sources.length} sources shown`}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0 self-center"
+              aria-label={
+                showDisabledSources ? "Hide disabled sources" : "Show disabled sources"
+              }
+              aria-pressed={showDisabledSources}
+              disabled={isInitialLoad}
+              onClick={() => setShowDisabledSources((value) => !value)}
+            >
+              {showDisabledSources ? (
+                <Eye className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <EyeOff className="h-5 w-5 text-muted-foreground" />
+              )}
+            </Button>
           </div>
+          {isInitialLoad ? (
+            <AudioZonesGridSkeleton count={8} />
+          ) : (
+          <div className="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2">
+            {sortedSources.map((source) => (
+              <SourceCard
+                key={source.sourceNumber}
+                id={source.sourceNumber}
+                name={source.name ?? `Source ${source.sourceNumber}`}
+                isEnabled={isSourceEnabled(source)}
+                isAirplay={source.isAirplay === 1}
+                inputGain={source.inputGain}
+                displayLine={source.displayLine}
+                onEdit={setEditSourceNumber}
+              />
+            ))}
+          </div>
+          )}
         </TabsContent>
 
         <TabsContent value="groups">
+          {isInitialLoad ? (
+            <AudioListSectionSkeleton titleWidth="w-28" rows={3} />
+          ) : (
           <div className="rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg font-medium text-foreground">Groups</h2>
             <ul className="mt-4 grid gap-2">
@@ -217,9 +275,13 @@ export function AudioPage(): React.JSX.Element {
               ))}
             </ul>
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="paging">
+          {isInitialLoad ? (
+            <AudioListSectionSkeleton titleWidth="w-24" rows={2} />
+          ) : (
           <div className="rounded-lg border border-border bg-card p-6">
             <h2 className="text-lg font-medium text-foreground">Paging</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -230,9 +292,16 @@ export function AudioPage(): React.JSX.Element {
               Assign the paging USB DAC under Settings → Audio Configuration.
             </p>
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="settings">
+          {isInitialLoad ? (
+            <div className="grid gap-4">
+              <AudioListSectionSkeleton titleWidth="w-44" rows={3} />
+              <AudioListSectionSkeleton titleWidth="w-28" rows={2} />
+            </div>
+          ) : (
           <div className="grid gap-4">
             <AudioConfigurationCard />
             <div className="rounded-lg border border-border bg-card p-6">
@@ -245,7 +314,11 @@ export function AudioPage(): React.JSX.Element {
               </Button>
             </div>
           </div>
+          )}
         </TabsContent>
+        </div>
+
+        <AudioBottomNav />
       </Tabs>
     </main>
 
@@ -261,6 +334,18 @@ export function AudioPage(): React.JSX.Element {
       sources={snapshot?.sources ?? []}
       saving={state.savingZone === editZoneNumber}
       onSave={saveZoneSettings}
+    />
+
+    <SourceEditSheet
+      open={editSourceNumber !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setEditSourceNumber(null);
+        }
+      }}
+      source={editSource}
+      saving={state.savingSource === editSourceNumber}
+      onSave={saveSourceSettings}
     />
     </>
   );

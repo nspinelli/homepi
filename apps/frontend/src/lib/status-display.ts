@@ -107,6 +107,39 @@ export function mapToVisualStatus(value: string | undefined): ServiceVisualStatu
 }
 
 /**
+ * Summarizes overall platform health for compact header display.
+ * @param snapshot - Live system status snapshot.
+ * @param healthStatus - Backend health status string.
+ * @returns Label and visual status bucket.
+ */
+export function summarizeSystemOverall(
+  snapshot: SystemStatusSnapshot | null,
+  healthStatus: string | undefined
+): { label: string; status: ServiceVisualStatus } {
+  const raw = snapshot?.state ?? healthStatus ?? "unknown";
+  const label = String(raw);
+  return {
+    label: label.charAt(0).toUpperCase() + label.slice(1),
+    status: mapToVisualStatus(label),
+  };
+}
+
+const STATUS_DOT_COLORS: Record<ServiceVisualStatus, string> = {
+  online: "bg-emerald-500",
+  warning: "bg-amber-500",
+  offline: "bg-red-500",
+};
+
+/**
+ * Tailwind class for a status indicator dot.
+ * @param status - Visual status bucket.
+ * @returns Background color class.
+ */
+export function statusDotClass(status: ServiceVisualStatus): string {
+  return STATUS_DOT_COLORS[status];
+}
+
+/**
  * Builds service cards from the authoritative system status snapshot.
  * @param snapshot - Live system status snapshot.
  * @param connections - Live transport connection states.

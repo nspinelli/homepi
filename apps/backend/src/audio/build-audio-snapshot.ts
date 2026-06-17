@@ -1,8 +1,10 @@
 import type { ServiceConfig } from "@homepi/core-config";
 
 import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
+import type { MetadataClient } from "../metadata/metadata-client.js";
 import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
 import type { SystemStatusSnapshot } from "../types/system-status-types.js";
+import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 
 /**
  * Aggregated audio module snapshot for initial page load.
@@ -66,16 +68,20 @@ export async function buildAudioSnapshot(
     config: ServiceConfig;
     hifiClient: HifiSerialClient;
     pcmClient: PcmRouterClient;
+    metadataClient: MetadataClient;
+    shairportRemote: ShairportRemoteClient;
     systemStatus: SystemStatusSnapshot;
   },
   correlationId: string
 ): Promise<AudioSnapshot> {
-  const [hifiSnapshot, shairportSettings, pcmSnapshot, hifiHealth] = await Promise.all([
+  const [hifiSnapshot, shairportSettings, pcmSnapshot, metadataSnapshot, hifiHealth] =
+    await Promise.all([
     deps.hifiClient.getSnapshot(correlationId).catch(() => ({})),
     deps.hifiClient
       .getShairportZoneSettings(correlationId)
       .catch(() => ({ shairportZoneSettings: [] as unknown[] })),
     deps.pcmClient.getSnapshot(correlationId).catch(() => null),
+    deps.metadataClient.getSnapshot(correlationId).catch(() => null),
     deps.hifiClient.getHealth(correlationId).catch(() => null),
   ]);
 
@@ -98,6 +104,15 @@ export async function buildAudioSnapshot(
     ? ((hifiSnapshot as { groups: unknown[] }).groups ?? [])
     : [];
 
+  const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
+  let clientName = metadataSnapshot?.clientName;
+  if (!clientName && ownerZoneId > 0) {
+    clientName =
+      (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_name")) ??
+      (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_model")) ??
+      undefined;
+  }
+
   return {
     controller,
     zones,
@@ -115,12 +130,18 @@ export async function buildAudioSnapshot(
       profileRevision: pcmSnapshot?.profileRevision,
       profileSource: pcmSnapshot?.profileSource,
       audioBridgeState: pcmSnapshot?.audioBridgeState,
-      metadata: {},
-      playback: {
-        playing: false,
-        positionMs: 0,
-        durationMs: 0,
+      metadata: {
+        title: metadataSnapshot?.title,
+        artist: metadataSnapshot?.artist,
+        album: metadataSnapshot?.album,
+        clientName,
       },
+      playback: {
+        playing: metadataSnapshot?.playing ?? false,
+        positionMs: metadataSnapshot?.positionMs ?? 0,
+        durationMs: metadataSnapshot?.durationMs ?? 0,
+      },
+      hasCoverArt: metadataSnapshot?.hasCoverArt,
     },
     services: {
       hifiSerial: deps.systemStatus.hifiSerial,

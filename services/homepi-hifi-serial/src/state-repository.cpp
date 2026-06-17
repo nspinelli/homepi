@@ -218,6 +218,28 @@ void StateRepository::patch_zone_controller(int zone_number, const std::string& 
   }
 }
 
+void StateRepository::patch_source(int source_number, const std::string& fields_json) {
+  if (source_number < 1 || source_number > 8) {
+    return;
+  }
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  const std::string& p = fields_json;
+
+  if (p.find("\"enabled\"") != std::string::npos) {
+    upsert_source_int(db, source_number, "enabled", json_get_int(p, "enabled"), now);
+  }
+  if (p.find("\"name\"") != std::string::npos) {
+    upsert_source_text(db, source_number, "name", json_get_string(p, "name"), now);
+  }
+  if (p.find("\"inputGain\"") != std::string::npos) {
+    upsert_source_int(db, source_number, "input_gain", json_get_int(p, "inputGain"), now);
+  }
+  if (p.find("\"displayLine\"") != std::string::npos) {
+    upsert_source_text(db, source_number, "display_line", json_get_string(p, "displayLine"), now);
+  }
+}
+
 void StateRepository::apply_parsed_update(const ParsedUpdate& update) {
   auto* db = static_cast<sqlite3*>(db_);
   const std::string now = utc_now();

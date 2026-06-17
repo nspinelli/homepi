@@ -24,6 +24,8 @@ import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import type { AudioRoutes } from "./audio/audio-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
 import type { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
+import { MetadataEventBridge } from "./metadata/metadata-event-bridge.js";
+import type { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
 import type { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 import { JournalLogBridge } from "./logging/journal-log-bridge.js";
@@ -65,6 +67,8 @@ export interface HttpServerOptions {
   hifiSerialSocketPath?: string;
   /** Unix socket path for PCM router event bridge; omit to disable. */
   pcmRouterSocketPath?: string;
+  /** Unix socket path for metadata event bridge; omit to disable. */
+  metadataSocketPath?: string;
   /** Unix socket path for USB devices event bridge; omit to disable. */
   usbDevicesSocketPath?: string;
   /** USB devices socket client for startup snapshots. */
@@ -73,6 +77,8 @@ export interface HttpServerOptions {
   hifiSerialClient: HifiSerialClient;
   /** PCM router socket client for startup snapshots. */
   pcmRouterClient: PcmRouterClient;
+  /** Metadata socket client for startup snapshots. */
+  metadataClient: MetadataClient;
 }
 
 /**
@@ -93,11 +99,14 @@ export function createHttpServer(options: HttpServerOptions): Server {
     audioRoutes,
     hifiSerialSocketPath,
     pcmRouterSocketPath,
+    metadataSocketPath,
     usbDevicesSocketPath,
     usbDevicesClient,
     hifiSerialClient,
     pcmRouterClient,
+    metadataClient: _metadataClient,
   } = options;
+  void _metadataClient;
 
   const getStatus = () => statusStore.getStatus();
   const broadcaster = new EventBroadcaster(logger, getStatus);
@@ -113,6 +122,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     usbDevices: false,
     hifiSerial: false,
     pcmRouter: false,
+    metadata: false,
   };
 
   const journalServiceStatusBridge = new JournalServiceStatusBridge({
@@ -156,11 +166,24 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
+  const metadataEventBridge = metadataSocketPath
+    ? new MetadataEventBridge({
+        socketPath: metadataSocketPath,
+        logger,
+        broadcaster,
+        coordinator,
+        onConnectionChange: (connected) => {
+          bridgeState.metadata = connected;
+        },
+      })
+    : undefined;
+
   broadcaster.start();
 
   usbEventBridge?.start();
   hifiEventBridge?.start();
   pcmEventBridge?.start();
+  metadataEventBridge?.start();
 
   const journalLogBridge = new JournalLogBridge({
     logger,
@@ -180,6 +203,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
       usbDevices: usbEventBridge?.isConnected() ?? false,
       hifiSerial: hifiEventBridge?.isConnected() ?? false,
       pcmRouter: pcmEventBridge?.isConnected() ?? false,
+      metadata: metadataEventBridge?.isConnected() ?? false,
     }),
     intervalMs: fallbackSettings.intervalMs,
   });

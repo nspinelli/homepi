@@ -67,6 +67,7 @@ export interface PcmMetadata {
   artist?: string;
   album?: string;
   clientName?: string;
+  clientModel?: string;
 }
 
 /**
@@ -135,6 +136,7 @@ export interface AudioPlaybackView {
   track?: string;
   artist?: string;
   album?: string;
+  clientName?: string;
   sourceLabel?: string;
   playing: boolean;
   positionMs: number;
@@ -203,4 +205,18 @@ export interface ZoneSettingsPatch {
     sessionTimeout: number;
     logVerbosity: number;
   }>;
+}
+
+/**
+ * Source settings save payload.
+ */
+export interface SourceSettingsPatch {
+  controller?: Partial<{
+    name: string;
+    enabled: number;
+    inputGain: number;
+    displayLine: string;
+  }>;
+  /** When true, designates this source as the exclusive AirPlay slot. */
+  airplay?: boolean;
 }

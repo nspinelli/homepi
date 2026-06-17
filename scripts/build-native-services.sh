@@ -9,6 +9,7 @@ NATIVE_SERVICES=(
   "homepi-usb-devices"
   "homepi-hifi-serial"
   "homepi-pcm-router"
+  "homepi-metadata"
 )
 
 log() {

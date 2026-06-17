@@ -1,9 +1,8 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AppLayout } from "@/components/app-layout.js";
 import { AudioPage } from "@/pages/audio-page.js";
 import { HomePage } from "@/pages/home-page.js";
-import { SettingsPage } from "@/pages/settings-page.js";
 import { StatusPage } from "@/pages/status-page.js";
 
 /**
@@ -17,7 +16,7 @@ export function App(): React.JSX.Element {
           <Route index element={<HomePage />} />
           <Route path="audio" element={<AudioPage />} />
           <Route path="status" element={<StatusPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route path="settings" element={<Navigate to="/audio" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

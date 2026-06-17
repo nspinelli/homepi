@@ -26,15 +26,27 @@ export const AUDIO_SECTION_TABS: AudioSectionTabItem[] = [
 ];
 
 /**
- * Pill-shaped tab list for the audio module (icon above label).
+ * Props for the floating audio section tab bar.
  */
-export function AudioSectionTabsList(): React.JSX.Element {
+export interface AudioSectionTabsListProps {
+  /** Optional class names for the tab list container. */
+  className?: string;
+}
+
+/**
+ * Pill-shaped tab list for the audio module (icon above label).
+ * @param props - Optional styling overrides.
+ */
+export function AudioSectionTabsList({
+  className,
+}: AudioSectionTabsListProps): React.JSX.Element {
   return (
     <TabsList
       className={cn(
-        "mb-6 flex h-auto w-full gap-0.5 rounded-full p-1",
-        "border border-border/50 bg-audio-tabs-track",
-        "overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        "inline-flex h-auto w-auto max-w-[calc(100vw-2rem)] gap-0.5 rounded-full p-1",
+        "border border-border/60 bg-audio-tabs-track/95 shadow-lg backdrop-blur-md",
+        "overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        className
       )}
     >
       {AUDIO_SECTION_TABS.map((tab) => (
@@ -55,7 +67,7 @@ function AudioSectionTabTrigger({ tab }: { tab: AudioSectionTabItem }): React.JS
     <TabsTrigger
       value={tab.value}
       className={cn(
-        "min-w-[4.25rem] flex-1 flex-col gap-1 rounded-full border-0 px-2 py-2.5",
+        "min-w-[4.25rem] shrink-0 flex-col gap-1 rounded-full border-0 px-2.5 py-2.5",
         "h-auto text-[11px] font-medium leading-tight shadow-none",
         "text-muted-foreground transition-colors",
         "focus-visible:ring-2 focus-visible:ring-zone-accent/40",

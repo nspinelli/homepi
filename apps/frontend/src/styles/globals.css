@@ -172,3 +172,58 @@
 .animate-pulse-border {
   animation: pulse-border 2s ease-in-out infinite;
 }
+
+@keyframes scroll-text {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll-text {
+  animation: scroll-text linear infinite;
+}
+
+@keyframes audio-bar-1 {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes audio-bar-2 {
+  0%,
+  100% {
+    transform: scaleY(0.85);
+  }
+  50% {
+    transform: scaleY(0.3);
+  }
+}
+
+@keyframes audio-bar-3 {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.animate-audio-bar-1 {
+  animation: audio-bar-1 0.9s ease-in-out infinite;
+}
+
+.animate-audio-bar-2 {
+  animation: audio-bar-2 0.75s ease-in-out infinite;
+}
+
+.animate-audio-bar-3 {
+  animation: audio-bar-3 1.05s ease-in-out infinite;
+}

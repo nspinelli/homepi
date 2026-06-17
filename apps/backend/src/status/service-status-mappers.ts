@@ -88,6 +88,37 @@ export function mapUsbDevicesFromPayload(payload: Record<string, unknown>): UsbD
 }
 
 /**
+ * Maps metadata service health payload to dashboard status.
+ * @param payload - Service health event payload.
+ * @param event - Event name.
+ * @returns Dashboard metadata status or null when not applicable.
+ */
+export function mapMetadataFromPayload(
+  payload: Record<string, unknown>,
+  event: string
+): MetadataStatus | null {
+  if (typeof payload.status === "string") {
+    if (payload.status === "offline" || payload.status === "degraded" || payload.status === "healthy") {
+      return payload.status;
+    }
+  }
+
+  if (event === "service_degraded") {
+    return "degraded";
+  }
+
+  if (event === "service_started" || event === "service_ready") {
+    return "healthy";
+  }
+
+  if (event === "service_stopped" || event === "service_failed") {
+    return "offline";
+  }
+
+  return null;
+}
+
+/**
  * Maps native PCM DAC state to dashboard status.
  * @param dacState - DAC state label from pcm_router_snapshot or dac_state events.
  * @returns Dashboard pcmRouter status.

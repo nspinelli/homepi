@@ -17,6 +17,7 @@ import type {
   PcmProfileTuple,
   PlaybackRemoteCommand,
   ShairportZoneSettings,
+  SourceSettingsPatch,
   ZoneSettingsPatch,
 } from "@/types/audio-types.js";
 
@@ -28,6 +29,7 @@ export interface AudioModuleState {
   loading: boolean;
   error: string | null;
   savingZone: number | null;
+  savingSource: number | null;
   togglingPowerZone: number | null;
   sseConnected: boolean;
 }
@@ -135,6 +137,166 @@ function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
   return pcm.ownerZoneId;
 }
 
+function metadataTargetsOwnerZone(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): boolean {
+  const payloadOwner =
+    typeof payload.ownerZoneId === "number"
+      ? payload.ownerZoneId
+      : typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : 0;
+  const ownerZoneId = getDacOwnerZoneId(pcm);
+  if (payloadOwner <= 0) {
+    return false;
+  }
+  if (ownerZoneId <= 0) {
+    return true;
+  }
+  return payloadOwner === ownerZoneId;
+}
+
+/**
+ * Applies a metadata field update to PCM now-playing state.
+ * @param pcm - Current PCM state.
+ * @param payload - Metadata event payload.
+ * @returns Updated PCM state.
+ */
+function applyMetadataFieldToPcm(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): AudioSnapshot["pcm"] {
+  if (!metadataTargetsOwnerZone(pcm, payload)) {
+    return pcm;
+  }
+
+  const metaField =
+    typeof payload.field === "string"
+      ? payload.field
+      : typeof payload.metadataField === "string"
+        ? payload.metadataField
+        : null;
+  const metaValue = typeof payload.value === "string" ? payload.value : null;
+  if (!metaField || metaValue === null) {
+    return pcm;
+  }
+
+  const metadata: PcmMetadata = { ...pcm.metadata };
+  if (metaField === "title") {
+    metadata.title = metaValue;
+  }
+  if (metaField === "artist") {
+    metadata.artist = metaValue;
+  }
+  if (metaField === "album") {
+    metadata.album = metaValue;
+  }
+  if (metaField === "client_name" || metaField === "clientName") {
+    metadata.clientName = metaValue;
+  }
+  if (metaField === "client_model" || metaField === "clientModel") {
+    metadata.clientModel = metaValue;
+  }
+  return { ...pcm, metadata };
+}
+
+function readMetadataField(
+  payload: Record<string, unknown>,
+  key: string,
+  current: string | undefined
+): string | undefined {
+  const value = payload[key];
+  if (typeof value !== "string") {
+    return current;
+  }
+  return value.length > 0 ? value : current;
+}
+
+/**
+ * Returns true when a metadata snapshot carries displayable track text.
+ * @param payload - Metadata snapshot payload.
+ * @returns Whether any text field is non-empty.
+ */
+function hasMetadataText(payload: Record<string, unknown>): boolean {
+  return ["title", "artist", "album", "clientName"].some(
+    (key) => typeof payload[key] === "string" && (payload[key] as string).length > 0
+  );
+}
+
+/**
+ * Applies a metadata snapshot payload to PCM now-playing state.
+ * @param pcm - Current PCM state.
+ * @param payload - Metadata snapshot payload.
+ * @returns Updated PCM state.
+ */
+function applyMetadataSnapshotToPcm(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): AudioSnapshot["pcm"] {
+  if (!metadataTargetsOwnerZone(pcm, payload)) {
+    return pcm;
+  }
+
+  const hasText = hasMetadataText(payload);
+  if (!hasText && payload.playing !== true && payload.hasCoverArt !== true) {
+    return pcm;
+  }
+
+  return {
+    ...pcm,
+    metadata: {
+      title: readMetadataField(payload, "title", pcm.metadata.title),
+      artist: readMetadataField(payload, "artist", pcm.metadata.artist),
+      album: readMetadataField(payload, "album", pcm.metadata.album),
+      clientName: readMetadataField(payload, "clientName", pcm.metadata.clientName),
+      clientModel: readMetadataField(payload, "clientModel", pcm.metadata.clientModel),
+    },
+    playback: {
+      playing:
+        payload.playing === true
+          ? true
+          : hasText && payload.playing === false
+            ? false
+            : pcm.playback.playing,
+      positionMs:
+        typeof payload.positionMs === "number" ? payload.positionMs : pcm.playback.positionMs,
+      durationMs:
+        typeof payload.durationMs === "number" ? payload.durationMs : pcm.playback.durationMs,
+      progressSyncedAt: Date.now(),
+    },
+    hasCoverArt: payload.hasCoverArt === true ? true : pcm.hasCoverArt,
+  };
+}
+
+/**
+ * Applies metadata progress or playback state to PCM playback fields.
+ * @param pcm - Current PCM state.
+ * @param payload - Metadata progress payload.
+ * @returns Updated PCM state.
+ */
+function applyMetadataProgressToPcm(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): AudioSnapshot["pcm"] {
+  if (!metadataTargetsOwnerZone(pcm, payload)) {
+    return pcm;
+  }
+
+  const playback = { ...pcm.playback };
+  if (typeof payload.positionMs === "number") {
+    playback.positionMs = payload.positionMs;
+  }
+  if (typeof payload.durationMs === "number") {
+    playback.durationMs = payload.durationMs;
+  }
+  if (typeof payload.playing === "boolean") {
+    playback.playing = payload.playing;
+  }
+  playback.progressSyncedAt = Date.now();
+  return { ...pcm, playback };
+}
+
 /**
  * Sort priority for zone cards: DAC owner, streaming, on, off.
  * Lower values appear first.
@@ -190,6 +352,15 @@ function patchPcmFromEvent(
     }
     if (typeof payload.ownerZoneId === "number") {
       ownerZoneId = payload.ownerZoneId;
+    }
+    if (
+      event === "pcm_router_snapshot" &&
+      ownerZoneId === 0 &&
+      activeStack.length === 0 &&
+      getDacOwnerZoneId(normalizedPcm) > 0
+    ) {
+      activeStack = [...normalizedPcm.activeStack];
+      ownerZoneId = normalizedPcm.ownerZoneId;
     }
     if (typeof payload.dacState === "string") {
       dacState = payload.dacState;
@@ -410,13 +581,64 @@ function patchZonesFromEvent(
 }
 
 /**
+ * Applies a Hi-Fi source delta event to source list state.
+ * @param sources - Current sources.
+ * @param event - Event name.
+ * @param payload - Event payload.
+ * @returns Updated sources.
+ */
+function patchSourcesFromEvent(
+  sources: HifiSource[],
+  event: string,
+  payload: Record<string, unknown>
+): HifiSource[] {
+  if (event === "source_airplay_changed") {
+    const sourceNumber =
+      typeof payload.sourceNumber === "number" ? payload.sourceNumber : null;
+    if (sourceNumber === null) {
+      return sources;
+    }
+    return sources.map((source) => ({
+      ...source,
+      isAirplay: source.sourceNumber === sourceNumber ? 1 : 0,
+    }));
+  }
+
+  const sourceNum = typeof payload.source === "number" ? payload.source : null;
+  if (sourceNum === null) {
+    return sources;
+  }
+
+  return sources.map((source) => {
+    if (source.sourceNumber !== sourceNum) {
+      return source;
+    }
+    const next = { ...source };
+    if (event === "source_name_changed" && typeof payload.name === "string") {
+      next.name = payload.name;
+    }
+    if (event === "source_enable_changed" && typeof payload.enabled === "number") {
+      next.enabled = payload.enabled;
+    }
+    if (event === "source_input_gain_changed" && typeof payload.inputGain === "number") {
+      next.inputGain = payload.inputGain;
+    }
+    if (event === "source_display_line_changed" && typeof payload.displayLine === "string") {
+      next.displayLine = payload.displayLine;
+    }
+    return next;
+  });
+}
+
+/**
  * Loads audio snapshot and maintains live SSE updates.
  * @returns Audio module state and actions.
  */
-export function useAudioModule(): {
+function useAudioModuleState(): {
   state: AudioModuleState;
   refresh: () => Promise<void>;
   saveZoneSettings: (zoneNumber: number, patch: ZoneSettingsPatch) => Promise<void>;
+  saveSourceSettings: (sourceNumber: number, patch: SourceSettingsPatch) => Promise<void>;
   toggleZonePower: (zoneNumber: number) => Promise<void>;
   setZoneVolume: (zoneNumber: number, volume: number) => Promise<void>;
   isZoneStreamedTo: (zoneNumber: number) => boolean;
@@ -431,6 +653,7 @@ export function useAudioModule(): {
     loading: true,
     error: null,
     savingZone: null,
+    savingSource: null,
     togglingPowerZone: null,
     sseConnected: false,
   });
@@ -466,6 +689,15 @@ export function useAudioModule(): {
         } else if (envelope.event.startsWith("zone_")) {
           snapshot.zones = patchZonesFromEvent(
             snapshot.zones,
+            envelope.event,
+            envelope.payload as Record<string, unknown>
+          );
+        } else if (
+          envelope.event.startsWith("source_") ||
+          envelope.event === "source_airplay_changed"
+        ) {
+          snapshot.sources = patchSourcesFromEvent(
+            snapshot.sources,
             envelope.event,
             envelope.payload as Record<string, unknown>
           );
@@ -514,39 +746,32 @@ export function useAudioModule(): {
           }
         }
 
-        if (
-          snapshot.pcm.ownerZoneId === 0 &&
-          snapshot.pcm.activeStack.length === 0
+      }
+
+      if (envelope.source === "homepi-metadata") {
+        const payload = envelope.payload as Record<string, unknown>;
+        if (envelope.event === "metadata_snapshot") {
+          snapshot.pcm = applyMetadataSnapshotToPcm(snapshot.pcm, payload);
+        } else if (envelope.event === "metadata_field_updated") {
+          snapshot.pcm = applyMetadataFieldToPcm(snapshot.pcm, payload);
+        } else if (
+          envelope.event === "metadata_progress_updated" ||
+          envelope.event === "playback_state_changed"
         ) {
+          snapshot.pcm = applyMetadataProgressToPcm(snapshot.pcm, payload);
+        } else if (envelope.event === "metadata_cover_updated") {
+          const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
+          const zoneId = typeof payload.zoneId === "number" ? payload.zoneId : ownerZoneId;
+          if (zoneId === ownerZoneId && ownerZoneId > 0) {
+            snapshot.pcm = { ...snapshot.pcm, hasCoverArt: true };
+          }
+        } else if (envelope.event === "metadata_cleared") {
           snapshot.pcm = {
             ...snapshot.pcm,
             metadata: {},
             playback: { playing: false, positionMs: 0, durationMs: 0 },
+            hasCoverArt: false,
           };
-        }
-
-        const metaField =
-          typeof payload.field === "string"
-            ? payload.field
-            : typeof payload.metadataField === "string"
-              ? payload.metadataField
-              : null;
-        const metaValue = typeof payload.value === "string" ? payload.value : null;
-        if (metaField && metaValue !== null) {
-          const metadata: PcmMetadata = { ...snapshot.pcm.metadata };
-          if (metaField === "title") {
-            metadata.title = metaValue;
-          }
-          if (metaField === "artist") {
-            metadata.artist = metaValue;
-          }
-          if (metaField === "album") {
-            metadata.album = metaValue;
-          }
-          if (metaField === "client_name" || metaField === "clientName") {
-            metadata.clientName = metaValue;
-          }
-          snapshot.pcm = { ...snapshot.pcm, metadata };
         }
       }
 
@@ -599,7 +824,8 @@ export function useAudioModule(): {
         const envelope = JSON.parse(event.data) as EventEnvelope;
         if (
           envelope.source === "homepi-hifi-serial" ||
-          envelope.source === "homepi-pcm-router"
+          envelope.source === "homepi-pcm-router" ||
+          envelope.source === "homepi-metadata"
         ) {
           applyEnvelope(envelope);
         }
@@ -676,6 +902,75 @@ export function useAudioModule(): {
         setState((current) => ({
           ...current,
           savingZone: null,
+        }));
+        showToast(error instanceof Error ? error.message : "Save failed", "error");
+        throw error;
+      }
+    },
+    []
+  );
+
+  const saveSourceSettings = useCallback(
+    async (sourceNumber: number, patch: SourceSettingsPatch): Promise<void> => {
+      const config = getAppConfig();
+      setState((current) => ({
+        ...current,
+        savingSource: sourceNumber,
+      }));
+      try {
+        const result = await fetch(`${config.apiBaseUrl}/api/audio/sources/${sourceNumber}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        }).then(async (response) => {
+          const body = (await response.json()) as AudioApiResponse<{
+            shairportRestartRequired: boolean;
+          }>;
+          if (!body.ok) {
+            throw new Error(body.error?.message ?? "Save failed");
+          }
+          return body.data;
+        });
+
+        setState((current) => {
+          if (!current.snapshot) {
+            return { ...current, savingSource: null };
+          }
+
+          let sources = current.snapshot.sources.map((row) => {
+            if (row.sourceNumber !== sourceNumber) {
+              return row;
+            }
+            return { ...row, ...(patch.controller ?? {}) };
+          });
+
+          if (patch.airplay) {
+            sources = sources.map((row) => ({
+              ...row,
+              isAirplay: row.sourceNumber === sourceNumber ? 1 : 0,
+            }));
+          }
+
+          return {
+            ...current,
+            savingSource: null,
+            snapshot: {
+              ...current.snapshot,
+              sources,
+            },
+          };
+        });
+
+        showToast(
+          result?.shairportRestartRequired
+            ? "AirPlay source updated; zones will restart when the supervisor applies changes."
+            : `Source ${sourceNumber} settings saved.`,
+          "success"
+        );
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          savingSource: null,
         }));
         showToast(error instanceof Error ? error.message : "Save failed", "error");
         throw error;
@@ -842,13 +1137,10 @@ export function useAudioModule(): {
 
     const ownerZone = snapshot.zones.find((zone) => zone.zoneNumber === ownerZoneId);
     const airplaySource = snapshot.sources.find((source) => source.isAirplay === 1);
-    const { title, artist, album, clientName } = snapshot.pcm.metadata;
+    const { title, artist, album, clientName, clientModel } = snapshot.pcm.metadata;
     const sourceParts: string[] = [];
     if (airplaySource?.sourceNumber !== undefined) {
       sourceParts.push(`Source ${airplaySource.sourceNumber}`);
-    }
-    if (clientName) {
-      sourceParts.push(clientName);
     } else if (airplaySource?.name) {
       sourceParts.push(airplaySource.name);
     }
@@ -865,6 +1157,7 @@ export function useAudioModule(): {
       track: title,
       artist,
       album,
+      clientName: clientName || clientModel,
       sourceLabel: sourceParts.length > 0 ? sourceParts.join(" • ") : undefined,
       playing: snapshot.pcm.playback?.playing ?? false,
       positionMs: snapshot.pcm.playback?.positionMs ?? 0,
@@ -917,6 +1210,7 @@ export function useAudioModule(): {
     state,
     refresh,
     saveZoneSettings,
+    saveSourceSettings,
     toggleZonePower,
     setZoneVolume,
     isZoneStreamedTo,
@@ -927,6 +1221,8 @@ export function useAudioModule(): {
     setPlaybackVolume,
   };
 }
+
+export { useAudioModuleState };
 
 /**
  * Finds Shairport settings for a zone.

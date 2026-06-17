@@ -6,6 +6,7 @@ import type { Logger } from "@homepi/core-logging";
 import { createErrorResponse, createSuccessResponse } from "@homepi/core-api";
 
 import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
+import type { MetadataClient } from "../metadata/metadata-client.js";
 import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
 import type { SystemStatusStore } from "../system-status-store.js";
 import { buildAudioSnapshot } from "./build-audio-snapshot.js";
@@ -15,6 +16,10 @@ import {
   type ShairportZonePatch,
   type ZoneControllerPatch,
 } from "./hifi-zone-commands.js";
+import {
+  buildSourceControllerCommands,
+  type SourceControllerPatch,
+} from "./hifi-source-commands.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 import { percentToAppleDb } from "./volume-conversion.js";
 
@@ -26,6 +31,8 @@ export interface AudioRouteDeps {
   client: HifiSerialClient;
   /** PCM router socket client. */
   pcmClient: PcmRouterClient;
+  /** Metadata socket client. */
+  metadataClient: MetadataClient;
   /** Shairport MQTT remote-control client. */
   shairportRemote: ShairportRemoteClient;
   /** System status store. */
@@ -80,6 +87,8 @@ export class AudioRoutes {
             config: this.deps.config,
             hifiClient: this.deps.client,
             pcmClient: this.deps.pcmClient,
+            metadataClient: this.deps.metadataClient,
+            shairportRemote: this.deps.shairportRemote,
             systemStatus: this.deps.statusStore.getStatus(),
           },
           correlationId
@@ -326,6 +335,88 @@ export class AudioRoutes {
           createSuccessResponse({
             correlationId,
             data: { zoneNumber, shairportRestartRequired },
+          })
+        );
+        return true;
+      }
+
+      const sourceMatch = pathname.match(/^\/api\/audio\/sources\/(\d+)$/);
+      if (req.method === "PUT" && sourceMatch) {
+        const sourceNumber = Number(sourceMatch[1]);
+        if (sourceNumber < 1 || sourceNumber > 8) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "source must be 1-8" },
+            })
+          );
+          return true;
+        }
+
+        const body = JSON.parse(await readBody(req)) as {
+          controller?: SourceControllerPatch;
+          airplay?: boolean;
+        };
+
+        const controllerPatch = body.controller ?? {};
+        const wantsAirplay = body.airplay === true;
+
+        if (wantsAirplay) {
+          const sourcesResult = await this.deps.client.getSources(correlationId);
+          const sources = sourcesResult.sources as Array<{
+            sourceNumber?: number;
+            enabled?: number;
+          }>;
+          const sourceRow = sources.find((row) => row.sourceNumber === sourceNumber);
+          const enabled =
+            controllerPatch.enabled !== undefined
+              ? controllerPatch.enabled
+              : sourceRow?.enabled;
+          if (enabled !== 1) {
+            sendJson(
+              res,
+              400,
+              createErrorResponse({
+                correlationId,
+                error: {
+                  code: "INVALID_REQUEST",
+                  message: "AirPlay source must be enabled",
+                },
+              })
+            );
+            return true;
+          }
+        }
+
+        if (Object.keys(controllerPatch).length > 0) {
+          await this.deps.client.patchSource(
+            sourceNumber,
+            controllerPatch as Record<string, unknown>,
+            correlationId
+          );
+        }
+
+        for (const command of buildSourceControllerCommands(sourceNumber, controllerPatch)) {
+          await this.deps.client.sendCommand(command, correlationId);
+        }
+
+        let shairportRestartRequired = false;
+        if (wantsAirplay) {
+          const currentAirplay = await this.deps.client.getAirplaySource(correlationId);
+          if (currentAirplay.sourceNumber !== sourceNumber) {
+            shairportRestartRequired = true;
+          }
+          await this.deps.client.setAirplaySource(sourceNumber, correlationId);
+        }
+
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: { sourceNumber, shairportRestartRequired },
           })
         );
         return true;

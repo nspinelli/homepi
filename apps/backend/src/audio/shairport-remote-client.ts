@@ -1,5 +1,10 @@
 import mqtt, { type MqttClient } from "mqtt";
 
+import {
+  parseShairportAstmDuration,
+  parseShairportPrgrProgress,
+} from "./parse-shairport-progress.js";
+
 /** Shairport MQTT remote commands accepted by the backend API. */
 export const SHAIRPORT_REMOTE_COMMANDS = [
   "play",
@@ -71,6 +76,137 @@ export class ShairportRemoteClient {
           return;
         }
         resolve();
+      });
+    });
+  }
+
+  /**
+   * Reads retained or live Shairport progress hints for snapshot hydration.
+   * @param zoneId - Zone number 1–16.
+   * @param waitForDuration - When true, waits briefly for duration-bearing topics.
+   * @returns Parsed position and duration hints.
+   */
+  async fetchProgressHints(
+    zoneId: number,
+    waitForDuration = true
+  ): Promise<{ positionMs: number; durationMs: number }> {
+    const base = `shairport/zone/${zoneId}`;
+    const topics = waitForDuration
+      ? [
+          `${base}/ssnc/prgr`,
+          `${base}/track_progress`,
+          `${base}/core/astm`,
+          `${base}/frame_position_and_time`,
+          `${base}/first_frame_position_and_time`,
+        ]
+      : [`${base}/frame_position_and_time`, `${base}/first_frame_position_and_time`];
+
+    let positionMs = 0;
+    let durationMs = 0;
+    let progressStartRtp = 0;
+
+    const retainedPrgr = await this.fetchRetainedTopic(zoneId, "ssnc/prgr");
+    if (retainedPrgr) {
+      const parsed = parseShairportPrgrProgress(retainedPrgr);
+      if (parsed) {
+        if (parsed.durationMs > 0) {
+          durationMs = parsed.durationMs;
+        }
+        if (parsed.positionMs > 0) {
+          positionMs = parsed.positionMs;
+        }
+      }
+    }
+
+    if (durationMs > 0 && positionMs > 0) {
+      return { positionMs, durationMs };
+    }
+
+    return new Promise<{ positionMs: number; durationMs: number }>((resolve, reject) => {
+      const subscriber = mqtt.connect(this.brokerUrl, {
+        clientId: `homepi-backend-progress-${zoneId}-${Date.now()}`,
+        protocolVersion: 4,
+      });
+
+      const timeoutMs = waitForDuration ? 1_500 : 750;
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve({ positionMs, durationMs });
+      }, timeoutMs);
+
+      const cleanup = (): void => {
+        clearTimeout(timeout);
+        subscriber.removeAllListeners();
+        subscriber.end(true);
+      };
+
+      subscriber.on("error", (error) => {
+        cleanup();
+        reject(error);
+      });
+
+      subscriber.on("connect", () => {
+        for (const topic of topics) {
+          subscriber.subscribe(topic, { qos: 0 });
+        }
+      });
+
+      subscriber.on("message", (messageTopic, payload) => {
+        if (messageTopic.endsWith("/first_frame_position_and_time")) {
+          const startToken = payload.toString("utf8").split("/")[0];
+          const start = Number(startToken);
+          if (Number.isFinite(start) && start > 0) {
+            progressStartRtp = start;
+          }
+          return;
+        }
+
+        if (
+          messageTopic.endsWith("/ssnc/prgr") ||
+          messageTopic.endsWith("/track_progress")
+        ) {
+          const parsed = parseShairportPrgrProgress(payload.toString("utf8"));
+          if (!parsed) {
+            return;
+          }
+          if (parsed.durationMs > 0) {
+            durationMs = parsed.durationMs;
+          }
+          if (parsed.positionMs > 0) {
+            positionMs = parsed.positionMs;
+          }
+          if (durationMs > 0) {
+            cleanup();
+            resolve({ positionMs, durationMs });
+          }
+          return;
+        }
+
+        if (messageTopic.endsWith("/core/astm")) {
+          const parsed = parseShairportAstmDuration(Buffer.from(payload));
+          if (parsed && parsed > 0) {
+            durationMs = parsed;
+            if (durationMs > 0 && positionMs > 0) {
+              cleanup();
+              resolve({ positionMs, durationMs });
+            }
+          }
+          return;
+        }
+
+        if (messageTopic.endsWith("/frame_position_and_time")) {
+          const text = payload.toString("utf8");
+          const currentToken = text.split("/")[0];
+          const current = Number(currentToken);
+          if (!Number.isFinite(current)) {
+            return;
+          }
+          const start = progressStartRtp > 0 ? progressStartRtp : current;
+          const parsed = parseShairportPrgrProgress(`${start}/${current}/${current}`);
+          if (parsed && parsed.positionMs > 0) {
+            positionMs = parsed.positionMs;
+          }
+        }
       });
     });
   }

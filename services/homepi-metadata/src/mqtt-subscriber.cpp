@@ -127,15 +127,19 @@ bool MqttSubscriber::subscribe_zone(int zone_id) {
       "album",
       "client_name",
       "client_model",
+      "track_id",
       "playing",
       "cover",
       "frame_position_and_time",
       "first_frame_position_and_time",
+      "ssnc/phbt",
       "active_start",
       "active_end",
       "play_end",
       "ssnc/prgr",
+      "track_progress",
       "ssnc/snam",
+      "ssnc/mdst",
       "core/astm",
   };
 
@@ -159,15 +163,19 @@ void MqttSubscriber::unsubscribe_zone(int zone_id) {
       "album",
       "client_name",
       "client_model",
+      "track_id",
       "playing",
       "cover",
       "frame_position_and_time",
       "first_frame_position_and_time",
+      "ssnc/phbt",
       "active_start",
       "active_end",
       "play_end",
       "ssnc/prgr",
+      "track_progress",
       "ssnc/snam",
+      "ssnc/mdst",
       "core/astm",
   };
 
@@ -221,6 +229,9 @@ void MqttSubscriber::handle_topic_suffix(int zone_id, const std::string& suffix,
   }
 
   if (is_empty_payload(payload)) {
+    if ((suffix == "title" || suffix == "artist" || suffix == "album") && callbacks_.on_field) {
+      callbacks_.on_field(zone_id, suffix, "");
+    }
     return;
   }
 
@@ -248,6 +259,10 @@ void MqttSubscriber::handle_topic_suffix(int zone_id, const std::string& suffix,
     callbacks_.on_field(zone_id, "client_model", payload_to_string(payload));
     return;
   }
+  if (suffix == "track_id" && callbacks_.on_field) {
+    callbacks_.on_field(zone_id, "track_id", payload_to_string(payload));
+    return;
+  }
 
   if (suffix == "playing" && callbacks_.on_playback_state) {
     const std::string value = payload_to_string(payload);
@@ -255,8 +270,7 @@ void MqttSubscriber::handle_topic_suffix(int zone_id, const std::string& suffix,
     return;
   }
 
-  if (suffix == "active_start") {
-    progress_start_rtp_ = 0;
+  if (suffix == "active_start" || suffix == "ssnc/mdst") {
     if (callbacks_.on_metadata_bundle_start) {
       callbacks_.on_metadata_bundle_start(zone_id);
     }
@@ -276,19 +290,19 @@ void MqttSubscriber::handle_topic_suffix(int zone_id, const std::string& suffix,
     return;
   }
 
-  if (suffix == "frame_position_and_time" && callbacks_.on_progress) {
+  if (suffix == "frame_position_and_time" || suffix == "ssnc/phbt") {
     const std::string text = payload_to_string(payload);
     if (progress_start_rtp_ == 0) {
       progress_start_rtp_ = parse_progress_start_rtp(text);
     }
     const auto update = parse_phbt_progress(text, sample_rate_hz_, progress_start_rtp_);
-    if (update.has_position) {
+    if (update.has_position && callbacks_.on_progress) {
       callbacks_.on_progress(zone_id, update.position_ms, -1, update.playing);
     }
     return;
   }
 
-  if (suffix == "ssnc/prgr" && callbacks_.on_progress) {
+  if ((suffix == "ssnc/prgr" || suffix == "track_progress") && callbacks_.on_progress) {
     const std::string progress = payload_to_string(payload);
     progress_start_rtp_ = parse_progress_start_rtp(progress);
     const auto update = parse_prgr_progress(progress, sample_rate_hz_);

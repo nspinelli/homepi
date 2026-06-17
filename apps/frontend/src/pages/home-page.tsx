@@ -1,23 +1,18 @@
 import { AudioCard } from "@/components/audio/audio-card.js";
 import { AudioCardSkeleton } from "@/components/audio/audio-card-skeleton.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
+import { deriveAudioConnectionLevel } from "@/lib/derive-audio-connection-level.js";
 
 /**
  * Home dashboard with module cards.
  */
 export function HomePage(): React.JSX.Element {
-  const { state, nowPlaying, playback } = useAudioModule();
+  const { state } = useAudioModule();
   const snapshot = state.snapshot;
-  const connected = snapshot?.hifiConnected ?? false;
-
-  const serviceStatuses = snapshot
-    ? [
-        { label: "Hi-Fi", status: snapshot.services.hifiSerial },
-        { label: "Shairport", status: snapshot.services.shairport },
-        { label: "PCM", status: snapshot.services.pcmRouter },
-        { label: "nqptp", status: snapshot.services.nqptp },
-      ]
-    : [];
+  const connectionLevel = deriveAudioConnectionLevel(
+    snapshot?.hifiConnected ?? false,
+    snapshot?.services
+  );
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
@@ -26,16 +21,7 @@ export function HomePage(): React.JSX.Element {
         {state.loading && snapshot === null ? (
           <AudioCardSkeleton />
         ) : (
-        <AudioCard
-          name="Home Audio"
-          isConnected={connected}
-          currentTrack={nowPlaying?.track}
-          artist={nowPlaying?.artist}
-          album={nowPlaying?.album}
-          source={nowPlaying?.source}
-          coverUrl={playback?.coverUrl}
-          serviceStatuses={nowPlaying ? undefined : serviceStatuses}
-        />
+          <AudioCard name="Home Audio" connectionLevel={connectionLevel} />
         )}
       </div>
     </main>

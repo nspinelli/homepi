@@ -2,14 +2,17 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "homepi/metadata/metadata-parser.hpp"
+
 namespace homepi::metadata {
 
-/** Callbacks retained for API compatibility; unused in drain-only mode. */
+/** Callbacks invoked when owner-zone metadata is parsed from a FIFO. */
 struct PipeManagerCallbacks {
   std::function<void(int zone_id, const std::string& field, const std::string& value)> on_field;
   std::function<void(int zone_id, int position_ms, int duration_ms, bool playing)> on_progress;
@@ -21,7 +24,7 @@ struct PipeManagerCallbacks {
 
 /**
  * Manages all zone metadata FIFOs with a single epoll loop.
- * Drains every pipe so Shairport Sync never blocks; metadata is sourced from MQTT.
+ * Non-owner pipes are drained; the owner pipe is parsed for progress and duration.
  */
 class PipeManager {
  public:
@@ -35,7 +38,7 @@ class PipeManager {
    * Starts the epoll drain loop.
    * @param pipe_prefix FIFO path prefix ending before zone number.
    * @param zone_count Number of zones to monitor.
-   * @param callbacks Unused (kept for service wiring stability).
+   * @param callbacks Parser callbacks for the active owner zone.
    */
   void start(const std::string& pipe_prefix, int zone_count, PipeManagerCallbacks callbacks);
 
@@ -43,7 +46,7 @@ class PipeManager {
   void stop();
 
   /**
-   * Retained for API compatibility with owner-zone changes.
+   * Updates which zone pipe is parsed instead of drained.
    * @param owner_zone_id Active owner zone id or 0.
    */
   void set_owner_zone(int owner_zone_id);
@@ -57,8 +60,9 @@ class PipeManager {
   void run_loop();
   void open_missing_pipes();
   void handle_readable(int fd);
-  void drain_zone(ZonePipe& zone);
+  void consume_zone(ZonePipe& zone);
   ZonePipe* find_zone_by_fd(int fd);
+  void reset_owner_parser();
 
   std::string pipe_prefix_;
   int zone_count_ = 0;
@@ -70,6 +74,7 @@ class PipeManager {
   int epoll_fd_ = -1;
   int wake_fd_ = -1;
   std::mutex zones_mutex_;
+  std::unique_ptr<MetadataParser> owner_parser_;
 };
 
 }  // namespace homepi::metadata

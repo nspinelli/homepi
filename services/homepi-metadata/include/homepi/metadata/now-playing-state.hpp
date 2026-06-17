@@ -13,6 +13,7 @@ struct NowPlayingSnapshot {
   std::string artist;
   std::string album;
   std::string client_name;
+  std::string track_id;
   bool playing = false;
   int position_ms = 0;
   int duration_ms = 0;
@@ -65,6 +66,11 @@ class NowPlayingState {
    * @returns True when the snapshot changed.
    */
   bool mark_cover_art(int zone_id, bool force = false);
+
+  /**
+   * Clears track text and artwork while preserving playback timing.
+   */
+  void clear_metadata_fields();
 
   /**
    * Clears track metadata while preserving the owner zone.

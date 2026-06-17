@@ -130,6 +130,56 @@ const STATUS_DOT_COLORS: Record<ServiceVisualStatus, string> = {
   offline: "bg-red-500",
 };
 
+const STATUS_ICON_COLORS: Record<ServiceVisualStatus, string> = {
+  online: "text-success",
+  warning: "text-warning",
+  offline: "text-destructive",
+};
+
+/**
+ * Returns the worst visual status from a list (offline beats warning beats online).
+ * @param statuses - Status values to compare.
+ * @returns Most severe status bucket.
+ */
+export function worstVisualStatus(statuses: ServiceVisualStatus[]): ServiceVisualStatus {
+  if (statuses.some((status) => status === "offline")) {
+    return "offline";
+  }
+  if (statuses.some((status) => status === "warning")) {
+    return "warning";
+  }
+  return "online";
+}
+
+/**
+ * Summarizes platform health for the header status icon color.
+ * @param snapshot - Live system status snapshot.
+ * @param healthStatus - Backend health status string.
+ * @param cpuTempC - CPU temperature in Celsius.
+ * @returns Worst visual status across services, health, and temperature.
+ */
+export function summarizeHeaderIconStatus(
+  snapshot: SystemStatusSnapshot | null,
+  healthStatus: string | undefined,
+  cpuTempC: number | null | undefined
+): ServiceVisualStatus {
+  const statuses: ServiceVisualStatus[] = [
+    mapCpuTempStatus(cpuTempC),
+    summarizeSystemOverall(snapshot, healthStatus).status,
+  ];
+
+  if (snapshot) {
+    for (const { key } of CORE_SERVICES) {
+      const value = snapshot[key];
+      statuses.push(mapToVisualStatus(value === undefined ? undefined : String(value)));
+    }
+  } else if (healthStatus) {
+    statuses.push(mapToVisualStatus(healthStatus));
+  }
+
+  return worstVisualStatus(statuses);
+}
+
 /**
  * Tailwind class for a status indicator dot.
  * @param status - Visual status bucket.
@@ -137,6 +187,15 @@ const STATUS_DOT_COLORS: Record<ServiceVisualStatus, string> = {
  */
 export function statusDotClass(status: ServiceVisualStatus): string {
   return STATUS_DOT_COLORS[status];
+}
+
+/**
+ * Tailwind class for a status icon in the header.
+ * @param status - Visual status bucket.
+ * @returns Text color class.
+ */
+export function statusIconClass(status: ServiceVisualStatus): string {
+  return STATUS_ICON_COLORS[status];
 }
 
 /**

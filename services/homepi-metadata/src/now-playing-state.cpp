@@ -50,6 +50,13 @@ bool NowPlayingState::update_field(int zone_id, const std::string& field,
     snapshot_.client_name = value;
     return true;
   }
+  if (field == "track_id") {
+    if (value.empty() || snapshot_.track_id == value) {
+      return false;
+    }
+    snapshot_.track_id = value;
+    return true;
+  }
   return false;
 }
 
@@ -99,16 +106,25 @@ bool NowPlayingState::mark_cover_art(int zone_id, bool force) {
   return true;
 }
 
+void NowPlayingState::clear_metadata_fields() {
+  std::lock_guard lock(mutex_);
+  snapshot_.title.clear();
+  snapshot_.artist.clear();
+  snapshot_.album.clear();
+  snapshot_.has_cover_art = false;
+}
+
 void NowPlayingState::clear_track_metadata() {
   std::lock_guard lock(mutex_);
   const int owner = snapshot_.owner_zone_id;
   snapshot_.title.clear();
   snapshot_.artist.clear();
   snapshot_.album.clear();
+  snapshot_.has_cover_art = false;
   snapshot_.playing = false;
   snapshot_.position_ms = 0;
   snapshot_.duration_ms = 0;
-  snapshot_.has_cover_art = false;
+  snapshot_.track_id.clear();
   snapshot_.owner_zone_id = owner;
 }
 

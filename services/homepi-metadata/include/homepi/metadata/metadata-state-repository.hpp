@@ -58,6 +58,28 @@ class MetadataStateRepository {
   static bool write_cover_art(const std::string& cache_dir, int zone_id,
                               const std::vector<std::uint8_t>& bytes);
 
+  /**
+   * Removes cached cover art for a zone when metadata is cleared.
+   * @param cache_dir Cache directory path.
+   * @param zone_id Zone id.
+   * @returns True when the file was removed or absent.
+   */
+  static bool delete_cover_art(const std::string& cache_dir, int zone_id);
+
+  /**
+   * Stores a learned track duration keyed by AirPlay track id.
+   * @param track_id Persistent track identifier.
+   * @param duration_ms Duration in milliseconds.
+   */
+  void cache_track_duration(const std::string& track_id, int duration_ms);
+
+  /**
+   * Loads a previously learned duration for a track id.
+   * @param track_id Persistent track identifier.
+   * @returns Duration in milliseconds when cached.
+   */
+  std::optional<int> load_cached_track_duration(const std::string& track_id) const;
+
  private:
   std::string database_path_;
   std::unique_ptr<homepi::storage::DatabaseConnection> db_;

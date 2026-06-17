@@ -51,7 +51,7 @@ export function NowPlayingHeader(): React.JSX.Element | null {
           </span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64 p-4">
+      <DropdownMenuContent align="center" className="w-[min(calc(100vw-2rem),26rem)] p-4">
         <AudioNowPlayingDropdownPanel playback={playback} />
       </DropdownMenuContent>
     </DropdownMenu>

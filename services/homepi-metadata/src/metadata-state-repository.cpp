@@ -23,10 +23,16 @@ CREATE TABLE IF NOT EXISTS metadata_owner_state (
   artist TEXT NOT NULL DEFAULT '',
   album TEXT NOT NULL DEFAULT '',
   client_name TEXT NOT NULL DEFAULT '',
+  track_id TEXT NOT NULL DEFAULT '',
   playing INTEGER NOT NULL DEFAULT 0,
   position_ms INTEGER NOT NULL DEFAULT 0,
   duration_ms INTEGER NOT NULL DEFAULT 0,
   has_cover_art INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS track_duration_cache (
+  track_id TEXT PRIMARY KEY,
+  duration_ms INTEGER NOT NULL,
   updated_at TEXT NOT NULL DEFAULT ''
 );
 )SQL";
@@ -44,6 +50,12 @@ MetadataStateRepository::MetadataStateRepository(const std::string& database_pat
   db_ = std::make_unique<homepi::storage::DatabaseConnection>(
       database_path_, homepi::storage::DatabaseOpenMode::ReadWrite);
   homepi::storage::MigrationRunner::apply(*db_, read_migration_sql());
+  char* error_message = nullptr;
+  if (sqlite3_exec(db_->handle(),
+                   "ALTER TABLE metadata_owner_state ADD COLUMN track_id TEXT NOT NULL DEFAULT '';",
+                   nullptr, nullptr, &error_message) != SQLITE_OK) {
+    sqlite3_free(error_message);
+  }
 }
 
 MetadataStateRepository::~MetadataStateRepository() = default;
@@ -54,12 +66,12 @@ void MetadataStateRepository::save_snapshot(const NowPlayingSnapshot& snapshot) 
   }
   const std::string sql =
       "INSERT INTO metadata_owner_state "
-      "(owner_zone_id, title, artist, album, client_name, playing, position_ms, duration_ms, "
+      "(owner_zone_id, title, artist, album, client_name, track_id, playing, position_ms, duration_ms, "
       "has_cover_art, updated_at) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
       "ON CONFLICT(owner_zone_id) DO UPDATE SET "
       "title=excluded.title, artist=excluded.artist, album=excluded.album, "
-      "client_name=excluded.client_name, playing=excluded.playing, "
+      "client_name=excluded.client_name, track_id=excluded.track_id, playing=excluded.playing, "
       "position_ms=excluded.position_ms, duration_ms=excluded.duration_ms, "
       "has_cover_art=excluded.has_cover_art, updated_at=excluded.updated_at;";
 
@@ -74,11 +86,12 @@ void MetadataStateRepository::save_snapshot(const NowPlayingSnapshot& snapshot) 
   sqlite3_bind_text(stmt, 3, snapshot.artist.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 4, snapshot.album.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_bind_text(stmt, 5, snapshot.client_name.c_str(), -1, SQLITE_TRANSIENT);
-  sqlite3_bind_int(stmt, 6, snapshot.playing ? 1 : 0);
-  sqlite3_bind_int(stmt, 7, snapshot.position_ms);
-  sqlite3_bind_int(stmt, 8, snapshot.duration_ms);
-  sqlite3_bind_int(stmt, 9, snapshot.has_cover_art ? 1 : 0);
-  sqlite3_bind_text(stmt, 10, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 6, snapshot.track_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt, 7, snapshot.playing ? 1 : 0);
+  sqlite3_bind_int(stmt, 8, snapshot.position_ms);
+  sqlite3_bind_int(stmt, 9, snapshot.duration_ms);
+  sqlite3_bind_int(stmt, 10, snapshot.has_cover_art ? 1 : 0);
+  sqlite3_bind_text(stmt, 11, updated_at.c_str(), -1, SQLITE_TRANSIENT);
   sqlite3_step(stmt);
   sqlite3_finalize(stmt);
 }
@@ -103,7 +116,7 @@ std::optional<NowPlayingSnapshot> MetadataStateRepository::load_owner(int owner_
   }
   sqlite3_stmt* stmt = nullptr;
   const char* sql =
-      "SELECT title, artist, album, client_name, playing, position_ms, duration_ms, has_cover_art "
+      "SELECT title, artist, album, client_name, track_id, playing, position_ms, duration_ms, has_cover_art "
       "FROM metadata_owner_state WHERE owner_zone_id = ? LIMIT 1;";
   if (sqlite3_prepare_v2(db_->handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
     return std::nullopt;
@@ -128,10 +141,13 @@ std::optional<NowPlayingSnapshot> MetadataStateRepository::load_owner(int owner_
   if (const unsigned char* text = sqlite3_column_text(stmt, 3)) {
     snapshot.client_name = reinterpret_cast<const char*>(text);
   }
-  snapshot.playing = sqlite3_column_int(stmt, 4) != 0;
-  snapshot.position_ms = sqlite3_column_int(stmt, 5);
-  snapshot.duration_ms = sqlite3_column_int(stmt, 6);
-  snapshot.has_cover_art = sqlite3_column_int(stmt, 7) != 0;
+  if (const unsigned char* text = sqlite3_column_text(stmt, 4)) {
+    snapshot.track_id = reinterpret_cast<const char*>(text);
+  }
+  snapshot.playing = sqlite3_column_int(stmt, 5) != 0;
+  snapshot.position_ms = sqlite3_column_int(stmt, 6);
+  snapshot.duration_ms = sqlite3_column_int(stmt, 7);
+  snapshot.has_cover_art = sqlite3_column_int(stmt, 8) != 0;
   sqlite3_finalize(stmt);
   return snapshot;
 }
@@ -151,6 +167,61 @@ bool MetadataStateRepository::write_cover_art(const std::string& cache_dir, int 
   out.write(reinterpret_cast<const char*>(bytes.data()),
             static_cast<std::streamsize>(bytes.size()));
   return out.good();
+}
+
+bool MetadataStateRepository::delete_cover_art(const std::string& cache_dir, int zone_id) {
+  if (zone_id <= 0) {
+    return false;
+  }
+  const fs::path path = fs::path(cache_dir) / ("cover-zone-" + std::to_string(zone_id));
+  std::error_code ec;
+  fs::remove(path, ec);
+  return !ec;
+}
+
+void MetadataStateRepository::cache_track_duration(const std::string& track_id, int duration_ms) {
+  if (!db_ || track_id.empty() || duration_ms <= 0) {
+    return;
+  }
+  sqlite3_stmt* stmt = nullptr;
+  const char* sql =
+      "INSERT INTO track_duration_cache (track_id, duration_ms, updated_at) "
+      "VALUES (?, ?, ?) "
+      "ON CONFLICT(track_id) DO UPDATE SET "
+      "duration_ms=excluded.duration_ms, updated_at=excluded.updated_at;";
+  if (sqlite3_prepare_v2(db_->handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return;
+  }
+  const std::string updated_at = homepi::events::iso_timestamp();
+  sqlite3_bind_text(stmt, 1, track_id.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_int(stmt, 2, duration_ms);
+  sqlite3_bind_text(stmt, 3, updated_at.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+}
+
+std::optional<int> MetadataStateRepository::load_cached_track_duration(
+    const std::string& track_id) const {
+  if (!db_ || track_id.empty()) {
+    return std::nullopt;
+  }
+  sqlite3_stmt* stmt = nullptr;
+  const char* sql =
+      "SELECT duration_ms FROM track_duration_cache WHERE track_id = ? LIMIT 1;";
+  if (sqlite3_prepare_v2(db_->handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return std::nullopt;
+  }
+  sqlite3_bind_text(stmt, 1, track_id.c_str(), -1, SQLITE_TRANSIENT);
+  if (sqlite3_step(stmt) != SQLITE_ROW) {
+    sqlite3_finalize(stmt);
+    return std::nullopt;
+  }
+  const int duration_ms = sqlite3_column_int(stmt, 0);
+  sqlite3_finalize(stmt);
+  if (duration_ms <= 0) {
+    return std::nullopt;
+  }
+  return duration_ms;
 }
 
 }  // namespace homepi::metadata

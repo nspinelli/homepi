@@ -102,11 +102,16 @@ export function AudioProgressBar({
   durationMs,
 }: AudioProgressBarProps): React.JSX.Element {
   const hasDuration = durationMs > 0;
-  const durationCap = hasDuration
+  const displayDuration = hasDuration
     ? Math.min(durationMs, MAX_DISPLAY_MS)
-    : Math.max(positionMs, 1);
-  const remainingMs = hasDuration ? Math.max(0, durationCap - positionMs) : 0;
-  const fillPercent = `${(positionMs / durationCap) * 100}%`;
+    : positionMs > 0
+      ? Math.min(Math.max(durationMs, positionMs + 120_000), MAX_DISPLAY_MS)
+      : 0;
+  const hasDisplayDuration = displayDuration > 0;
+  const remainingMs = hasDisplayDuration ? Math.max(0, displayDuration - positionMs) : 0;
+  const fillPercent = hasDisplayDuration
+    ? `${Math.min(100, (positionMs / displayDuration) * 100)}%`
+    : undefined;
 
   return (
     <div className="flex items-center gap-3">
@@ -118,12 +123,16 @@ export function AudioProgressBar({
         role="progressbar"
         aria-valuenow={positionMs}
         aria-valuemin={0}
-        aria-valuemax={durationCap}
+        aria-valuemax={hasDisplayDuration ? displayDuration : undefined}
       >
-        <div
-          className="h-full rounded-full bg-foreground transition-[width] duration-300"
-          style={{ width: fillPercent }}
-        />
+        {hasDisplayDuration ? (
+          <div
+            className="h-full rounded-full bg-foreground transition-[width] duration-300"
+            style={{ width: fillPercent }}
+          />
+        ) : (
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-foreground/40" />
+        )}
       </div>
       <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
         {formatPlaybackTime(remainingMs, !hasDuration)}

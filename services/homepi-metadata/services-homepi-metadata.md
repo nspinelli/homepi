@@ -21,7 +21,7 @@ Shairport Sync writes metadata to per-zone pipes (`/tmp/homepi-metadata-zone-N`)
 | `cover` | Album art (binary) |
 | `frame_position_and_time` | Progress position (with `first_frame_position_and_time`) |
 | `ssnc/prgr`, `core/astm` | Progress position + duration (requires `publish_raw = yes` on Shairport) |
-| `active_start` | Clear track metadata for new session |
+| `active_start`, `ssnc/mdst` | Clear track metadata for new session |
 | `active_end`, `play_end` | Session cleared |
 
 ## Core modules

@@ -47,6 +47,7 @@ void PipeManager::start(const std::string& pipe_prefix, int zone_count,
   zone_count_ = zone_count;
   callbacks_ = std::move(callbacks);
   stop_.store(false);
+  reset_owner_parser();
 
   epoll_fd_ = epoll_create1(EPOLL_CLOEXEC);
   wake_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -99,14 +100,63 @@ void PipeManager::stop() {
       zone.fd = -1;
     }
   }
+  owner_parser_.reset();
 }
 
 void PipeManager::set_owner_zone(int owner_zone_id) {
   owner_zone_id_.store(owner_zone_id);
+  reset_owner_parser();
   if (wake_fd_ >= 0) {
     const uint64_t value = 1;
     write(wake_fd_, &value, sizeof(value));
   }
+}
+
+void PipeManager::reset_owner_parser() {
+  const int owner_zone_id = owner_zone_id_.load();
+  if (owner_zone_id <= 0) {
+    owner_parser_.reset();
+    return;
+  }
+
+  MetadataParserCallbacks parser_callbacks;
+  parser_callbacks.on_field = [this, owner_zone_id](const MetadataFieldUpdate& update) {
+    if (callbacks_.on_field) {
+      callbacks_.on_field(owner_zone_id, update.field, update.value);
+    }
+  };
+  parser_callbacks.on_progress = [this, owner_zone_id](const MetadataProgressUpdate& update) {
+    if (!callbacks_.on_progress) {
+      return;
+    }
+    callbacks_.on_progress(
+        owner_zone_id,
+        update.has_position ? update.position_ms : -1,
+        update.has_duration ? update.duration_ms : -1,
+        update.playing);
+  };
+  parser_callbacks.on_playback_state = [this, owner_zone_id](bool playing) {
+    if (callbacks_.on_playback_state) {
+      callbacks_.on_playback_state(owner_zone_id, playing);
+    }
+  };
+  parser_callbacks.on_cover_art = [this, owner_zone_id](const std::vector<std::uint8_t>& bytes) {
+    if (callbacks_.on_cover_art) {
+      callbacks_.on_cover_art(owner_zone_id, bytes);
+    }
+  };
+  parser_callbacks.on_metadata_bundle_start = [this, owner_zone_id]() {
+    if (callbacks_.on_metadata_bundle_start) {
+      callbacks_.on_metadata_bundle_start(owner_zone_id);
+    }
+  };
+  parser_callbacks.on_session_cleared = [this, owner_zone_id]() {
+    if (callbacks_.on_session_cleared) {
+      callbacks_.on_session_cleared(owner_zone_id);
+    }
+  };
+
+  owner_parser_ = std::make_unique<MetadataParser>(std::move(parser_callbacks));
 }
 
 void PipeManager::run_loop() {
@@ -177,10 +227,11 @@ void PipeManager::handle_readable(int fd) {
   if (zone == nullptr) {
     return;
   }
-  drain_zone(*zone);
+  consume_zone(*zone);
 }
 
-void PipeManager::drain_zone(ZonePipe& zone) {
+void PipeManager::consume_zone(ZonePipe& zone) {
+  const bool parse_owner = zone.zone_id == owner_zone_id_.load();
   char buffer[4096];
   while (true) {
     const ssize_t n = read(zone.fd, buffer, sizeof(buffer));
@@ -195,6 +246,9 @@ void PipeManager::drain_zone(ZonePipe& zone) {
     }
     if (n == 0) {
       break;
+    }
+    if (parse_owner && owner_parser_ != nullptr) {
+      owner_parser_->feed(buffer, static_cast<std::size_t>(n), true);
     }
   }
 }

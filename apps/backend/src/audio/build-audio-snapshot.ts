@@ -44,6 +44,7 @@ export interface AudioSnapshot {
       playing: boolean;
       positionMs: number;
       durationMs: number;
+      progressSyncedAt?: number;
     };
     hasCoverArt?: boolean;
   };
@@ -113,6 +114,25 @@ export async function buildAudioSnapshot(
       undefined;
   }
 
+  let positionMs = metadataSnapshot?.positionMs ?? 0;
+  let durationMs = metadataSnapshot?.durationMs ?? 0;
+  if (
+    ownerZoneId > 0 &&
+    (metadataSnapshot?.playing ?? false) &&
+    (durationMs <= 0 || positionMs <= 0)
+  ) {
+    const hints = await deps.shairportRemote.fetchProgressHints(
+      ownerZoneId,
+      durationMs <= 0
+    );
+    if (hints.durationMs > 0) {
+      durationMs = hints.durationMs;
+    }
+    if (hints.positionMs > 0 && (positionMs <= 0 || hints.positionMs > positionMs)) {
+      positionMs = hints.positionMs;
+    }
+  }
+
   return {
     controller,
     zones,
@@ -138,8 +158,9 @@ export async function buildAudioSnapshot(
       },
       playback: {
         playing: metadataSnapshot?.playing ?? false,
-        positionMs: metadataSnapshot?.positionMs ?? 0,
-        durationMs: metadataSnapshot?.durationMs ?? 0,
+        positionMs,
+        durationMs,
+        progressSyncedAt: Date.now(),
       },
       hasCoverArt: metadataSnapshot?.hasCoverArt,
     },

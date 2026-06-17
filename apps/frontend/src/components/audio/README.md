@@ -7,6 +7,9 @@ React components for the Home Audio module (`/audio`).
 | File | Role |
 |------|------|
 | `zone-card.tsx` | Zone grid card with power, volume, and edit affordance |
+| `zone-power-button.tsx` | Shared circular play/stop control for zone cards and header quick actions |
+| `zone-volume-knob.tsx` | Circular volume control for now-playing zone quick actions |
+| `zone-volume-slider.tsx` | Horizontal volume slider for zone cards |
 | `zone-edit-sheet.tsx` | iOS-style bottom sheet for editing Hi-Fi2 zone settings |
 | `zone-settings-dialog.tsx` | Legacy centered dialog (same save contract as the sheet) |
 | `zone-settings-patch.ts` | Shared diff/patch helpers for zone save payloads |
@@ -16,7 +19,7 @@ React components for the Home Audio module (`/audio`).
 | `source-settings-patch.ts` | Shared diff/patch helpers for source save payloads |
 | `audio-section-tabs.tsx` | Pill-style icon tab bar for the audio page sections |
 | `audio-bottom-nav.tsx` | Fixed bottom nav with audio section tabs |
-| `audio-now-playing-dropdown-panel.tsx` | Minimal now-playing panel for the header dropdown |
+| `audio-now-playing-dropdown-panel.tsx` | Now-playing panel for the header dropdown (track info, progress, zone quick actions) |
 | `audio-playback-ui.tsx` | Shared playback progress, cover art, and time formatting |
 
 ## Zone edit flow

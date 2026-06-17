@@ -21,6 +21,7 @@ add_executable(homepi-metadata
   src/service.cpp
   src/pcm-router-subscriber.cpp
   src/pipe-manager.cpp
+  src/metadata-parser.cpp
   src/mqtt-subscriber.cpp
   src/progress-parser.cpp
   src/now-playing-state.cpp

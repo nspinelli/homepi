@@ -46,14 +46,16 @@ const defaultPcmPlayback: AudioSnapshot["pcm"]["playback"] = {
  * @returns Snapshot with normalized PCM playback state.
  */
 function normalizeAudioSnapshot(snapshot: AudioSnapshot): AudioSnapshot {
+  const playback = {
+    ...defaultPcmPlayback,
+    ...snapshot.pcm.playback,
+    progressSyncedAt: Date.now(),
+  };
   return {
     ...snapshot,
     pcm: {
       ...snapshot.pcm,
-      playback: {
-        ...defaultPcmPlayback,
-        ...snapshot.pcm.playback,
-      },
+      playback,
     },
   };
 }
@@ -206,11 +208,39 @@ function readMetadataField(
   key: string,
   current: string | undefined
 ): string | undefined {
+  if (!(key in payload)) {
+    return current;
+  }
   const value = payload[key];
   if (typeof value !== "string") {
     return current;
   }
-  return value.length > 0 ? value : current;
+  return value;
+}
+
+/**
+ * Merges playback timing from metadata events without wiping known duration.
+ * @param payload - Metadata event payload.
+ * @param key - Playback field to read.
+ * @param current - Current playback value.
+ * @returns Merged playback milliseconds.
+ */
+function readPlaybackMs(
+  payload: Record<string, unknown>,
+  key: "positionMs" | "durationMs",
+  current: number
+): number {
+  const value = payload[key];
+  if (typeof value !== "number") {
+    return current;
+  }
+  if (key === "durationMs" && value <= 0) {
+    return current;
+  }
+  if (key === "positionMs" && value === 0 && current > 0) {
+    return current;
+  }
+  return value;
 }
 
 /**
@@ -252,20 +282,17 @@ function applyMetadataSnapshotToPcm(
       clientName: readMetadataField(payload, "clientName", pcm.metadata.clientName),
       clientModel: readMetadataField(payload, "clientModel", pcm.metadata.clientModel),
     },
+    hasCoverArt:
+      typeof payload.hasCoverArt === "boolean" ? payload.hasCoverArt : pcm.hasCoverArt,
     playback: {
+      ...pcm.playback,
       playing:
         payload.playing === true
           ? true
           : hasText && payload.playing === false
             ? false
             : pcm.playback.playing,
-      positionMs:
-        typeof payload.positionMs === "number" ? payload.positionMs : pcm.playback.positionMs,
-      durationMs:
-        typeof payload.durationMs === "number" ? payload.durationMs : pcm.playback.durationMs,
-      progressSyncedAt: Date.now(),
     },
-    hasCoverArt: payload.hasCoverArt === true ? true : pcm.hasCoverArt,
   };
 }
 
@@ -284,14 +311,29 @@ function applyMetadataProgressToPcm(
   }
 
   const playback = { ...pcm.playback };
-  if (typeof payload.positionMs === "number") {
-    playback.positionMs = payload.positionMs;
+  const positionMs = typeof payload.positionMs === "number" ? payload.positionMs : null;
+  const durationMs = typeof payload.durationMs === "number" ? payload.durationMs : null;
+  const playing = typeof payload.playing === "boolean" ? payload.playing : null;
+
+  if (positionMs === 0 && durationMs === 0 && playing === false) {
+    if (pcm.playback.playing || pcm.playback.positionMs > 0) {
+      return pcm;
+    }
+    playback.positionMs = 0;
+    playback.durationMs = 0;
+    playback.playing = false;
+    playback.progressSyncedAt = Date.now();
+    return { ...pcm, playback };
   }
-  if (typeof payload.durationMs === "number") {
-    playback.durationMs = payload.durationMs;
+
+  if (positionMs !== null) {
+    playback.positionMs = positionMs;
   }
-  if (typeof payload.playing === "boolean") {
-    playback.playing = payload.playing;
+  if (durationMs !== null) {
+    playback.durationMs = readPlaybackMs(payload, "durationMs", playback.durationMs);
+  }
+  if (playing !== null) {
+    playback.playing = playing;
   }
   playback.progressSyncedAt = Date.now();
   return { ...pcm, playback };
@@ -459,7 +501,7 @@ function patchPcmFromEvent(
       playback.positionMs = payload.positionMs;
     }
     if (typeof payload.durationMs === "number") {
-      playback.durationMs = payload.durationMs;
+      playback.durationMs = readPlaybackMs(payload, "durationMs", playback.durationMs);
     }
     playback.progressSyncedAt = Date.now();
     return { ...pcm, playback };
@@ -769,7 +811,7 @@ function useAudioModuleState(): {
           snapshot.pcm = {
             ...snapshot.pcm,
             metadata: {},
-            playback: { playing: false, positionMs: 0, durationMs: 0 },
+            playback: { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
             hasCoverArt: false,
           };
         }
@@ -1162,7 +1204,7 @@ function useAudioModuleState(): {
       playing: snapshot.pcm.playback?.playing ?? false,
       positionMs: snapshot.pcm.playback?.positionMs ?? 0,
       durationMs: snapshot.pcm.playback?.durationMs ?? 0,
-      progressSyncedAt: snapshot.pcm.playback?.progressSyncedAt ?? Date.now(),
+      progressSyncedAt: snapshot.pcm.playback.progressSyncedAt || Date.now(),
       volume: ownerZone?.volume ?? 0,
       coverUrl,
     };

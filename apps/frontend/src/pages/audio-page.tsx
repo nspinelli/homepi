@@ -3,7 +3,7 @@ import { ArrowLeft, Eye, EyeOff } from "lucide-react";
 
 import { isSourceEnabled } from "@/lib/is-source-enabled.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
-import { zoneInitialVolume } from "@/lib/zone-initial-volume.js";
+import { zoneCardVolume } from "@/lib/zone-card-volume.js";
 import { Link, useNavigate } from "react-router-dom";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
@@ -24,20 +24,6 @@ import {
 } from "@/hooks/use-audio-module.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
 import type { HifiSource, HifiZone } from "@/types/audio-types.js";
-
-/**
- * Volume shown on the zone card slider (live when on or streamed, initial when off).
- * @param zone - Hi-Fi zone row.
- * @param isStreamedTo - Whether PCM router has an active AirPlay route to this zone.
- * @returns Volume 0–100 for the slider display.
- */
-function zoneCardVolume(zone: HifiZone, isStreamedTo: boolean): number {
-  const initialVolume = zoneInitialVolume(zone);
-  if ((zone.power ?? 0) === 1 || isStreamedTo) {
-    return zone.volume ?? initialVolume;
-  }
-  return initialVolume;
-}
 
 /**
  * Sort priority for source cards: AirPlay first, then enabled, then disabled.
@@ -132,7 +118,7 @@ export function AudioPage(): React.JSX.Element {
 
   return (
     <>
-    <main className="mx-auto max-w-5xl overflow-x-hidden px-4 py-8">
+    <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-8">
       <div className="mb-6">
         <Button
           variant="ghost"

@@ -82,6 +82,34 @@ int Service::run() {
                 SnapshotBuilder::build_payload(impl_->state.snapshot()));
   };
 
+  const auto persist_and_emit_progress = [&](int zone_id, int position_ms, int duration_ms,
+                                             bool playing) {
+    if (!impl_->state.update_progress(zone_id, position_ms, duration_ms, playing)) {
+      return;
+    }
+    const auto snapshot = impl_->state.snapshot();
+    if (snapshot.duration_ms > 0 && !snapshot.track_id.empty()) {
+      impl_->repository->cache_track_duration(snapshot.track_id, snapshot.duration_ms);
+    }
+    impl_->repository->save_snapshot(snapshot);
+    events.emit("modules.metadata.progress", "metadata_progress_updated", "progress",
+                SnapshotBuilder::build_progress_payload(
+                    zone_id,
+                    snapshot.position_ms,
+                    snapshot.duration_ms,
+                    playing));
+  };
+
+  const auto apply_cached_duration = [&](int zone_id) {
+    const auto snapshot = impl_->state.snapshot();
+    if (snapshot.duration_ms > 0 || snapshot.track_id.empty()) {
+      return;
+    }
+    if (const auto cached = impl_->repository->load_cached_track_duration(snapshot.track_id)) {
+      persist_and_emit_progress(zone_id, -1, *cached, snapshot.playing);
+    }
+  };
+
   const auto persist_and_emit_field = [&](int zone_id, const std::string& field,
                                           const std::string& value) {
     std::string resolvedField = field;
@@ -98,21 +126,9 @@ int Service::run() {
     impl_->repository->save_snapshot(snapshot);
     events.emit("modules.metadata.now_playing", "metadata_field_updated", resolvedField,
                 SnapshotBuilder::build_field_payload(zone_id, resolvedField, value));
-  };
-
-  const auto persist_and_emit_progress = [&](int zone_id, int position_ms, int duration_ms,
-                                             bool playing) {
-    if (!impl_->state.update_progress(zone_id, position_ms, duration_ms, playing)) {
-      return;
+    if (resolvedField == "track_id") {
+      apply_cached_duration(zone_id);
     }
-    const auto snapshot = impl_->state.snapshot();
-    impl_->repository->save_snapshot(snapshot);
-    events.emit("modules.metadata.progress", "metadata_progress_updated", "progress",
-                SnapshotBuilder::build_progress_payload(
-                    zone_id,
-                    snapshot.position_ms,
-                    snapshot.duration_ms,
-                    playing));
   };
 
   const auto persist_and_emit_playing = [&](int zone_id, bool playing) {
@@ -157,15 +173,61 @@ int Service::run() {
       }
       impl_->state.update_progress(owner_zone_id, restored->position_ms, restored->duration_ms,
                                   restored->playing);
+      if (!restored->track_id.empty()) {
+        impl_->state.update_field(owner_zone_id, "track_id", restored->track_id);
+      }
       if (restored->has_cover_art) {
         impl_->state.mark_cover_art(owner_zone_id);
       }
+      apply_cached_duration(owner_zone_id);
     }
     emit_snapshot("owner-changed");
   };
 
   impl_->pipes = std::make_unique<PipeManager>();
   PipeManagerCallbacks pipe_callbacks;
+  pipe_callbacks.on_field = [&](int zone_id, const std::string& field, const std::string& value) {
+    persist_and_emit_field(zone_id, field, value);
+  };
+  pipe_callbacks.on_progress = [&](int zone_id, int position_ms, int duration_ms, bool playing) {
+    persist_and_emit_progress(zone_id, position_ms, duration_ms, playing);
+  };
+  pipe_callbacks.on_playback_state = persist_and_emit_playing;
+  pipe_callbacks.on_cover_art = [&](int zone_id, const std::vector<std::uint8_t>& bytes) {
+    if (!impl_->state.mark_cover_art(zone_id, true)) {
+      return;
+    }
+    MetadataStateRepository::write_cover_art(config_.cache_dir, zone_id, bytes);
+    impl_->repository->save_snapshot(impl_->state.snapshot());
+    events.emit("modules.metadata.cover_art", "metadata_cover_updated", "cover",
+                SnapshotBuilder::build_cover_payload(zone_id));
+  };
+  pipe_callbacks.on_metadata_bundle_start = [&](int zone_id) {
+    if (zone_id != impl_->state.snapshot().owner_zone_id) {
+      return;
+    }
+    impl_->state.clear_metadata_fields();
+    MetadataStateRepository::delete_cover_art(config_.cache_dir, zone_id);
+    impl_->repository->save_snapshot(impl_->state.snapshot());
+    emit_snapshot("metadata-bundle-start");
+  };
+  pipe_callbacks.on_session_cleared = [&](int zone_id) {
+    if (zone_id != impl_->state.snapshot().owner_zone_id) {
+      return;
+    }
+    const auto snapshot = impl_->state.snapshot();
+    if (snapshot.duration_ms <= 0 && snapshot.position_ms > 0) {
+      persist_and_emit_progress(zone_id, snapshot.position_ms, snapshot.position_ms, false);
+      if (!snapshot.track_id.empty()) {
+        impl_->repository->cache_track_duration(snapshot.track_id, snapshot.position_ms);
+      }
+    }
+    impl_->state.clear();
+    MetadataStateRepository::delete_cover_art(config_.cache_dir, zone_id);
+    impl_->repository->clear_owner(zone_id);
+    events.emit("modules.metadata.now_playing", "metadata_cleared", "session-cleared", "{}");
+    emit_snapshot("session-cleared");
+  };
   impl_->pipes->start(config_.pipe_prefix, config_.zone_count, std::move(pipe_callbacks));
 
   MqttSubscriberCallbacks mqtt_callbacks;
@@ -181,18 +243,29 @@ int Service::run() {
     events.emit("modules.metadata.cover_art", "metadata_cover_updated", "cover",
                 SnapshotBuilder::build_cover_payload(zone_id));
   };
-  mqtt_callbacks.on_metadata_bundle_start = [this, &events, &emit_snapshot](int zone_id) {
+  mqtt_callbacks.on_metadata_bundle_start = [this, &emit_snapshot](int zone_id) {
     if (zone_id != impl_->state.snapshot().owner_zone_id) {
       return;
     }
-    impl_->state.clear_track_metadata();
+    impl_->state.clear_metadata_fields();
+    MetadataStateRepository::delete_cover_art(config_.cache_dir, zone_id);
+    impl_->repository->save_snapshot(impl_->state.snapshot());
     emit_snapshot("metadata-bundle-start");
   };
-  mqtt_callbacks.on_session_cleared = [this, &events, &emit_snapshot](int zone_id) {
+  mqtt_callbacks.on_session_cleared = [this, &events, &emit_snapshot, &persist_and_emit_progress](
+                                          int zone_id) {
     if (zone_id != impl_->state.snapshot().owner_zone_id) {
       return;
     }
+    const auto snapshot = impl_->state.snapshot();
+    if (snapshot.duration_ms <= 0 && snapshot.position_ms > 0) {
+      persist_and_emit_progress(zone_id, snapshot.position_ms, snapshot.position_ms, false);
+      if (!snapshot.track_id.empty()) {
+        impl_->repository->cache_track_duration(snapshot.track_id, snapshot.position_ms);
+      }
+    }
     impl_->state.clear();
+    MetadataStateRepository::delete_cover_art(config_.cache_dir, zone_id);
     impl_->repository->clear_owner(zone_id);
     events.emit("modules.metadata.now_playing", "metadata_cleared", "session-cleared", "{}");
     emit_snapshot("session-cleared");

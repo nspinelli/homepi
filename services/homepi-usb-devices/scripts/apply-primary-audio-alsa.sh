@@ -54,8 +54,7 @@ primary_card_usb_ids() {
   local depth=0
   while [[ -L "${usb_dev}" || -d "${usb_dev}" ]] && (( depth < 8 )); do
     if [[ -f "${usb_dev}/idVendor" && -f "${usb_dev}/idProduct" ]]; then
-      tr '[:upper:]' '[:lower:]' < "${usb_dev}/idVendor"
-      tr '[:upper:]' '[:lower:]' < "${usb_dev}/idProduct"
+      echo "$(tr '[:upper:]' '[:lower:]' < "${usb_dev}/idVendor") $(tr '[:upper:]' '[:lower:]' < "${usb_dev}/idProduct")"
       return 0
     fi
     usb_dev="${usb_dev}/.."
@@ -93,46 +92,82 @@ usb_port_from_sound_card() {
   return 1
 }
 
+usb_port_has_audio_interface() {
+  local port="$1"
+  local iface class
+  for iface in /sys/bus/usb/devices/"${port}"/"${port}":*; do
+    [[ -f "${iface}/bInterfaceClass" ]] || continue
+    class=$(cat "${iface}/bInterfaceClass")
+    if [[ "${class}" == "01" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 list_usb_audio_ports() {
-  local dev vendor product
+  local dev port
   for dev in /sys/bus/usb/devices/*; do
     [[ "${dev}" =~ /[0-9]+-[0-9]+$ ]] || continue
     [[ -f "${dev}/idVendor" && -f "${dev}/idProduct" ]] || continue
-    for child in "${dev}"/*:*; do
-      [[ -d "${child}" ]] || continue
-      if [[ "$(basename "${child}")" =~ :1\.0$ ]]; then
-        echo "$(basename "${dev}")"
-        break
-      fi
-    done
+    port=$(basename "${dev}")
+    if usb_port_has_audio_interface "${port}"; then
+      echo "${port}"
+    fi
+  done
+}
+
+rebind_stranded_usb_ports() {
+  local dev port
+  for dev in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
+    [[ -f "${dev}/idVendor" ]] || continue
+    [[ -e "${dev}/driver" ]] && continue
+    port=$(basename "${dev}")
+    log "Re-binding stranded USB port ${port}"
+    echo "${port}" > /sys/bus/usb/drivers/usb/bind 2>/dev/null || true
+  done
+}
+
+stop_audio_consumers() {
+  local unit
+  for unit in homepi-pcm-router.service homepi-shairport-supervisor.service; do
+    if systemctl is-active "${unit}" >/dev/null 2>&1; then
+      log "Stopping ${unit} during ALSA reload"
+      systemctl stop "${unit}"
+    fi
   done
 }
 
 reload_usb_audio_for_primary() {
   local primary_port="$1"
   local port
-  log "Reloading USB audio so ${PRIMARY_CARD_ID} can claim index 2 for ${VID}:${PID}"
+  local -a audio_ports=()
 
-  if systemctl is-active homepi-pcm-router.service >/dev/null 2>&1; then
-    log "Stopping homepi-pcm-router during ALSA reload"
-    systemctl stop homepi-pcm-router.service
-  fi
+  while IFS= read -r port; do
+    [[ -n "${port}" ]] && audio_ports+=("${port}")
+  done < <(list_usb_audio_ports)
+
+  log "Reloading USB audio so ${PRIMARY_CARD_ID} can bind to ${VID}:${PID}"
+
+  stop_audio_consumers
 
   modprobe -r snd-usb-audio 2>/dev/null || true
-  while IFS= read -r port; do
-    [[ -n "${port}" ]] || continue
+  for port in "${audio_ports[@]}"; do
     echo "${port}" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null || true
-  done < <(list_usb_audio_ports)
+  done
   sleep 2
 
   echo "${primary_port}" > /sys/bus/usb/drivers/usb/bind
   sleep 3
 
-  while IFS= read -r port; do
+  for port in "${audio_ports[@]}"; do
     [[ -n "${port}" && "${port}" != "${primary_port}" ]] || continue
     echo "${port}" > /sys/bus/usb/drivers/usb/bind 2>/dev/null || true
     sleep 1
-  done < <(list_usb_audio_ports)
+  done
+
+  modprobe snd-usb-audio 2>/dev/null || true
+  rebind_stranded_usb_ports
 }
 
 find_usb_sysfs_name() {
@@ -194,12 +229,29 @@ main() {
   if has_primary_card && ! primary_card_matches_modprobe; then
     log "${PRIMARY_CARD_ID} is bound to a different USB device — reloading USB audio"
     reload_usb_audio_for_primary "${usb_name}"
+  elif ! has_primary_card; then
+    log "Stable ALSA name ${PRIMARY_CARD_ID} missing — reloading USB audio"
+    reload_usb_audio_for_primary "${usb_name}"
   else
     rebind_usb_device "${usb_name}"
   fi
 
   if wait_for_primary_card; then
-    log "${PRIMARY_CARD_ID} detected after USB rebind"
+    log "${PRIMARY_CARD_ID} detected after USB apply"
+    aplay -l | grep -i "${PRIMARY_CARD_ID}" || true
+    exit 0
+  fi
+
+  if has_primary_card; then
+    log "${PRIMARY_CARD_ID} not detected after ${WAIT_SEC}s"
+    exit 1
+  fi
+
+  log "Rebind did not apply ${PRIMARY_CARD_ID} — retrying with full USB audio reload"
+  reload_usb_audio_for_primary "${usb_name}"
+
+  if wait_for_primary_card; then
+    log "${PRIMARY_CARD_ID} detected after USB audio reload"
     aplay -l | grep -i "${PRIMARY_CARD_ID}" || true
     exit 0
   fi

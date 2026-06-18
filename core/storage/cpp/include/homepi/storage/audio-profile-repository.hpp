@@ -22,6 +22,14 @@ class AudioProfileRepository {
   std::optional<AudioCapabilities> get_capabilities(const std::string& device_id) const;
 
   /**
+   * Loads the best stored capabilities for a USB identity, ignoring ALSA card suffix drift.
+   * @param device_identity Device id with or without an :alsa:N suffix.
+   * @return Capabilities for the identity when any probed record exists.
+   */
+  std::optional<AudioCapabilities> get_capabilities_for_identity(
+      const std::string& device_identity) const;
+
+  /**
    * Loads the active audio configuration for consumers.
    * @return Active config derived from operating profile tables.
    */

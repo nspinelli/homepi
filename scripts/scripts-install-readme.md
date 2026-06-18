@@ -4,6 +4,8 @@ Operational install scripts for the Raspberry Pi production stack.
 
 ## Quick install
 
+See **[fresh-pi-runbook.md](./fresh-pi-runbook.md)** for the full path from bare Pi to configured production state (install + UI assignments + AirPlay).
+
 ```bash
 cd /home/homepi/homepi
 sudo bash scripts/install-preflight.sh    # optional if using install-operational (runs automatically)
@@ -23,6 +25,7 @@ bash scripts/verify-operational.sh
 | `install-services.sh` | Native services only (dependency order) |
 | `verify-operational.sh` | Service, MQTT, ALSA, HTTP health checks |
 | `verify-post-reboot.sh` | Run after a controlled reboot test |
+| `fresh-pi-runbook.md` | End-to-end fresh Pi install and configuration guide |
 | `verify-nqptp-patch.sh` | Offline check that nqptp patch applies to pinned upstream |
 | `lib/install-common.sh` | Shared backup, apt, sudoers, patch helpers |
 
@@ -63,7 +66,7 @@ sudo systemctl restart ssh
 - **Install** sets `HOMEPI_INSTALL_MODE=1` and `HOMEPI_ALLOW_REBOOT=0` — no automatic reboot during install.
 - **pcm-router** installs `snd-aloop` loopback config; loopback cards may require a manual reboot.
 - **USB primary audio** deploy is skipped during install; it runs only when saving assignments in the UI.
-- **post-assignment-hook** may reboot when ALSA rebind fails, unless `HOMEPI_ALLOW_REBOOT=0`.
+- **post-assignment-hook** will not auto-reboot by default (`HOMEPI_ALLOW_REBOOT=0`). Set `HOMEPI_ALLOW_REBOOT=1` in `/opt/homepi/services/usb-devices/env/.env` to re-enable after primary audio rebind fails.
 
 Test UI assignment saves safely:
 

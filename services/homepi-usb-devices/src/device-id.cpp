@@ -36,4 +36,17 @@ std::string build_device_id(const std::string& id_vendor, const std::string& id_
   return "usb:fallback:" + fnv1a_hex(fallback_source);
 }
 
+std::string strip_alsa_suffix(const std::string& device_id) {
+  const std::string suffix = ":alsa:";
+  const size_t pos = device_id.rfind(suffix);
+  if (pos == std::string::npos) {
+    return device_id;
+  }
+  return device_id.substr(0, pos);
+}
+
+bool device_identity_matches(const std::string& left, const std::string& right) {
+  return strip_alsa_suffix(left) == strip_alsa_suffix(right);
+}
+
 }  // namespace homepi::usb_devices

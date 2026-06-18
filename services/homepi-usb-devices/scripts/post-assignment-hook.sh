@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOCK_FILE="/run/homepi/post-assignment-hook.lock"
 SERIAL_CHANGED="${1:-${SERIAL_CHANGED:-1}}"
 AUDIO_CHANGED="${2:-${AUDIO_CHANGED:-1}}"
-HOMEPI_ALLOW_REBOOT="${HOMEPI_ALLOW_REBOOT:-1}"
+HOMEPI_ALLOW_REBOOT="${HOMEPI_ALLOW_REBOOT:-0}"
 
 log() { echo "==> $*"; }
 
@@ -18,7 +18,7 @@ schedule_reboot() {
 
   if [[ "${HOMEPI_ALLOW_REBOOT}" != "1" ]]; then
     echo "Reboot blocked (HOMEPI_ALLOW_REBOOT=0). Apply ALSA changes manually or set HOMEPI_ALLOW_REBOOT=1." >&2
-    exit 1
+    return 1
   fi
 
   local delay="${HOMEPI_REBOOT_DELAY_SEC:-0}"
@@ -67,7 +67,12 @@ restart_service() {
   wait_for_service "${unit}" "${socket_path}" 30 || true
 }
 
-PRIMARY_MODPROBE_CHANGED=false
+if [[ "${SERIAL_CHANGED}" == "1" ]]; then
+  if ! bash "${SCRIPT_DIR}/deploy-udev-rules.sh"; then
+    log "WARN: serial udev deploy skipped (assign Primary Serial or check /dev/vHifi)"
+  fi
+  restart_service "homepi-hifi-serial.service" "/run/homepi/hifi-serial.sock"
+fi
 
 if [[ "${AUDIO_CHANGED}" == "1" ]]; then
   deploy_rc=0
@@ -78,27 +83,33 @@ if [[ "${AUDIO_CHANGED}" == "1" ]]; then
   fi
 
   if [[ "${deploy_rc}" -eq 0 ]]; then
-    PRIMARY_MODPROBE_CHANGED=true
     log "Primary audio modprobe changed — applying stable ALSA name"
+  elif [[ "${deploy_rc}" -eq 2 ]]; then
+    log "Primary audio modprobe unchanged — applying stable ALSA name if needed"
+  elif [[ -f /etc/modprobe.d/homepi-audio-primary.conf ]] \
+    && grep -q '^options snd-usb-audio' /etc/modprobe.d/homepi-audio-primary.conf; then
+    log "WARN: generated modprobe not ready; using installed /etc/modprobe.d/homepi-audio-primary.conf"
+    deploy_rc=2
+  else
+    log "WARN: primary audio modprobe deploy failed (check Primary Audio Output assignment)"
+  fi
+
+  if [[ "${deploy_rc}" -eq 0 || "${deploy_rc}" -eq 2 ]]; then
     if bash "${SCRIPT_DIR}/apply-primary-audio-alsa.sh"; then
       log "HomePiPrimary ALSA name is active"
     else
-      schedule_reboot "HomePiPrimary ALSA name requires reboot after primary audio modprobe change"
+      schedule_reboot "HomePiPrimary ALSA name requires reboot after primary audio modprobe change" \
+        || log "WARN: primary audio apply incomplete; reboot blocked or deferred"
     fi
-  elif [[ "${deploy_rc}" -ne 2 ]]; then
-    log "WARN: primary audio modprobe deploy failed (check Primary Audio Output assignment)"
   fi
-fi
-
-if [[ "${SERIAL_CHANGED}" == "1" ]]; then
-  if ! bash "${SCRIPT_DIR}/deploy-udev-rules.sh"; then
-    log "WARN: serial udev deploy skipped (assign Primary Serial or check /dev/vHifi)"
-  fi
-  restart_service "homepi-hifi-serial.service" "/run/homepi/hifi-serial.sock"
 fi
 
 if [[ "${AUDIO_CHANGED}" == "1" ]]; then
   restart_service "homepi-pcm-router.service" "/run/homepi/pcm-router.sock"
+  if systemctl is-enabled homepi-shairport-supervisor.service >/dev/null 2>&1; then
+    log "Restarting homepi-shairport-supervisor.service"
+    systemctl restart homepi-shairport-supervisor.service || true
+  fi
 fi
 
 log "Post-assignment hook complete"

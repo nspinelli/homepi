@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include "homepi/storage/audio-profile-types.hpp"
+#include "homepi/usb-devices/device-id.hpp"
 
 namespace homepi::usb_devices {
 
@@ -246,6 +247,104 @@ UsbAssignments AssignmentRepository::get_assignments() const {
   return assignments;
 }
 
+namespace {
+
+std::optional<std::string> resolve_present_device_id(const std::optional<std::string>& assigned_id,
+                                                     const std::vector<UsbDevice>& devices,
+                                                     DeviceKind kind) {
+  if (!assigned_id || assigned_id->empty()) {
+    return std::nullopt;
+  }
+
+  const auto exact = std::find_if(
+      devices.begin(), devices.end(), [&](const UsbDevice& device) {
+        return device.device_id == *assigned_id && device.present;
+      });
+  if (exact != devices.end()) {
+    return assigned_id;
+  }
+
+  const auto matches = [&](const UsbDevice& device) {
+    return device.kind == kind && device.present &&
+           device_identity_matches(device.device_id, *assigned_id);
+  };
+
+  const auto resolved = std::find_if(devices.begin(), devices.end(), matches);
+  if (resolved == devices.end()) {
+    return std::nullopt;
+  }
+  return resolved->device_id;
+}
+
+}  // namespace
+
+bool AssignmentRepository::heal_assignments(UsbAssignments& assignments,
+                                            const std::vector<UsbDevice>& devices) {
+  bool changed = false;
+
+  const auto heal = [&](std::optional<std::string>& id, DeviceKind kind) {
+    if (!id || id->empty()) {
+      return;
+    }
+    const auto resolved = resolve_present_device_id(id, devices, kind);
+    if (resolved && *resolved != *id) {
+      *id = *resolved;
+      changed = true;
+    }
+  };
+
+  heal(assignments.serial, DeviceKind::Serial);
+  heal(assignments.audio_primary, DeviceKind::Audio);
+  heal(assignments.paging, DeviceKind::Audio);
+  return changed;
+}
+
+bool AssignmentRepository::persist_healed_assignments(
+    const UsbAssignments& assignments, const std::vector<UsbDevice>& devices) {
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  const char* sql =
+      "UPDATE usb_assignments SET serial_device_id = ?, audio_primary_device_id = ?, "
+      "paging_device_id = ?, updated_at = ? WHERE id = 1";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    return false;
+  }
+
+  const auto bind_optional = [&](int index, const std::optional<std::string>& value) {
+    if (!value || value->empty()) {
+      sqlite3_bind_null(stmt, index);
+      return;
+    }
+    sqlite3_bind_text(stmt, index, value->c_str(), -1, SQLITE_TRANSIENT);
+  };
+
+  bind_optional(1, assignments.serial);
+  bind_optional(2, assignments.audio_primary);
+  bind_optional(3, assignments.paging);
+  sqlite3_bind_text(stmt, 4, now.c_str(), -1, SQLITE_TRANSIENT);
+
+  const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+  sqlite3_finalize(stmt);
+  if (!ok) {
+    return false;
+  }
+
+  if (assignments.audio_primary && !assignments.audio_primary->empty()) {
+    const char* profile_sql =
+        "UPDATE audio_operating_profiles SET device_id = ? WHERE role IN "
+        "('primary_audio', 'platform_loopback')";
+    if (sqlite3_prepare_v2(db, profile_sql, -1, &stmt, nullptr) == SQLITE_OK) {
+      sqlite3_bind_text(stmt, 1, assignments.audio_primary->c_str(), -1, SQLITE_TRANSIENT);
+      sqlite3_step(stmt);
+      sqlite3_finalize(stmt);
+    }
+  }
+
+  sync_hifi_controller_serial(db, assignments, devices);
+  return true;
+}
+
 bool AssignmentRepository::set_assignments(const UsbAssignments& assignments,
                                              const std::vector<UsbDevice>& devices,
                                              std::string& error_out) {
@@ -328,15 +427,15 @@ bool AssignmentRepository::set_assignments(const UsbAssignments& assignments,
 
 bool AssignmentRepository::assignments_degraded(const UsbAssignments& assignments,
                                                 const std::vector<UsbDevice>& devices) {
-  auto check = [&](const std::optional<std::string>& id) {
+  auto check = [&](const std::optional<std::string>& id, DeviceKind kind) {
     if (!id || id->empty()) {
       return false;
     }
-    const auto found = std::find_if(devices.begin(), devices.end(),
-                                    [&](const UsbDevice& d) { return d.device_id == *id; });
-    return found == devices.end() || !found->present;
+    return !resolve_present_device_id(id, devices, kind).has_value();
   };
-  return check(assignments.serial) || check(assignments.audio_primary) || check(assignments.paging);
+  return check(assignments.serial, DeviceKind::Serial) ||
+         check(assignments.audio_primary, DeviceKind::Audio) ||
+         check(assignments.paging, DeviceKind::Audio);
 }
 
 void* AssignmentRepository::db_handle() const { return db_; }

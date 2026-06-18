@@ -74,8 +74,11 @@ void refresh_devices() {
   }
   const auto scanned = homepi::usb_devices::scan_usb_devices();
   g_repository->upsert_devices(scanned);
-  const auto assignments = g_repository->get_assignments();
+  auto assignments = g_repository->get_assignments();
   const auto devices = g_repository->list_devices();
+  if (homepi::usb_devices::AssignmentRepository::heal_assignments(assignments, devices)) {
+    g_repository->persist_healed_assignments(assignments, devices);
+  }
   if (g_audio_profiles != nullptr) {
     g_audio_profiles->refresh_audio_capabilities(devices);
     g_audio_profiles->validate_active_profile(assignments, "hotplug");

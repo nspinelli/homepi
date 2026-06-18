@@ -81,7 +81,7 @@ When **Primary Audio Output** changes, the post-assignment hook automatically:
 
 1. Deploys updated modprobe options
 2. Rebinds the assigned USB DAC to apply `HomePiPrimaryAudio`
-3. Reboots the Pi if the stable name is still missing
+3. Reboots the Pi only if the stable name is still missing **and** `HOMEPI_ALLOW_REBOOT=1` (default is `0` — no auto-reboot)
 4. Restarts `homepi-pcm-router` and `homepi-hifi-serial`
 
 Manual replug is no longer required in the common case; reboot is automatic only when USB rebind cannot apply the ALSA name.

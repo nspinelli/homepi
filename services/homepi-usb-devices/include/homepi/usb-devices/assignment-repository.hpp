@@ -56,6 +56,23 @@ class AssignmentRepository {
   UsbAssignments get_assignments() const;
 
   /**
+   * Remaps stale assignment ids to currently present devices with the same identity.
+   * @param assignments Assignments to heal in place.
+   * @param devices Current device inventory.
+   * @return True when any assignment id changed.
+   */
+  static bool heal_assignments(UsbAssignments& assignments, const std::vector<UsbDevice>& devices);
+
+  /**
+   * Persists healed assignment ids without re-validating profile tuples.
+   * @param assignments Healed assignments.
+   * @param devices Current device inventory.
+   * @return True on success.
+   */
+  bool persist_healed_assignments(const UsbAssignments& assignments,
+                                  const std::vector<UsbDevice>& devices);
+
+  /**
    * Persists role assignments after validation.
    * @param assignments Assignments to save.
    * @param devices Available devices for validation.

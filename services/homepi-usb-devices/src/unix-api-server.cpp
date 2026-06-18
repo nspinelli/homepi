@@ -254,7 +254,12 @@ std::string UnixApiServer::handle_request(const std::string& line) const {
   }
 
   if (method == "getAssignments") {
-    return ok(assignments_to_json(context_.repository->get_assignments()));
+    auto assignments = context_.repository->get_assignments();
+    const auto devices = context_.repository->list_devices();
+    if (AssignmentRepository::heal_assignments(assignments, devices)) {
+      context_.repository->persist_healed_assignments(assignments, devices);
+    }
+    return ok(assignments_to_json(assignments));
   }
 
   if (method == "getAudioCapabilities") {

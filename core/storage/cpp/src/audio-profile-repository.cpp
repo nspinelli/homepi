@@ -98,6 +98,67 @@ std::optional<AudioCapabilities> AudioProfileRepository::get_capabilities(
   return caps;
 }
 
+namespace {
+
+std::string strip_alsa_suffix(const std::string& device_id) {
+  const std::string suffix = ":alsa:";
+  const size_t pos = device_id.rfind(suffix);
+  if (pos == std::string::npos) {
+    return device_id;
+  }
+  return device_id.substr(0, pos);
+}
+
+}  // namespace
+
+std::optional<AudioCapabilities> AudioProfileRepository::get_capabilities_for_identity(
+    const std::string& device_identity) const {
+  const std::string identity = strip_alsa_suffix(device_identity);
+  const std::string pattern = identity + ":alsa:%";
+
+  const char* sql =
+      "SELECT device_id, probed_at, probe_error FROM usb_audio_capabilities "
+      "WHERE device_id = ? OR device_id LIKE ? "
+      "ORDER BY CASE WHEN device_id = ? THEN 0 ELSE 1 END, probed_at DESC LIMIT 1;";
+  sqlite3_stmt* stmt = nullptr;
+  if (sqlite3_prepare_v2(db_.handle(), sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw RepositoryError(sqlite3_errmsg(db_.handle()));
+  }
+  sqlite3_bind_text(stmt, 1, identity.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 2, pattern.c_str(), -1, SQLITE_TRANSIENT);
+  sqlite3_bind_text(stmt, 3, identity.c_str(), -1, SQLITE_TRANSIENT);
+  if (sqlite3_step(stmt) != SQLITE_ROW) {
+    sqlite3_finalize(stmt);
+    return std::nullopt;
+  }
+
+  AudioCapabilities caps;
+  const char* matched_id = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+  caps.device_id = matched_id != nullptr ? matched_id : identity;
+  const char* probed_at = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+  caps.probed_at = probed_at != nullptr ? probed_at : "";
+  const char* probe_error = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+  if (probe_error != nullptr && probe_error[0] != '\0') {
+    caps.probe_error = probe_error;
+  }
+  sqlite3_finalize(stmt);
+
+  const char* tuple_sql =
+      "SELECT sample_rate, channels, sample_format FROM supported_profile_tuples "
+      "WHERE device_id = ? ORDER BY sample_rate, channels, sample_format;";
+  if (sqlite3_prepare_v2(db_.handle(), tuple_sql, -1, &stmt, nullptr) != SQLITE_OK) {
+    throw RepositoryError(sqlite3_errmsg(db_.handle()));
+  }
+  sqlite3_bind_text(stmt, 1, caps.device_id.c_str(), -1, SQLITE_TRANSIENT);
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    caps.supported_profile_tuples.push_back(tuple_from_columns(
+        sqlite3_column_int(stmt, 0), sqlite3_column_int(stmt, 1),
+        reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2))));
+  }
+  sqlite3_finalize(stmt);
+  return caps;
+}
+
 ActiveAudioConfig AudioProfileRepository::load_active_config() const {
   ActiveAudioConfig config;
   config.loopback_profile = platform_loopback_default();

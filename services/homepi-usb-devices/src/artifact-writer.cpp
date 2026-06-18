@@ -81,9 +81,8 @@ bool ArtifactWriter::regenerate(const UsbAssignments& assignments,
       if (device->id_vendor.empty() || device->id_product.empty()) {
         out << "# Primary device missing USB vendor/product identity\n";
       } else {
-        out << "options snd-usb-audio index=" << config_.primary_audio_modprobe_index
-            << " id=" << config_.primary_audio_alsa_id << " vid=0x" << device->id_vendor
-            << " pid=0x" << device->id_product << " enable=1\n";
+        out << "options snd-usb-audio id=" << config_.primary_audio_alsa_id << " vid=0x"
+            << device->id_vendor << " pid=0x" << device->id_product << " enable=1\n";
       }
     } else {
       out << "# Assigned primary device not found in inventory\n";

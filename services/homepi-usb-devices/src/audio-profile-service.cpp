@@ -43,7 +43,17 @@ std::optional<homepi::storage::AudioCapabilities> AudioProfileService::load_capa
   }
   homepi::storage::DatabaseConnection db(database_path_, homepi::storage::DatabaseOpenMode::ReadOnly);
   homepi::storage::AudioProfileRepository repo(db);
-  return repo.get_capabilities(device_id);
+  const auto direct = repo.get_capabilities(device_id);
+  if (direct.has_value() && !direct->supported_profile_tuples.empty()) {
+    return direct;
+  }
+  const auto inherited = repo.get_capabilities_for_identity(device_id);
+  if (!inherited.has_value() || inherited->supported_profile_tuples.empty()) {
+    return direct;
+  }
+  homepi::storage::AudioCapabilities resolved = *inherited;
+  resolved.device_id = device_id;
+  return resolved;
 }
 
 void AudioProfileService::refresh_audio_capabilities(const std::vector<UsbDevice>& devices) {
@@ -51,10 +61,15 @@ void AudioProfileService::refresh_audio_capabilities(const std::vector<UsbDevice
     if (device.kind != DeviceKind::Audio || !device.present) {
       continue;
     }
-    const auto capabilities = probe_.probe_playback(device.device_id, device.resolved_alsa_name);
-    if (!capabilities.has_value()) {
+    std::optional<homepi::storage::AudioCapabilities> capabilities =
+        probe_.probe_playback(device.device_id, device.resolved_alsa_name);
+    if (!capabilities.has_value() || capabilities->supported_profile_tuples.empty()) {
+      capabilities = load_capabilities(device.device_id);
+    }
+    if (!capabilities.has_value() || capabilities->supported_profile_tuples.empty()) {
       continue;
     }
+    capabilities->device_id = device.device_id;
     writer_.upsert_capabilities(*capabilities);
     std::ostringstream payload;
     payload << "{\"deviceId\":\"" << json_escape(device.device_id) << "\",\"tupleCount\":"

@@ -30,6 +30,8 @@ export interface AudioModuleState {
   error: string | null;
   savingZone: number | null;
   savingSource: number | null;
+  savingController: boolean;
+  syncingController: boolean;
   togglingPowerZone: number | null;
   sseConnected: boolean;
 }
@@ -681,6 +683,8 @@ function useAudioModuleState(): {
   refresh: () => Promise<void>;
   saveZoneSettings: (zoneNumber: number, patch: ZoneSettingsPatch) => Promise<void>;
   saveSourceSettings: (sourceNumber: number, patch: SourceSettingsPatch) => Promise<void>;
+  saveControllerSettings: (deviceName: string) => Promise<void>;
+  syncController: () => Promise<void>;
   toggleZonePower: (zoneNumber: number) => Promise<void>;
   setZoneVolume: (zoneNumber: number, volume: number) => Promise<void>;
   isZoneStreamedTo: (zoneNumber: number) => boolean;
@@ -696,6 +700,8 @@ function useAudioModuleState(): {
     error: null,
     savingZone: null,
     savingSource: null,
+    savingController: false,
+    syncingController: false,
     togglingPowerZone: null,
     sseConnected: false,
   });
@@ -1021,6 +1027,82 @@ function useAudioModuleState(): {
     []
   );
 
+  const saveControllerSettings = useCallback(async (deviceName: string): Promise<void> => {
+    const config = getAppConfig();
+    setState((current) => ({
+      ...current,
+      savingController: true,
+    }));
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/audio/controller`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceName }),
+      });
+      const body = (await response.json()) as AudioApiResponse<{ deviceName: string }>;
+      if (!body.ok) {
+        throw new Error(body.error?.message ?? "Save failed");
+      }
+
+      setState((current) => {
+        if (!current.snapshot) {
+          return { ...current, savingController: false };
+        }
+        return {
+          ...current,
+          savingController: false,
+          snapshot: {
+            ...current.snapshot,
+            controller: {
+              ...current.snapshot.controller,
+              deviceName,
+            },
+          },
+        };
+      });
+
+      showToast("Controller name saved.", "success");
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        savingController: false,
+      }));
+      showToast(error instanceof Error ? error.message : "Save failed", "error");
+      throw error;
+    }
+  }, []);
+
+  const syncController = useCallback(async (): Promise<void> => {
+    const config = getAppConfig();
+    setState((current) => ({
+      ...current,
+      syncingController: true,
+    }));
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/audio/controller/sync`, {
+        method: "POST",
+      });
+      const body = (await response.json()) as AudioApiResponse<{ synced: boolean }>;
+      if (!body.ok) {
+        throw new Error(body.error?.message ?? "Sync failed");
+      }
+
+      setState((current) => ({
+        ...current,
+        syncingController: false,
+      }));
+      await refresh();
+      showToast("Controller re-synced successfully.", "success");
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        syncingController: false,
+      }));
+      showToast(error instanceof Error ? error.message : "Sync failed", "error");
+      throw error;
+    }
+  }, [refresh]);
+
   const toggleZonePower = useCallback(
     async (zoneNumber: number) => {
       const config = getAppConfig();
@@ -1253,6 +1335,8 @@ function useAudioModuleState(): {
     refresh,
     saveZoneSettings,
     saveSourceSettings,
+    saveControllerSettings,
+    syncController,
     toggleZonePower,
     setZoneVolume,
     isZoneStreamedTo,

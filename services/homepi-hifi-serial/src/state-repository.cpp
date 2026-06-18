@@ -240,6 +240,16 @@ void StateRepository::patch_source(int source_number, const std::string& fields_
   }
 }
 
+void StateRepository::patch_controller(const std::string& fields_json) {
+  auto* db = static_cast<sqlite3*>(db_);
+  const std::string now = utc_now();
+  const std::string& p = fields_json;
+
+  if (p.find("\"deviceName\"") != std::string::npos) {
+    update_controller_text(db, "device_name", json_get_string(p, "deviceName"), now);
+  }
+}
+
 void StateRepository::apply_parsed_update(const ParsedUpdate& update) {
   auto* db = static_cast<sqlite3*>(db_);
   const std::string now = utc_now();
@@ -697,6 +707,7 @@ std::string StateRepository::controller_json() const {
   col_text(10, "serialDeviceId");
   col_text(11, "serialPath");
   col_text(12, "lastFullSyncAt");
+  col_text(13, "updatedAt");
 
   std::string json = out.str();
   if (!json.empty() && json.back() == ',') {

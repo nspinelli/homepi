@@ -639,6 +639,30 @@ std::optional<std::string> parse_quoted_value(const std::string& line, std::size
   return std::nullopt;
 }
 
+/**
+ * Collects quoted string values appearing sequentially after start.
+ * @param line Response line.
+ * @param start Index to begin searching.
+ * @returns Ordered quoted values.
+ */
+std::vector<std::string> collect_quoted_values(const std::string& line, std::size_t start) {
+  std::vector<std::string> values;
+  std::size_t search = start;
+  while (search < line.size()) {
+    const auto q = line.find('"', search);
+    if (q == std::string::npos) {
+      break;
+    }
+    const auto value = parse_quoted_value(line, q);
+    if (!value) {
+      break;
+    }
+    values.push_back(*value);
+    search = quoted_value_end(line, q);
+  }
+  return values;
+}
+
 std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
   std::vector<ParsedUpdate> updates;
   if (line.empty() || line[0] != '#') {
@@ -706,10 +730,18 @@ std::vector<ParsedUpdate> parse_response_line(const std::string& line) {
   }
 
   if (line.rfind("#NETIP", 0) == 0) {
-    const auto quoted = parse_quoted_value(line, 6);
-    if (quoted) {
+    const auto values = collect_quoted_values(line, 6);
+    if (!values.empty()) {
+      std::ostringstream payload;
+      payload << "\"ipAddress\":\"" << json_escape(values[0]) << "\"";
+      if (values.size() >= 2) {
+        payload << ",\"subnetMask\":\"" << json_escape(values[1]) << "\"";
+      }
+      if (values.size() >= 3) {
+        payload << ",\"gateway\":\"" << json_escape(values[2]) << "\"";
+      }
       updates.push_back(make_update("modules.audio.controller", "network_config_changed",
-                                    payload_obj("\"ipAddress\":\"" + json_escape(*quoted) + "\"")));
+                                    payload_obj(payload.str())));
     } else {
       std::string ip = line.substr(6);
       while (!ip.empty() && (ip[0] == ' ' || ip[0] == '"')) {

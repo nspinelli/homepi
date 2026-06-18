@@ -6,6 +6,7 @@ React components for the Home Audio module (`/audio`).
 
 | File | Role |
 |------|------|
+| `audio-controller-card.tsx` | Controller settings form with re-sync and inline name editing |
 | `zone-card.tsx` | Zone grid card with power, volume, and edit affordance |
 | `zone-power-button.tsx` | Shared circular play/stop control for zone cards and header quick actions |
 | `zone-volume-knob.tsx` | Circular volume control for now-playing zone quick actions |

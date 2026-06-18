@@ -296,6 +296,11 @@ int main(int argc, char* argv[]) {
           return ok("{\"patched\":true}");
         }
 
+        if (method == "patchController") {
+          repository.patch_controller(line);
+          return ok("{\"patched\":true}");
+        }
+
         if (method == "getAirplaySource") {
           const auto source = repository.airplay_source_number();
           if (!source.has_value()) {

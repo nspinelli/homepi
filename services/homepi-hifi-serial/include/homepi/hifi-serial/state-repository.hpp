@@ -41,6 +41,12 @@ class StateRepository {
    */
   void patch_source(int source_number, const std::string& fields_json);
 
+  /**
+   * Writes controller fields to the cache without sending serial commands.
+   * @param fields_json JSON object with optional controller fields.
+   */
+  void patch_controller(const std::string& fields_json);
+
   void set_serial_metadata(const std::string& device_id, const std::string& path);
 
   void mark_full_sync_complete();

@@ -20,6 +20,7 @@ import {
   buildSourceControllerCommands,
   type SourceControllerPatch,
 } from "./hifi-source-commands.js";
+import { buildNetNameCommand } from "./hifi-controller-commands.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 import { percentToAppleDb } from "./volume-conversion.js";
 
@@ -107,6 +108,48 @@ export class AudioRoutes {
       if (req.method === "GET" && pathname === "/api/audio/airplay-source") {
         const result = await this.deps.client.getAirplaySource(correlationId);
         sendJson(res, 200, createSuccessResponse({ correlationId, data: result }));
+        return true;
+      }
+
+      if (req.method === "POST" && pathname === "/api/audio/controller/sync") {
+        const result = await this.deps.client.syncController(correlationId);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: result as unknown as Record<string, unknown>,
+          })
+        );
+        return true;
+      }
+
+      if (req.method === "PUT" && pathname === "/api/audio/controller") {
+        const body = JSON.parse(await readBody(req)) as { deviceName?: string };
+        const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim() : "";
+        if (!deviceName) {
+          sendJson(
+            res,
+            400,
+            createErrorResponse({
+              correlationId,
+              error: { code: "INVALID_REQUEST", message: "deviceName is required" },
+            })
+          );
+          return true;
+        }
+
+        await this.deps.client.patchController({ deviceName }, correlationId);
+        await this.deps.client.sendCommand(buildNetNameCommand(deviceName), correlationId);
+
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: { deviceName },
+          })
+        );
         return true;
       }
 

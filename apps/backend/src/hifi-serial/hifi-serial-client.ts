@@ -145,6 +145,18 @@ export class HifiSerialClient {
   }
 
   /**
+   * Updates cached controller fields in SQLite (does not send serial commands).
+   * @param fields - Controller fields to persist.
+   * @param correlationId - Request correlation id.
+   */
+  async patchController(
+    fields: Record<string, unknown>,
+    correlationId: string
+  ): Promise<{ patched: boolean }> {
+    return this.request<{ patched: boolean }>("patchController", correlationId, fields);
+  }
+
+  /**
    * Returns the configured AirPlay source number.
    * @param correlationId - Request correlation id.
    */

@@ -176,6 +176,19 @@ int main() {
   assert(found_z9_disabled);
   assert(found_z8_enabled);
 
+  const auto netip_bulk =
+      parse_response_line("#NETIP\"192.168.1.100\",\"255.255.255.0\",\"192.168.1.1\"");
+  assert(netip_bulk.size() == 1);
+  assert(netip_bulk[0].event_name == "network_config_changed");
+  assert(netip_bulk[0].payload_json.find("\"ipAddress\":\"192.168.1.100\"") != std::string::npos);
+  assert(netip_bulk[0].payload_json.find("\"subnetMask\":\"255.255.255.0\"") != std::string::npos);
+  assert(netip_bulk[0].payload_json.find("\"gateway\":\"192.168.1.1\"") != std::string::npos);
+
+  const auto netip_single = parse_response_line("#NETIP\"10.0.0.5\"");
+  assert(netip_single.size() == 1);
+  assert(netip_single[0].payload_json.find("\"ipAddress\":\"10.0.0.5\"") != std::string::npos);
+  assert(netip_single[0].payload_json.find("subnetMask") == std::string::npos);
+
   assert(cmd_source_name_set(3, "Radio") == "*S3NAME\"Radio\"\r");
   assert(cmd_source_name_set(1, "Line \"A\"") == "*S1NAME\"Line \\\"A\\\"\"\r");
   assert(cmd_source_enable_set(2, 1) == "*S2ENABLE1\r");

@@ -81,6 +81,9 @@ std::string cmd_group_type_query(int group);
 /** Builds network config query. */
 std::string cmd_netconfig_query();
 
+/** Sets controller network device name. */
+std::string cmd_netname_set(const std::string& name);
+
 /** Builds page state query. */
 std::string cmd_page_query();
 

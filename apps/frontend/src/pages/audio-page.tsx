@@ -4,9 +4,9 @@ import { Eye, EyeOff } from "lucide-react";
 import { isSourceEnabled } from "@/lib/is-source-enabled.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
 import { zoneCardVolume } from "@/lib/zone-card-volume.js";
-import { Link } from "react-router-dom";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
+import { AudioControllerCard } from "@/components/audio/audio-controller-card.js";
 import {
   AudioListSectionSkeleton,
   AudioZonesGridSkeleton,
@@ -282,15 +282,7 @@ export function AudioPage(): React.JSX.Element {
           ) : (
           <div className="grid gap-4">
             <AudioConfigurationCard />
-            <div className="rounded-lg border border-border bg-card p-6">
-              <h2 className="font-medium text-foreground">Controller</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Trigger a full Hi-Fi2 sync from the controller.
-              </p>
-              <Button className="mt-4" variant="outline" asChild>
-                <Link to="/status">View system status</Link>
-              </Button>
-            </div>
+            <AudioControllerCard />
           </div>
           )}
         </TabsContent>

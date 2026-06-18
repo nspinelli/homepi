@@ -43,9 +43,20 @@ export interface HifiGroup {
  * Hi-Fi controller row.
  */
 export interface HifiController {
-  pageActive?: number;
+  firmwareVersion?: string;
+  hardwareVersion?: string;
   deviceName?: string;
+  macAddress?: string;
+  dhcpEnabled?: number;
+  ipAddress?: string;
+  subnetMask?: string;
+  gateway?: string;
+  tcpPort?: number;
+  pageActive?: number;
+  serialDeviceId?: string;
+  serialPath?: string;
   lastFullSyncAt?: string;
+  updatedAt?: string;
 }
 
 /**
@@ -180,6 +191,13 @@ export interface AudioApiResponse<T> {
   ok: boolean;
   data?: T;
   error?: { code: string; message: string };
+}
+
+/**
+ * Controller settings save payload.
+ */
+export interface ControllerSettingsPatch {
+  deviceName: string;
 }
 
 /**

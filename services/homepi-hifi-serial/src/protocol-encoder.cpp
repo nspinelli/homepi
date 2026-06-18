@@ -98,6 +98,10 @@ std::string cmd_group_type_query(int group) {
 
 std::string cmd_netconfig_query() { return build_command("NETCONFIG?"); }
 
+std::string cmd_netname_set(const std::string& name) {
+  return build_command("NETNAME\"" + escape_protocol_string(name) + "\"");
+}
+
 std::string cmd_page_query() { return build_command("PAGE?"); }
 
 std::string cmd_language_string_query(int index) {

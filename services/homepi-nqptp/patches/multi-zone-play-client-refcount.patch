@@ -1,6 +1,6 @@
 --- a/nqptp-message-handlers.c
 +++ b/nqptp-message-handlers.c
-@@ -32,6 +32,7 @@
+@@ -33,6 +33,7 @@
  int reset_clock_smoothing = 0;
  uint64_t clock_validity_expiration_time = 0;
  int clock_is_active = 0;
@@ -8,7 +8,7 @@
  
  char *hex_string(void *buf, size_t buf_len) {
    char *tbuf = (char *)buf;
-@@ -108,16 +109,24 @@ void handle_control_port_messages(char *buf, ssize_t recv_len,
+@@ -108,13 +109,23 @@
              }
              clock_is_active = 1;
              clock_validity_expiration_time = 0;
@@ -33,7 +33,7 @@
              } else {
                debug(2, "clock is already inactive.");
              }
-@@ -125,6 +134,7 @@ void handle_control_port_messages(char *buf, ssize_t recv_len,
+@@ -125,6 +136,7 @@
            } else if ((command == NULL) || ((strcmp(command, "T") == 0) && (ip_list == NULL))) {
              debug(2, "Stop Timing");
              clock_is_active = 0;

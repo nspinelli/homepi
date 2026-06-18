@@ -4,6 +4,8 @@ set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-usb-devices"
 INSTALL_ROOT="/opt/homepi/services/usb-devices"
 RUNTIME_ROOT="/opt/homepi/runtime"
@@ -23,21 +25,7 @@ require_root() {
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in cmake g++ pkg-config; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  if ! pkg-config --exists libudev 2>/dev/null; then
-    missing+=("libudev-dev")
-  fi
-  if ! pkg-config --exists sqlite3 2>/dev/null; then
-    missing+=("libsqlite3-dev")
-  fi
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies: ${missing[*]}"
-    apt-get update -qq
-    apt-get install -y cmake g++ pkg-config libudev-dev libsqlite3-dev
-  fi
+  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libudev-dev libsqlite3-dev
 }
 
 build_binary() {
@@ -65,14 +53,12 @@ install_files() {
     "${INSTALL_ROOT}/storage/migrations/001-usb-devices.sql"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/002-audio-profiles.sql" \
     "${INSTALL_ROOT}/storage/migrations/002-audio-profiles.sql"
-  install -m 0755 "${SERVICE_ROOT}/scripts/deploy-udev-rules.sh" \
-    "${INSTALL_ROOT}/scripts/deploy-udev-rules.sh"
-  install -m 0755 "${SERVICE_ROOT}/scripts/deploy-audio-modprobe.sh" \
-    "${INSTALL_ROOT}/scripts/deploy-audio-modprobe.sh"
-  install -m 0755 "${SERVICE_ROOT}/scripts/apply-primary-audio-alsa.sh" \
-    "${INSTALL_ROOT}/scripts/apply-primary-audio-alsa.sh"
-  install -m 0755 "${SERVICE_ROOT}/scripts/post-assignment-hook.sh" \
-    "${INSTALL_ROOT}/scripts/post-assignment-hook.sh"
+
+  install_root_owned_scripts "${INSTALL_ROOT}/scripts" \
+    "${SERVICE_ROOT}/scripts/deploy-udev-rules.sh" \
+    "${SERVICE_ROOT}/scripts/deploy-audio-modprobe.sh" \
+    "${SERVICE_ROOT}/scripts/apply-primary-audio-alsa.sh" \
+    "${SERVICE_ROOT}/scripts/post-assignment-hook.sh"
 
   install -d -m 0755 "${RUNTIME_ROOT}/state"
   install -d -m 0755 "${RUNTIME_ROOT}/generated"
@@ -82,9 +68,8 @@ install_files() {
 
 install_sudoers() {
   log "Installing sudoers for post-assignment hook"
-  install -m 0440 "${SERVICE_ROOT}/scripts/post-assignment.sudoers" \
+  install_sudoers_dropin "${SERVICE_ROOT}/scripts/post-assignment.sudoers" \
     /etc/sudoers.d/homepi-usb-post-assignment
-  visudo -c -f /etc/sudoers.d/homepi-usb-post-assignment
 }
 
 install_systemd() {
@@ -132,7 +117,7 @@ verify_install() {
 
   local health
   health=$(printf '%s\n' '{"method":"getHealth","correlationId":"install-verify"}' \
-    | nc -U /run/homepi/usb-devices.sock 2>/dev/null || true)
+    | timeout 3 nc -U /run/homepi/usb-devices.sock 2>/dev/null | head -1 || true)
   if [[ "${health}" != *'"ok":true'* ]]; then
     echo "Health check failed via Unix socket" >&2
     echo "${health}" >&2
@@ -161,7 +146,8 @@ main() {
   ensure_build_deps
   build_binary
   install_files
-  chown -R homepi:homepi /opt/homepi
+  chown -R homepi:homepi "${RUNTIME_ROOT}"
+  chown -R homepi:homepi "${INSTALL_ROOT}/storage" 2>/dev/null || true
   install_sudoers
   install_systemd
   deploy_udev_rules

@@ -8,6 +8,11 @@ set -euo pipefail
 MODPROBE_SRC="/opt/homepi/runtime/generated/modprobe/homepi-audio-primary.conf"
 MODPROBE_DEST="/etc/modprobe.d/homepi-audio-primary.conf"
 
+if [[ "${HOMEPI_INSTALL_MODE:-0}" == "1" ]]; then
+  echo "Skipping primary audio modprobe deploy during install (HOMEPI_INSTALL_MODE=1)" >&2
+  exit 2
+fi
+
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Re-run with sudo: sudo bash $0" >&2
   exit 1

@@ -3,6 +3,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-shairport-supervisor"
 INSTALL_ROOT="/opt/homepi/services/shairport"
 
@@ -50,6 +53,7 @@ main() {
   require_root
   stop_services
   remove_systemd
+  remove_sudoers_dropin /etc/sudoers.d/homepi-shairport
   remove_install_tree
   restart_backend
   echo "${SERVICE_NAME} uninstalled."

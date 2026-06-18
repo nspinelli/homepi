@@ -5,15 +5,33 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-echo "==> Building HomePi monorepo"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
+
+export HOMEPI_INSTALL_MODE=1
+export HOMEPI_ALLOW_REBOOT=0
+export HOMEPI_SKIP_PREREQS=1
+
+echo "==> Running install preflight (backups, SSH checks)"
+sudo bash "${REPO_ROOT}/scripts/install-preflight.sh"
+
+echo "==> Installing prerequisites"
+sudo bash "${REPO_ROOT}/scripts/install-prerequisites.sh"
+
+echo "==> Installing Node dependencies and building HomePi monorepo"
+assert_node_version
+assert_pnpm_version
 if command -v pnpm >/dev/null 2>&1; then
+  pnpm install
   pnpm run build
 else
+  npx pnpm install
   npx pnpm run build
 fi
 
 echo "==> Installing HomePi native services"
-sudo bash "${REPO_ROOT}/scripts/install-services.sh"
+sudo env HOMEPI_INSTALL_MODE=1 HOMEPI_ALLOW_REBOOT=0 HOMEPI_SKIP_PREREQS=1 \
+  bash "${REPO_ROOT}/scripts/install-services.sh"
 
 echo "==> Installing NGINX site"
 HOMEPI_ROOT="${REPO_ROOT}" bash "${REPO_ROOT}/infra/nginx/install/install-nginx-config.sh"
@@ -41,35 +59,10 @@ sudo systemctl enable avahi-homepi-alias
 sudo systemctl restart avahi-homepi-alias
 
 echo "==> Verifying services"
-sleep 2
-systemctl is-active nginx homepi-backend avahi-daemon avahi-homepi-alias
-
-echo "==> Smoke tests"
-FAIL=0
-check() {
-  local label="$1"
-  local url="$2"
-  local code
-  code=$(curl -sf -o /dev/null -w "%{http_code}" "${url}") || code="000"
-  if [[ "${code}" == "200" ]]; then
-    echo "  OK  ${label} (${code})"
-  else
-    echo "  FAIL ${label} (${code}) ${url}"
-    FAIL=1
-  fi
-}
-
-check "API health (localhost)" "http://127.0.0.1/api/health"
-check "Frontend (localhost)" "http://127.0.0.1/"
-check "Frontend (homepi.local)" "http://homepi.local/"
-check "API health (homepi.local)" "http://homepi.local/api/health"
-
-if [[ "${FAIL}" -ne 0 ]]; then
-  echo "Smoke tests failed. Check: journalctl -u homepi-backend -u nginx" >&2
-  exit 1
-fi
+bash "${REPO_ROOT}/scripts/verify-operational.sh"
 
 echo ""
 echo "Operational HomePi is ready at http://homepi.local (mDNS on LAN)"
 echo "  Pi IP: $(hostname -I | awk '{print $1}')"
 echo "  Other devices on the network can open http://homepi.local"
+echo "  Backups: ${HOMEPI_BACKUP_ROOT:-/var/backups/homepi}/ (latest preflight session)"

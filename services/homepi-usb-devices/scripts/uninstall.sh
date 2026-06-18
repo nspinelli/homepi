@@ -3,6 +3,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-usb-devices"
 INSTALL_ROOT="/opt/homepi/services/usb-devices"
 UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -60,6 +63,7 @@ main() {
   require_root
   stop_service
   remove_systemd
+  remove_sudoers_dropin /etc/sudoers.d/homepi-usb-post-assignment
   remove_install_tree
   remove_socket
   restart_backend

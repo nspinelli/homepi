@@ -26,11 +26,14 @@ bash scripts/build-native-services.sh   # USB, HiFi serial, PCM router
 
 ## Operational install (Pi)
 
-Installs the web stack, backend, mDNS, and all native services (`homepi-usb-devices`, `homepi-nqptp`, `homepi-metadata`, `homepi-hifi-serial`):
+Installs the web stack, backend, mDNS, Mosquitto, NGINX, and all six native services (`homepi-usb-devices`, `homepi-nqptp`, `homepi-pcm-router`, `homepi-metadata`, `homepi-hifi-serial`, `homepi-shairport-sync`):
 
 ```bash
 sudo bash scripts/install-operational.sh
+bash scripts/verify-operational.sh
 ```
+
+Preflight (backups, SSH checks) and prerequisites run automatically. See [scripts/scripts-install-readme.md](scripts/scripts-install-readme.md) for SSH/ALSA safety and recovery.
 
 ## Development
 

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-hifi-serial"
 INSTALL_ROOT="/opt/homepi/services/hifi-serial"
 RUNTIME_ROOT="/opt/homepi/runtime"
@@ -19,18 +22,7 @@ require_root() {
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in cmake g++; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  if ! pkg-config --exists sqlite3 2>/dev/null; then
-    missing+=("libsqlite3-dev")
-  fi
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies: ${missing[*]}"
-    apt-get update -qq
-    apt-get install -y cmake g++ pkg-config libsqlite3-dev
-  fi
+  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libsqlite3-dev
 }
 
 build_binary() {
@@ -104,7 +96,7 @@ main() {
   ensure_build_deps
   build_binary
   install_files
-  chown -R homepi:homepi /opt/homepi
+  chown_homepi_runtime
   install_systemd
   restart_backend
   verify_install

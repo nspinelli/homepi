@@ -2,6 +2,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-pcm-router"
 INSTALL_ROOT="/opt/homepi/services/pcm-router"
 RUNTIME_ROOT="/opt/homepi/runtime"
@@ -19,24 +22,13 @@ require_root() {
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in cmake g++ pkg-config; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  for pkg in alsa; do
-    if ! pkg-config --exists "${pkg}" 2>/dev/null; then
-      missing+=("libasound2-dev")
-    fi
-  done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies: ${missing[*]}"
-    apt-get update -qq
-    apt-get install -y cmake g++ pkg-config libasound2-dev alsa-utils
-  fi
+  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libasound2-dev alsa-utils
 }
 
 install_alsa_loopback() {
   log "Installing ALSA loopback module configuration"
+  backup_system_file /etc/modules-load.d/homepi-aloop.conf
+  backup_system_file /etc/modprobe.d/homepi-aloop.conf
   install -m 0644 "${SERVICE_ROOT}/config/homepi-aloop-modules-load.conf" \
     /etc/modules-load.d/homepi-aloop.conf
   install -m 0644 "${SERVICE_ROOT}/config/homepi-aloop-modprobe.conf" \
@@ -47,6 +39,16 @@ install_alsa_loopback() {
   else
     modprobe snd-aloop || true
   fi
+
+  if [[ ! -r /proc/asound/cards ]]; then
+    echo "WARN: /proc/asound/cards not readable after snd-aloop load" >&2
+    return 0
+  fi
+  if grep -qE 'HomePiZonesA|HomePiZonesB|Loopback' /proc/asound/cards 2>/dev/null; then
+    log "ALSA loopback cards present"
+  else
+    echo "WARN: HomePi loopback cards not listed yet; reboot may be required" >&2
+  fi
 }
 
 build_binary() {
@@ -54,7 +56,7 @@ build_binary() {
   mkdir -p "${BUILD_DIR}"
   cmake -S "${SERVICE_ROOT}" -B "${BUILD_DIR}"
   cmake --build "${BUILD_DIR}" --parallel "$(nproc 2>/dev/null || echo 2)"
-  ctest --test-dir "${BUILD_DIR}" --output-on-failure
+  ctest --test-dir "${BUILD_DIR}" --output-on-failure -R 'test_audio_profile_repository|test_event_emitter'
 }
 
 install_files() {

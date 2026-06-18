@@ -3,37 +3,28 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
+
 SERVICE_NAME="homepi-nqptp"
 INSTALL_ROOT="/opt/homepi/services/nqptp"
 BUILD_DIR="${SERVICE_ROOT}/build"
 SRC_DIR="${BUILD_DIR}/nqptp-src"
 UNIT_SRC="${SERVICE_ROOT}/systemd/${SERVICE_NAME}.service"
 UNIT_DEST="/etc/systemd/system/${SERVICE_NAME}.service"
+CONFIG_JSON="${SERVICE_ROOT}/config/service-config.json"
+PATCH_FILE="${SERVICE_ROOT}/patches/multi-zone-play-client-refcount.patch"
 UPSTREAM_REPO="https://github.com/mikebrady/nqptp.git"
-UPSTREAM_VERSION="1.2.8"
 LEGACY_UNIT="nqptp.service"
 
-log() {
-  echo "==> $*"
-}
-
-require_root() {
-  if [[ "${EUID}" -ne 0 ]]; then
-    echo "Re-run with sudo: sudo bash ${SERVICE_ROOT}/scripts/install.sh" >&2
-    exit 1
-  fi
+read_upstream_version() {
+  UPSTREAM_VERSION="$(read_json_field "${CONFIG_JSON}" "nqptp.upstreamVersion")" \
+    || die "Could not read nqptp.upstreamVersion from ${CONFIG_JSON}"
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in git autoconf automake libtool pkg-config make gcc; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies"
-    apt-get update -qq
-    apt-get install -y git autoconf automake libtool pkg-config build-essential
-  fi
+  ensure_build_deps_skip_if_prereqs git autoconf automake libtool pkg-config build-essential
 }
 
 remove_legacy_unit() {
@@ -57,8 +48,8 @@ fetch_upstream() {
   rm -rf "${SRC_DIR}"
   mkdir -p "${BUILD_DIR}"
   git clone --depth 1 --branch "${UPSTREAM_VERSION}" "${UPSTREAM_REPO}" "${SRC_DIR}"
-  log "Patching nqptp for multi-zone play client reference counting"
-  patch -d "${SRC_DIR}" -p1 < "${SERVICE_ROOT}/patches/multi-zone-play-client-refcount.patch"
+  log "Validating multi-zone patch for nqptp ${UPSTREAM_VERSION}"
+  apply_patch "${PATCH_FILE}" "${SRC_DIR}"
 }
 
 build_nqptp() {
@@ -69,8 +60,7 @@ build_nqptp() {
   make -j"$(nproc 2>/dev/null || echo 2)"
   make install
   if [[ ! -x "${INSTALL_ROOT}/bin/nqptp" ]]; then
-    echo "Build failed: ${INSTALL_ROOT}/bin/nqptp not found" >&2
-    exit 1
+    die "Build failed: ${INSTALL_ROOT}/bin/nqptp not found"
   fi
 }
 
@@ -78,8 +68,7 @@ install_homepi_files() {
   log "Installing HomePi config and env layout"
   install -d -m 0755 "${INSTALL_ROOT}/config"
   install -d -m 0755 "${INSTALL_ROOT}/env"
-  install -m 0644 "${SERVICE_ROOT}/config/service-config.json" \
-    "${INSTALL_ROOT}/config/service-config.json"
+  install -m 0644 "${CONFIG_JSON}" "${INSTALL_ROOT}/config/service-config.json"
 }
 
 install_systemd() {
@@ -111,22 +100,20 @@ verify_install() {
   local version_out
   version_out="$("${INSTALL_ROOT}/bin/nqptp" -V 2>&1 || true)"
   if [[ "${version_out}" != *"${UPSTREAM_VERSION}"* ]] && [[ "${version_out}" != *"1.2"* ]]; then
-    echo "Unexpected nqptp version output: ${version_out}" >&2
-    exit 1
+    die "Unexpected nqptp version output: ${version_out}"
   fi
   echo "  OK  ${SERVICE_NAME} active (${version_out%%$'\n'*})"
 }
 
 main() {
   require_root
+  read_upstream_version
   ensure_build_deps
   remove_legacy_unit
   fetch_upstream
   build_nqptp
   install_homepi_files
-  if id homepi >/dev/null 2>&1; then
-    chown -R homepi:homepi /opt/homepi
-  fi
+  chown_homepi_runtime
   install_systemd
   restart_backend
   verify_install

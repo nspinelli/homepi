@@ -6,8 +6,31 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOCK_FILE="/run/homepi/post-assignment-hook.lock"
 SERIAL_CHANGED="${1:-${SERIAL_CHANGED:-1}}"
 AUDIO_CHANGED="${2:-${AUDIO_CHANGED:-1}}"
+HOMEPI_ALLOW_REBOOT="${HOMEPI_ALLOW_REBOOT:-1}"
 
 log() { echo "==> $*"; }
+
+schedule_reboot() {
+  local reason="$1"
+  mkdir -p /run/homepi
+  echo "${reason}" > /run/homepi/pending-reboot-reason
+  log "Reboot required: ${reason}"
+
+  if [[ "${HOMEPI_ALLOW_REBOOT}" != "1" ]]; then
+    echo "Reboot blocked (HOMEPI_ALLOW_REBOOT=0). Apply ALSA changes manually or set HOMEPI_ALLOW_REBOOT=1." >&2
+    exit 1
+  fi
+
+  local delay="${HOMEPI_REBOOT_DELAY_SEC:-0}"
+  if [[ "${delay}" -gt 0 ]]; then
+    log "Rebooting in ${delay}s (HOMEPI_REBOOT_DELAY_SEC)"
+    sleep "${delay}"
+  fi
+
+  sync
+  systemctl reboot --no-wall
+  exit 0
+}
 
 exec 9>"${LOCK_FILE}"
 if ! flock -n 9; then
@@ -60,10 +83,7 @@ if [[ "${AUDIO_CHANGED}" == "1" ]]; then
     if bash "${SCRIPT_DIR}/apply-primary-audio-alsa.sh"; then
       log "HomePiPrimary ALSA name is active"
     else
-      log "Scheduling reboot to apply HomePiPrimary ALSA name"
-      sync
-      systemctl reboot --no-wall
-      exit 0
+      schedule_reboot "HomePiPrimary ALSA name requires reboot after primary audio modprobe change"
     fi
   elif [[ "${deploy_rc}" -ne 2 ]]; then
     log "WARN: primary audio modprobe deploy failed (check Primary Audio Output assignment)"

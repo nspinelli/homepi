@@ -3,6 +3,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-shairport-supervisor"
 INSTALL_ROOT="/opt/homepi/services/shairport"
 BUILD_DIR="${SERVICE_ROOT}/build"
@@ -25,25 +28,10 @@ require_root() {
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in git autoconf automake libtool pkg-config make g++ cmake xxd; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  for pkg in libasound2-dev libmosquitto-dev; do
-    case "${pkg}" in
-      libasound2-dev) pkg-config --exists alsa 2>/dev/null || missing+=("${pkg}") ;;
-      libmosquitto-dev) pkg-config --exists libmosquitto 2>/dev/null || missing+=("${pkg}") ;;
-    esac
-  done
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies"
-    apt-get update -qq
-    apt-get install -y --no-install-recommends git autoconf automake libtool pkg-config \
-      build-essential cmake g++ sqlite3 netcat-openbsd \
-      libpopt-dev libconfig-dev libasound2-dev avahi-daemon libavahi-client-dev libssl-dev \
-      libsoxr-dev libplist-dev libsodium-dev libavutil-dev libavcodec-dev libavformat-dev \
-      uuid-dev libgcrypt20-dev libmosquitto-dev xxd
-  fi
+  ensure_build_deps_skip_if_prereqs git autoconf automake libtool pkg-config build-essential \
+    cmake g++ sqlite3 netcat-openbsd libpopt-dev libconfig-dev libasound2-dev avahi-daemon \
+    libavahi-client-dev libssl-dev libsoxr-dev libplist-dev libsodium-dev libavutil-dev \
+    libavcodec-dev libavformat-dev uuid-dev libgcrypt20-dev libmosquitto-dev xxd
 }
 
 fetch_upstream() {
@@ -162,9 +150,8 @@ install_homepi_files() {
     "${INSTALL_ROOT}/config/service-config.json"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/003-shairport-sync.sql" \
     "${INSTALL_ROOT}/storage/migrations/003-shairport-sync.sql"
-  install -m 0440 "${SERVICE_ROOT}/config/homepi-shairport-sudoers" \
+  install_sudoers_dropin "${SERVICE_ROOT}/config/homepi-shairport-sudoers" \
     /etc/sudoers.d/homepi-shairport
-  visudo -cf /etc/sudoers.d/homepi-shairport
 }
 
 install_systemd() {
@@ -205,9 +192,7 @@ main() {
   build_shairport_sync
   build_supervisor
   install_homepi_files
-  if id homepi >/dev/null 2>&1; then
-    chown -R homepi:homepi /opt/homepi
-  fi
+  chown_homepi_runtime
   install_systemd
   restart_backend
   verify_install

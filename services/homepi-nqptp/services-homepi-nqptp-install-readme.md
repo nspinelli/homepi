@@ -58,4 +58,10 @@ If `ufw` or `firewalld` is enabled, allow UDP **319** and **320** in both direct
 
 ## Build dependencies
 
-Installed automatically by `install.sh` when missing: `git`, `autoconf`, `automake`, `libtool`, `pkg-config`, `build-essential`.
+Installed by `scripts/install-prerequisites.sh` (or automatically by `install.sh` when prerequisites were not run): `git`, `autoconf`, `automake`, `libtool`, `pkg-config`, `build-essential`.
+
+Validate the multi-zone patch offline:
+
+```bash
+bash /home/homepi/homepi/scripts/verify-nqptp-patch.sh
+```

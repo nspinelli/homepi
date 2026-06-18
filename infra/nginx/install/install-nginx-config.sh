@@ -34,7 +34,9 @@ sed \
 
 # Allow nginx (www-data) to traverse home directory and read static assets
 chmod o+x /home/homepi 2>/dev/null || sudo chmod o+x /home/homepi
-chmod -R o+rX "${HOMEPI_WEB_ROOT}"
+if ! chmod -R o+rX "${HOMEPI_WEB_ROOT}" 2>/dev/null; then
+  sudo chmod -R o+rX "${HOMEPI_WEB_ROOT}"
+fi
 
 sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 sudo ln -sf "${OUTPUT}" /etc/nginx/sites-enabled/homepi.local

@@ -2,6 +2,9 @@
 set -euo pipefail
 
 SERVICE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "${SERVICE_ROOT}/../.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 SERVICE_NAME="homepi-metadata"
 INSTALL_ROOT="/opt/homepi/services/metadata"
 RUNTIME_ROOT="/opt/homepi/runtime"
@@ -20,18 +23,7 @@ require_root() {
 }
 
 ensure_build_deps() {
-  local missing=()
-  for cmd in cmake g++ pkg-config; do
-    command -v "${cmd}" >/dev/null 2>&1 || missing+=("${cmd}")
-  done
-  if ! pkg-config --exists libmosquitto 2>/dev/null; then
-    missing+=("libmosquitto-dev")
-  fi
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    log "Installing build dependencies: ${missing[*]}"
-    apt-get update -qq
-    apt-get install -y cmake g++ libsqlite3-dev pkg-config libmosquitto-dev
-  fi
+  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libsqlite3-dev libmosquitto-dev
 }
 
 build_binary() {

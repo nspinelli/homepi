@@ -142,6 +142,7 @@ bool RoutingState::try_promote_pending_owner(const ZoneActivityFn& is_ready) {
   push_stack_locked(pending_zone);
   pending_owner_zone_id_ = 0;
   pending_owner_at_ms_ = 0;
+  recompute_modes_locked();
   return true;
 }
 

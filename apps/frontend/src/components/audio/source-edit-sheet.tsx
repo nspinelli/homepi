@@ -1,8 +1,8 @@
-import { Airplay, Radio, X } from "lucide-react";
+import { Airplay, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { ZoneEditSlider } from "@/components/audio/zone-edit-slider.js";
+import { SourceCard } from "@/components/audio/source-card.js";
 import {
   buildSourceSettingsPatch,
   hasSourceSettingsChanges,
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils.js";
 import type { HifiSource, SourceSettingsPatch } from "@/types/audio-types.js";
 
 /**
- * Props for the iOS-style source edit bottom sheet.
+ * Props for the centered source edit modal.
  */
 export interface SourceEditSheetProps {
   /** Whether the sheet is open. */
@@ -29,15 +29,6 @@ export interface SourceEditSheetProps {
   saving: boolean;
   /** Persists source settings. Rejects when the save request fails. */
   onSave: (sourceNumber: number, patch: SourceSettingsPatch) => Promise<void>;
-}
-
-/**
- * Section header label for sheet form groups.
- */
-function SectionHeader({ title }: { title: string }): React.JSX.Element {
-  return (
-    <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</p>
-  );
 }
 
 /**
@@ -63,7 +54,7 @@ function SheetCard({
 }
 
 /**
- * iOS-style bottom sheet for editing Hi-Fi2 source settings.
+ * Centered modal for editing Hi-Fi2 source settings.
  */
 export function SourceEditSheet({
   open,
@@ -193,169 +184,105 @@ export function SourceEditSheet({
         aria-modal="true"
         aria-labelledby="source-edit-sheet-title"
         className={cn(
-          "fixed inset-x-0 bottom-0 z-[210] mx-auto flex w-full max-w-lg flex-col overflow-hidden",
-          "max-h-[min(92vh,900px)] min-h-[50vh]",
-          "rounded-t-[1.75rem] border border-border/60 bg-card text-card-foreground shadow-2xl"
+          "fixed inset-x-0 top-[50%] z-[210] mx-auto flex w-full max-w-lg -translate-y-1/2 flex-col overflow-hidden",
+          "max-h-[min(90vh,900px)]",
+          "rounded-2xl border border-border/60 bg-card text-card-foreground shadow-2xl"
         )}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex shrink-0 justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden />
-        </div>
+        <header className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-full bg-muted/70"
+            aria-label="Close"
+            onClick={handleClose}
+          >
+            <X className="h-5 w-5 text-muted-foreground" />
+          </Button>
 
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          <header className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 border-b border-border/60 bg-card/80 px-4 py-3 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-card/65">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 shrink-0 rounded-full bg-muted/70"
-              aria-label="Close"
-              onClick={handleClose}
-            >
-              <X className="h-5 w-5 text-muted-foreground" />
-            </Button>
+          <div className="min-w-0 flex-1 text-center">
+            <h2 id="source-edit-sheet-title" className="text-base font-semibold text-foreground">
+              Edit Source
+            </h2>
+            <span className="mt-1 inline-block rounded-full bg-zone-accent/15 px-2.5 py-0.5 text-xs font-medium text-zone-accent">
+              Source {source.sourceNumber}
+            </span>
+          </div>
 
-            <div className="min-w-0 flex-1 text-center">
-              <h2 id="source-edit-sheet-title" className="text-base font-semibold text-foreground">
-                Edit Source
-              </h2>
-              <span className="mt-1 inline-block rounded-full bg-zone-accent/15 px-2.5 py-0.5 text-xs font-medium text-zone-accent">
-                Source {source.sourceNumber}
-              </span>
+          <Button
+            type="button"
+            size="sm"
+            className="shrink-0 rounded-full bg-zone-accent px-4 text-white hover:bg-zone-accent/90"
+            disabled={saving || !unsaved}
+            onClick={() => void handleSave()}
+          >
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="space-y-4 p-4">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                Preview
+              </p>
+              <SourceCard
+                id={source.sourceNumber}
+                name={sheetForm.name}
+                isEnabled={sheetForm.enabled === 1}
+                isAirplay={sheetForm.isAirplay || isCurrentAirplay}
+                inputGain={sheetForm.inputGain}
+                displayLine={source.displayLine}
+                hideEditButton
+                editableName
+                onNameChange={(name) => updateForm({ name })}
+                interactiveEnabled
+                onEnabledChange={(enabled) => {
+                  updateForm({
+                    enabled: enabled ? 1 : 0,
+                    ...(enabled ? {} : { isAirplay: false }),
+                  });
+                }}
+                onInputGainChange={(inputGain) => updateForm({ inputGain })}
+              />
             </div>
 
-            <Button
-              type="button"
-              size="sm"
-              className="shrink-0 rounded-full bg-zone-accent px-4 text-white hover:bg-zone-accent/90"
-              disabled={saving || !unsaved}
-              onClick={() => void handleSave()}
-            >
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          </header>
-
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[4.75rem]">
-            <div className="space-y-6 px-4 pt-2 pb-8">
-              <SheetCard>
-                <div className="flex gap-4">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-zone-accent/15">
-                    <Radio className="h-7 w-7 text-zone-accent" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">Preview</p>
-                    <p className="text-xs text-muted-foreground">How this source appears in the UI</p>
-                  </div>
-                </div>
-                <p className="mt-4 text-lg font-semibold text-foreground">{sheetForm.name}</p>
-                {sheetForm.displayLine ? (
-                  <p className="mt-1 text-sm text-muted-foreground">{sheetForm.displayLine}</p>
-                ) : null}
-              </SheetCard>
-
-              <div className="space-y-3">
-                <SectionHeader title="General" />
-                <SheetCard className="space-y-4">
-                  <label className="grid gap-2">
-                    <span className="text-sm font-medium text-foreground">Name</span>
-                    <input
-                      type="text"
-                      className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-                      value={sheetForm.name}
-                      onChange={(event) => updateForm({ name: event.target.value })}
-                    />
-                  </label>
-
-                  <div className="flex items-center justify-between gap-4">
+            <SheetCard>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zone-accent/15">
+                      <Airplay className="h-5 w-5 text-zone-accent" />
+                    </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">Enabled</p>
+                      <p className="text-sm font-medium text-foreground">AirPlay source</p>
                       <p className="text-xs text-muted-foreground">
-                        Disabled sources are hidden from zone selection
+                        Only one source can receive AirPlay audio
                       </p>
-                    </div>
-                    <Switch
-                      checked={sheetForm.enabled === 1}
-                      onCheckedChange={(checked) => {
-                        const enabled = checked ? 1 : 0;
-                        updateForm({
-                          enabled,
-                          ...(enabled === 0 ? { isAirplay: false } : {}),
-                        });
-                      }}
-                    />
-                  </div>
-                </SheetCard>
-              </div>
-
-              <div className="space-y-3">
-                <SectionHeader title="Audio" />
-                <SheetCard className="space-y-4">
-                  <div>
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-foreground">Input gain</span>
-                      <span className="text-sm text-muted-foreground">{sheetForm.inputGain}</span>
-                    </div>
-                    <ZoneEditSlider
-                      min={0}
-                      max={20}
-                      value={sheetForm.inputGain}
-                      ariaLabel="Source input gain"
-                      onChange={(value) => updateForm({ inputGain: value })}
-                    />
-                  </div>
-
-                  <label className="grid gap-2">
-                    <span className="text-sm font-medium text-foreground">Display line</span>
-                    <input
-                      type="text"
-                      className="h-10 rounded-xl border border-border bg-background px-3 text-sm text-foreground"
-                      value={sheetForm.displayLine}
-                      placeholder="Shown on keypads and displays"
-                      onChange={(event) => updateForm({ displayLine: event.target.value })}
-                    />
-                  </label>
-                </SheetCard>
-              </div>
-
-              <div className="space-y-3">
-                <SectionHeader title="AirPlay" />
-                <SheetCard>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zone-accent/15">
-                        <Airplay className="h-5 w-5 text-zone-accent" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">AirPlay source</p>
-                        <p className="text-xs text-muted-foreground">
-                          Only one source can receive AirPlay audio
+                      {isCurrentAirplay ? (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Select another source as AirPlay first to turn this off.
                         </p>
-                        {isCurrentAirplay ? (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            Select another source as AirPlay first to turn this off.
-                          </p>
-                        ) : null}
-                        {sheetForm.enabled !== 1 ? (
-                          <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                            Enable this source before assigning AirPlay.
-                          </p>
-                        ) : null}
-                      </div>
+                      ) : null}
+                      {sheetForm.enabled !== 1 ? (
+                        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                          Enable this source before assigning AirPlay.
+                        </p>
+                      ) : null}
                     </div>
-                    <Switch
-                      checked={sheetForm.isAirplay || isCurrentAirplay}
-                      disabled={airplaySwitchDisabled}
-                      onCheckedChange={(checked) => {
-                        if (checked) {
-                          updateForm({ isAirplay: true });
-                        }
-                      }}
-                    />
                   </div>
-                </SheetCard>
-              </div>
-            </div>
+                  <Switch
+                    checked={sheetForm.isAirplay || isCurrentAirplay}
+                    disabled={airplaySwitchDisabled}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        updateForm({ isAirplay: true });
+                      }
+                    }}
+                  />
+                </div>
+              </SheetCard>
           </div>
         </div>
       </div>

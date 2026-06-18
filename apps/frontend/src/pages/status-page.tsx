@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
 
+import { ModulePageHeader } from "@/components/module-page-header.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
@@ -75,22 +76,24 @@ export function StatusPage(): React.JSX.Element {
     return matchesLevel && matchesService && matchesSearch;
   });
 
+  const statusSubtitle = state.loading
+    ? "Loading platform status…"
+    : `${services.length} services monitored · ${filteredLogs.length} events shown`;
+
   return (
     <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-6">
-      <div className="mb-6">
-        <Button variant="ghost" size="sm" className="mb-4 gap-2 text-muted-foreground" asChild>
-          <Link to="/">
-            <ArrowLeft className="size-4" />
-            Back
-          </Link>
-        </Button>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">System Status</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Monitor platform services and live event stream
-            </p>
-          </div>
+      <Button variant="ghost" size="sm" className="mb-4 gap-2 text-muted-foreground" asChild>
+        <Link to="/">
+          <ArrowLeft className="size-4" />
+          Back
+        </Link>
+      </Button>
+      <ModulePageHeader
+        iconSrc="/homepi-logo.png"
+        iconAlt="HomePi"
+        title="System Status"
+        subtitle={statusSubtitle}
+        actions={
           <Button
             type="button"
             variant="secondary"
@@ -101,16 +104,13 @@ export function StatusPage(): React.JSX.Element {
           >
             Refresh
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {state.error ? (
         <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {state.error}
         </p>
-      ) : null}
-      {state.loading ? (
-        <p className="mb-4 text-sm text-muted-foreground">Loading platform status…</p>
       ) : null}
 
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

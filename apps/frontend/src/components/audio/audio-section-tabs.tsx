@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Megaphone, Radio, Settings, Speaker, Users } from "lucide-react";
+import { Megaphone, Radio, Settings, Speaker } from "lucide-react";
 
 import { TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { cn } from "@/lib/utils.js";
@@ -20,7 +20,6 @@ export interface AudioSectionTabItem {
 export const AUDIO_SECTION_TABS: AudioSectionTabItem[] = [
   { value: "zones", label: "Zones", icon: Speaker },
   { value: "sources", label: "Sources", icon: Radio },
-  { value: "groups", label: "Groups", icon: Users },
   { value: "paging", label: "Paging", icon: Megaphone },
   { value: "settings", label: "Settings", icon: Settings },
 ];

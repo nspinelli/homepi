@@ -1,21 +1,23 @@
 import { useMemo, useState } from "react";
-import { ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { isSourceEnabled } from "@/lib/is-source-enabled.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
 import { zoneCardVolume } from "@/lib/zone-card-volume.js";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
 import {
   AudioListSectionSkeleton,
   AudioZonesGridSkeleton,
 } from "@/components/audio/audio-page-skeletons.js";
+import { AUDIO_SECTION_TABS } from "@/components/audio/audio-section-tabs.js";
 import { AudioBottomNav } from "@/components/audio/audio-bottom-nav.js";
 import { SourceCard } from "@/components/audio/source-card.js";
 import { SourceEditSheet } from "@/components/audio/source-edit-sheet.js";
 import { ZoneCard } from "@/components/audio/zone-card.js";
 import { ZoneEditSheet } from "@/components/audio/zone-edit-sheet.js";
+import { ModulePageHeader } from "@/components/module-page-header.js";
 import { Button } from "@/components/ui/button.js";
 import { Tabs, TabsContent } from "@/components/ui/tabs.js";
 import {
@@ -24,6 +26,9 @@ import {
 } from "@/hooks/use-audio-module.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
 import type { HifiSource, HifiZone } from "@/types/audio-types.js";
+
+/** Hi-Fi controller artwork used across Home Audio UI. */
+const AUDIO_MODULE_ICON = "/audio-controller.png";
 
 /**
  * Sort priority for source cards: AirPlay first, then enabled, then disabled.
@@ -41,10 +46,18 @@ function getSourceSortPriority(source: HifiSource): number {
 }
 
 /**
- * Audio module detail page with zones, sources, groups, paging, and settings tabs.
+ * Resolve the visible label for an audio section tab value.
+ * @param tabValue - Radix tab value.
+ * @returns Human-readable section title.
+ */
+function audioSectionTitle(tabValue: string): string {
+  return AUDIO_SECTION_TABS.find((tab) => tab.value === tabValue)?.label ?? tabValue;
+}
+
+/**
+ * Audio module detail page with zones, sources, paging, and settings tabs.
  */
 export function AudioPage(): React.JSX.Element {
-  const navigate = useNavigate();
   const {
     state,
     saveZoneSettings,
@@ -54,6 +67,7 @@ export function AudioPage(): React.JSX.Element {
     isZoneStreamedTo,
     isZoneSendingAudio,
   } = useAudioModule();
+  const [activeTab, setActiveTab] = useState("zones");
   const [showDisabled, setShowDisabled] = useState(false);
   const [showDisabledSources, setShowDisabledSources] = useState(false);
   const [editZoneNumber, setEditZoneNumber] = useState<number | null>(null);
@@ -116,57 +130,88 @@ export function AudioPage(): React.JSX.Element {
 
   const isInitialLoad = state.loading && snapshot === null;
 
+  const headerSubtitle = useMemo((): string => {
+    switch (activeTab) {
+      case "zones":
+        return isInitialLoad
+          ? "Loading zones…"
+          : `${sortedZones.length} of ${zones.length} zones shown`;
+      case "sources":
+        return isInitialLoad
+          ? "Loading sources…"
+          : `${sortedSources.length} of ${sources.length} sources shown`;
+      case "paging":
+        return isInitialLoad
+          ? "Loading paging…"
+          : `Controller page active: ${snapshot?.controller.pageActive === 1 ? "Yes" : "No"}`;
+      case "settings":
+        return isInitialLoad ? "Loading settings…" : "Audio configuration and controller";
+      default:
+        return "";
+    }
+  }, [
+    activeTab,
+    isInitialLoad,
+    sortedZones.length,
+    zones.length,
+    sortedSources.length,
+    sources.length,
+    snapshot?.controller.pageActive,
+  ]);
+
+  const headerActions =
+    activeTab === "zones" ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={showDisabled ? "Hide disabled zones" : "Show disabled zones"}
+        aria-pressed={showDisabled}
+        disabled={isInitialLoad}
+        onClick={() => setShowDisabled((value) => !value)}
+      >
+        {showDisabled ? (
+          <Eye className="h-5 w-5 text-muted-foreground" />
+        ) : (
+          <EyeOff className="h-5 w-5 text-muted-foreground" />
+        )}
+      </Button>
+    ) : activeTab === "sources" ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={showDisabledSources ? "Hide disabled sources" : "Show disabled sources"}
+        aria-pressed={showDisabledSources}
+        disabled={isInitialLoad}
+        onClick={() => setShowDisabledSources((value) => !value)}
+      >
+        {showDisabledSources ? (
+          <Eye className="h-5 w-5 text-muted-foreground" />
+        ) : (
+          <EyeOff className="h-5 w-5 text-muted-foreground" />
+        )}
+      </Button>
+    ) : null;
+
   return (
     <>
     <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-8">
-      <div className="mb-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="mb-4 gap-2"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
-        <h1 className="text-2xl font-semibold text-foreground">Home Audio</h1>
-        <p className="mt-1 text-muted-foreground">Manage your audio zones and settings</p>
-        {state.error ? (
-          <p className="mt-2 text-sm text-destructive" role="alert">
-            {state.error}
-          </p>
-        ) : null}
-      </div>
-
-      <Tabs defaultValue="zones" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="pb-28">
+          <ModulePageHeader
+            iconSrc={AUDIO_MODULE_ICON}
+            title={audioSectionTitle(activeTab)}
+            subtitle={headerSubtitle}
+            actions={headerActions}
+          />
+          {state.error ? (
+            <p className="-mt-2 mb-6 text-sm text-destructive" role="alert">
+              {state.error}
+            </p>
+          ) : null}
+
           <TabsContent value="zones">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-lg font-medium text-foreground">Audio Zones</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isInitialLoad
-                  ? "Loading zones…"
-                  : `${sortedZones.length} of ${zones.length} zones shown`}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0 self-center"
-              aria-label={showDisabled ? "Hide disabled zones" : "Show disabled zones"}
-              aria-pressed={showDisabled}
-              disabled={isInitialLoad}
-              onClick={() => setShowDisabled((value) => !value)}
-            >
-              {showDisabled ? (
-                <Eye className="h-5 w-5 text-muted-foreground" />
-              ) : (
-                <EyeOff className="h-5 w-5 text-muted-foreground" />
-              )}
-            </Button>
-          </div>
           {isInitialLoad ? (
             <AudioZonesGridSkeleton count={8} />
           ) : (
@@ -196,34 +241,6 @@ export function AudioPage(): React.JSX.Element {
         </TabsContent>
 
         <TabsContent value="sources">
-          <div className="mb-6 flex items-center justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="text-lg font-medium text-foreground">Sources</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {isInitialLoad
-                  ? "Loading sources…"
-                  : `${sortedSources.length} of ${sources.length} sources shown`}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0 self-center"
-              aria-label={
-                showDisabledSources ? "Hide disabled sources" : "Show disabled sources"
-              }
-              aria-pressed={showDisabledSources}
-              disabled={isInitialLoad}
-              onClick={() => setShowDisabledSources((value) => !value)}
-            >
-              {showDisabledSources ? (
-                <Eye className="h-5 w-5 text-muted-foreground" />
-              ) : (
-                <EyeOff className="h-5 w-5 text-muted-foreground" />
-              )}
-            </Button>
-          </div>
           {isInitialLoad ? (
             <AudioZonesGridSkeleton count={8} />
           ) : (
@@ -244,37 +261,12 @@ export function AudioPage(): React.JSX.Element {
           )}
         </TabsContent>
 
-        <TabsContent value="groups">
-          {isInitialLoad ? (
-            <AudioListSectionSkeleton titleWidth="w-28" rows={3} />
-          ) : (
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-medium text-foreground">Groups</h2>
-            <ul className="mt-4 grid gap-2">
-              {(snapshot?.groups ?? []).map((group) => (
-                <li
-                  key={group.groupNumber}
-                  className="rounded-md border border-border px-3 py-2 text-sm"
-                >
-                  {group.groupNumber}. {group.name ?? "Unnamed"} (type {group.type ?? 0})
-                </li>
-              ))}
-            </ul>
-          </div>
-          )}
-        </TabsContent>
-
         <TabsContent value="paging">
           {isInitialLoad ? (
             <AudioListSectionSkeleton titleWidth="w-24" rows={2} />
           ) : (
           <div className="rounded-lg border border-border bg-card p-6">
-            <h2 className="text-lg font-medium text-foreground">Paging</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Controller page active:{" "}
-              {snapshot?.controller.pageActive === 1 ? "Yes" : "No"}
-            </p>
-            <p className="mt-4 text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Assign the paging USB DAC under Settings → Audio Configuration.
             </p>
           </div>

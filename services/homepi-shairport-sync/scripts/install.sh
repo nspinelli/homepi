@@ -139,8 +139,8 @@ build_supervisor() {
 install_homepi_files() {
   log "Installing HomePi layout"
   install -d -m 0755 "${INSTALL_ROOT}/bin"
-  install -d -m 0755 "${INSTALL_ROOT}/config/zones"
-  install -d -m 0755 "${INSTALL_ROOT}/bin/hooks"
+  install -d -o homepi -g homepi -m 0755 "${INSTALL_ROOT}/config/zones"
+  install -d -o homepi -g homepi -m 0755 "${INSTALL_ROOT}/bin/hooks"
   install -d -m 0755 "${INSTALL_ROOT}/env"
   install -d -m 0755 "${INSTALL_ROOT}/storage/migrations"
 

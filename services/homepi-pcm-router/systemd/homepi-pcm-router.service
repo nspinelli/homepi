@@ -2,6 +2,8 @@
 Description=HomePi PCM Router
 After=network-online.target sound.target homepi-usb-devices.service
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -11,7 +13,8 @@ SupplementaryGroups=audio
 EnvironmentFile=/opt/homepi/services/pcm-router/env/.env
 ExecStart=/opt/homepi/services/pcm-router/bin/homepi-pcm-router
 Restart=on-failure
-RestartSec=2
+RestartSec=10
+StartLimitAction=none
 NoNewPrivileges=true
 
 [Install]

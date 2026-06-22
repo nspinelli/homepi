@@ -2,6 +2,8 @@
 Description=HomePi Shairport Sync Supervisor
 Wants=network-online.target mosquitto.service
 After=network-online.target homepi-nqptp.service homepi-pcm-router.service homepi-hifi-serial.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -10,7 +12,8 @@ Group=homepi
 WorkingDirectory=/opt/homepi/services/shairport
 ExecStart=/opt/homepi/services/shairport/bin/homepi-shairport-supervisor /opt/homepi/services/shairport/config/service-config.json
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+StartLimitAction=none
 EnvironmentFile=-/opt/homepi/services/shairport/env/.env
 
 [Install]

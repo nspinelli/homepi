@@ -21,6 +21,20 @@ int main() {
   assert(fallback_stack.size() == 1);
   assert(fallback_stack[0] == 5);
 
+  // Simulates both zones firing route_end at a track boundary (play_end hook).
+  // The second route_end empties the stack and drops the DAC — hooks must not
+  // call route_end on play_end; only deactivate should tear down routing.
+  {
+    homepi::pcm_router::RoutingState multi_zone;
+    multi_zone.on_route_start(1);
+    multi_zone.on_route_join(2);
+    multi_zone.on_route_end(1);
+    assert(multi_zone.owner_zone_id() == 2);
+    multi_zone.on_route_end(2);
+    assert(multi_zone.owner_zone_id() == 0);
+    assert(multi_zone.active_stack().empty());
+  }
+
   routing.on_route_start(8);
   routing.on_route_start(3, [](int zone_id) { return zone_id == 8; });
   assert(routing.owner_zone_id() == 8);

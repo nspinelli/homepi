@@ -33,10 +33,10 @@ Shairport Sync is the program used to enable airplay2 capabilities for the audio
 |general|default_airplay_volume|From Controller: INIVOL (Must be converted from 0-100 to Apple range of -30.0 to 0.00)|
 |general|run_this_when_volume_is_set|From Controller: /path/to/script.sh (This will be converted and volume command sent to controller)|
 |sessioncontrol|run_this_before_entering_active_state|From Controller: path/to/script.sh (This will turn the zone on and set the zone source to the airplay source number set in the UI.)|
-|sessioncontrol|run_this_after_exiting_active_state|From Controller: path/to/script.sh (This will turn the zone off and set the zone source to the airplay source number set in the UI.)|
+|sessioncontrol|run_this_after_exiting_active_state|PCM handoff + always power off the exiting zone|
 |sessioncontrol|active_state_timeout|Editable: Default 5.0|
 |sessioncontrol|run_this_before_play_begins|From Controller: path/to/script.sh (This will turn the zone on and set the zone source to the airplay source number set in the UI.)|
-|sessioncontrol|run_this_after_play_ends|From Controller: path/to/script.sh (This will turn the zone off and set the zone source to the airplay source number set in the UI.)|
+|sessioncontrol|run_this_after_play_ends|No-op at track boundary (PCM teardown runs on `deactivate` only)|
 |sessioncontrol|run_this_if_an_unfixable_error_is_detected|Static: path/to/script.sh (This should be sent to a logger function and notification in UI)|
 |sessioncontrol|wait_for_completion|Static: yes|
 |sessioncontrol|allow_session_interruption|Static: no|

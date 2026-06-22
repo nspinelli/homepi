@@ -2,6 +2,8 @@
 Description=HomePi USB Devices Service
 After=network.target systemd-udevd.service
 Requires=systemd-udevd.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -12,7 +14,8 @@ WorkingDirectory=/opt/homepi/services/usb-devices
 ExecStart=/opt/homepi/services/usb-devices/bin/homepi-usb-devices /opt/homepi/services/usb-devices/config/service-config.json
 EnvironmentFile=-/opt/homepi/services/usb-devices/env/.env
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+StartLimitAction=none
 RuntimeDirectory=homepi
 RuntimeDirectoryPreserve=yes
 

@@ -2,6 +2,8 @@
 Description=HomePi Metadata Service
 After=homepi-pcm-router.service homepi-shairport-supervisor.service mosquitto.service
 Wants=homepi-pcm-router.service mosquitto.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -10,7 +12,8 @@ Group=homepi
 WorkingDirectory=/opt/homepi/services/metadata
 ExecStart=/opt/homepi/services/metadata/bin/homepi-metadata
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+StartLimitAction=none
 EnvironmentFile=-/opt/homepi/services/metadata/env/.env
 
 [Install]

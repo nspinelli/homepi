@@ -2,6 +2,8 @@
 Description=HomePi Backend API
 After=network.target
 Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -11,7 +13,8 @@ WorkingDirectory=/home/homepi/homepi/apps/backend
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/node /home/homepi/homepi/apps/backend/dist/index.js
 Restart=on-failure
-RestartSec=5
+RestartSec=10
+StartLimitAction=none
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=homepi-backend

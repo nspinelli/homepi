@@ -40,6 +40,7 @@ import { StatusUpdateCoordinator } from "./status/status-update-coordinator.js";
 import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
 import { UsbDevicesEventBridge } from "./usb-devices/usb-devices-event-bridge.js";
 import type { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
+import { EventsBrokerBridge } from "./events/events-broker-bridge.js";
 
 /**
  * HTTP server configuration for the backend vertical slice.
@@ -71,6 +72,8 @@ export interface HttpServerOptions {
   metadataSocketPath?: string;
   /** Unix socket path for USB devices event bridge; omit to disable. */
   usbDevicesSocketPath?: string;
+  /** Unix socket path for core/events broker; omit to disable. */
+  eventsBrokerSocketPath?: string;
   /** USB devices socket client for startup snapshots. */
   usbDevicesClient: UsbDevicesClient;
   /** HiFi serial socket client for startup snapshots. */
@@ -101,6 +104,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     pcmRouterSocketPath,
     metadataSocketPath,
     usbDevicesSocketPath,
+    eventsBrokerSocketPath,
     usbDevicesClient,
     hifiSerialClient,
     pcmRouterClient,
@@ -123,6 +127,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     hifiSerial: false,
     pcmRouter: false,
     metadata: false,
+    eventsBroker: false,
   };
 
   const journalServiceStatusBridge = new JournalServiceStatusBridge({
@@ -178,12 +183,25 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
+  const eventsBrokerBridge = eventsBrokerSocketPath
+    ? new EventsBrokerBridge({
+        socketPath: eventsBrokerSocketPath,
+        logger,
+        broadcaster,
+        coordinator,
+        onConnectionChange: (connected) => {
+          bridgeState.eventsBroker = connected;
+        },
+      })
+    : undefined;
+
   broadcaster.start();
 
   usbEventBridge?.start();
   hifiEventBridge?.start();
   pcmEventBridge?.start();
   metadataEventBridge?.start();
+  eventsBrokerBridge?.start();
 
   const journalLogBridge = new JournalLogBridge({
     logger,

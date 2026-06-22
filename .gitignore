@@ -7,3 +7,4 @@ dist/
 coverage/
 apps/frontend/dist/
 services/*/build/
+core/events/cpp/build/

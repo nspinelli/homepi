@@ -37,7 +37,7 @@ check_http() {
 }
 
 echo "=== HomePi operational status ==="
-for svc in nginx homepi-backend avahi-daemon avahi-homepi-alias mosquitto \
+for svc in nginx homepi-backend homepi-events avahi-daemon avahi-homepi-alias mosquitto \
   homepi-usb-devices homepi-nqptp homepi-pcm-router homepi-metadata \
   homepi-hifi-serial homepi-shairport-supervisor; do
   status_line "${svc}"

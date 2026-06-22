@@ -1,0 +1,24 @@
+[Unit]
+Description=HomePi Core Events Broker
+After=network.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+RuntimeDirectory=homepi
+RuntimeDirectoryPreserve=yes
+WorkingDirectory=/opt/homepi/services/events
+ExecStart=/opt/homepi/services/events/bin/homepi-events /run/homepi/events.sock
+Restart=on-failure
+RestartSec=5
+StartLimitAction=none
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homepi-events
+
+[Install]
+WantedBy=multi-user.target

@@ -29,6 +29,9 @@ else
   npx pnpm run build
 fi
 
+echo "==> Installing core/events broker"
+sudo bash "${REPO_ROOT}/core/events/scripts/install.sh"
+
 echo "==> Installing HomePi native services"
 sudo env HOMEPI_INSTALL_MODE=1 HOMEPI_ALLOW_REBOOT=0 HOMEPI_SKIP_PREREQS=1 \
   bash "${REPO_ROOT}/scripts/install-services.sh"

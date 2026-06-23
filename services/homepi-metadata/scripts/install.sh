@@ -23,7 +23,7 @@ require_root() {
 }
 
 ensure_build_deps() {
-  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libsqlite3-dev libmosquitto-dev
+  ensure_build_deps_skip_if_prereqs cmake g++ pkg-config libsqlite3-dev
 }
 
 build_binary() {

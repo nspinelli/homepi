@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <iomanip>
+#include <sstream>
 #include <string_view>
 
 #include "homepi/metadata/progress-parser.hpp"
@@ -31,6 +33,7 @@ constexpr std::uint32_t kCodeAbeg = 0x61626567;  // "abeg"
 constexpr std::uint32_t kCodeAend = 0x61656e64;  // "aend"
 constexpr std::uint32_t kCodeMdst = 0x6d647374;  // "mdst"
 constexpr std::uint32_t kCodeMden = 0x6d64656e;  // "mden"
+constexpr std::uint32_t kCodeMper = 0x6d706572;  // "mper"
 
 bool parse_header(const std::string& item_xml, std::uint32_t& type, std::uint32_t& code,
                   std::size_t& length) {
@@ -180,6 +183,10 @@ void MetadataParser::dispatch_item(std::uint32_t type, std::uint32_t code,
     callbacks_.on_metadata_bundle_start();
   }
 
+  if (type == kTypeSsnc && code == kCodeMden && callbacks_.on_metadata_bundle_end) {
+    callbacks_.on_metadata_bundle_end();
+  }
+
   if (type == kTypeCore) {
     if (code == kCodeMinm && callbacks_.on_field) {
       callbacks_.on_field({"title", std::string(payload.begin(), payload.end())});
@@ -189,6 +196,13 @@ void MetadataParser::dispatch_item(std::uint32_t type, std::uint32_t code,
       callbacks_.on_field({"album", std::string(payload.begin(), payload.end())});
     } else if (code == kCodeAstm && callbacks_.on_progress) {
       callbacks_.on_progress(parse_astm_duration(payload));
+    } else if (code == kCodeMper && callbacks_.on_field) {
+      std::ostringstream hex;
+      hex << "0x" << std::hex << std::setfill('0');
+      for (unsigned char byte : payload) {
+        hex << std::setw(2) << static_cast<unsigned>(byte);
+      }
+      callbacks_.on_field({"track_id", hex.str()});
     }
     return;
   }

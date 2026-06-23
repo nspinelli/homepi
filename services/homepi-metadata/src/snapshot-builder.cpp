@@ -18,6 +18,7 @@ std::string SnapshotBuilder::build_payload(const NowPlayingSnapshot& snapshot) {
       << "\"playing\":" << (snapshot.playing ? "true" : "false") << ","
       << "\"positionMs\":" << snapshot.position_ms << ","
       << "\"durationMs\":" << snapshot.duration_ms << ","
+      << "\"trackId\":\"" << escape_json_string(snapshot.track_id) << "\","
       << "\"hasCoverArt\":" << (snapshot.has_cover_art ? "true" : "false")
       << '}';
   return out.str();

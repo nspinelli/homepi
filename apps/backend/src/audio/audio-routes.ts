@@ -277,14 +277,22 @@ export class AudioRoutes {
         }
 
         let cover: Buffer | null = null;
-        const cachePath = `/opt/homepi/runtime/cache/cover-zone-${zoneId}`;
-        try {
-          const cached = await readFile(cachePath);
-          if (cached.length > 0) {
-            cover = cached;
+        const cacheDir = this.deps.config.runtime.paths.cacheDir;
+        const coverCandidates = [
+          `${cacheDir}/metadata/artwork/current.jpg`,
+          `${cacheDir}/current.jpg`,
+          `${cacheDir}/cover-zone-${zoneId}`,
+        ];
+        for (const cachePath of coverCandidates) {
+          try {
+            const cached = await readFile(cachePath);
+            if (cached.length > 0) {
+              cover = cached;
+              break;
+            }
+          } catch {
+            continue;
           }
-        } catch {
-          cover = null;
         }
         if (!cover) {
           cover = await this.deps.shairportRemote.fetchCoverArt(zoneId);

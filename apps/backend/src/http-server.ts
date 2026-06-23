@@ -25,6 +25,7 @@ import type { AudioRoutes } from "./audio/audio-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
 import type { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { MetadataEventBridge } from "./metadata/metadata-event-bridge.js";
+import { AudioRealtimeBridge } from "./audio/audio-realtime-bridge.js";
 import type { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
 import type { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
@@ -70,6 +71,8 @@ export interface HttpServerOptions {
   pcmRouterSocketPath?: string;
   /** Unix socket path for metadata event bridge; omit to disable. */
   metadataSocketPath?: string;
+  /** Unix socket path for audio realtime progress bridge; omit to disable. */
+  audioRealtimeSocketPath?: string;
   /** Unix socket path for USB devices event bridge; omit to disable. */
   usbDevicesSocketPath?: string;
   /** Unix socket path for core/events broker; omit to disable. */
@@ -103,6 +106,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     hifiSerialSocketPath,
     pcmRouterSocketPath,
     metadataSocketPath,
+    audioRealtimeSocketPath,
     usbDevicesSocketPath,
     eventsBrokerSocketPath,
     usbDevicesClient,
@@ -183,6 +187,16 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
+  const audioRealtimeBridge = audioRealtimeSocketPath
+    ? new AudioRealtimeBridge({
+        socketPath: audioRealtimeSocketPath,
+        logger,
+        broadcaster,
+        coordinator,
+        onConnectionChange: () => {},
+      })
+    : undefined;
+
   const eventsBrokerBridge = eventsBrokerSocketPath
     ? new EventsBrokerBridge({
         socketPath: eventsBrokerSocketPath,
@@ -201,6 +215,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
   hifiEventBridge?.start();
   pcmEventBridge?.start();
   metadataEventBridge?.start();
+  audioRealtimeBridge?.start();
   eventsBrokerBridge?.start();
 
   const journalLogBridge = new JournalLogBridge({

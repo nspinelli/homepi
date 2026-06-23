@@ -49,14 +49,21 @@ class MetadataStateRepository {
   std::optional<NowPlayingSnapshot> load_owner(int owner_zone_id) const;
 
   /**
-   * Writes cover art bytes for a zone to the cache directory.
+   * Writes cover art bytes to the content-addressed artwork cache.
    * @param cache_dir Cache directory path.
-   * @param zone_id Zone id.
+   * @param zone_id Owner zone id for legacy cover-zone path.
    * @param bytes Cover art bytes.
-   * @returns True when written.
+   * @returns Cover art id (sha256 hex) when written.
    */
-  static bool write_cover_art(const std::string& cache_dir, int zone_id,
-                              const std::vector<std::uint8_t>& bytes);
+  static std::string write_cover_art(const std::string& cache_dir, int zone_id,
+                                     const std::vector<std::uint8_t>& bytes);
+
+  /**
+   * Returns the canonical artwork directory under the cache root.
+   * @param cache_dir Cache directory path.
+   * @returns Path to metadata/artwork.
+   */
+  static std::string artwork_directory(const std::string& cache_dir);
 
   /**
    * Removes cached cover art for a zone when metadata is cleared.
@@ -79,6 +86,12 @@ class MetadataStateRepository {
    * @returns Duration in milliseconds when cached.
    */
   std::optional<int> load_cached_track_duration(const std::string& track_id) const;
+
+  /**
+   * Inserts a completed stream into play history and trims to the last 20 rows.
+   * @param snapshot Final snapshot for the stream.
+   */
+  void record_play_history(const NowPlayingSnapshot& snapshot);
 
  private:
   std::string database_path_;

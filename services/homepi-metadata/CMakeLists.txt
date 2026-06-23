@@ -5,12 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(MOSQUITTO REQUIRED libmosquitto)
 
 set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
 set(HOMEPI_STORAGE_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/storage/cpp")
 set(HOMEPI_EVENTS_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/events/cpp")
+set(HOMEPI_TRANSPORT_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/transport/cpp")
 
 add_subdirectory(${HOMEPI_STORAGE_CPP} ${CMAKE_BINARY_DIR}/homepi_core_storage)
 add_subdirectory(${HOMEPI_EVENTS_CPP} ${CMAKE_BINARY_DIR}/homepi_core_events)
@@ -19,10 +18,11 @@ add_executable(homepi-metadata
   src/main.cpp
   src/service-config.cpp
   src/service.cpp
-  src/pcm-router-subscriber.cpp
+  src/events-owner-subscriber.cpp
+  src/metadata-coalescer.cpp
+  src/realtime-progress-server.cpp
   src/pipe-manager.cpp
   src/metadata-parser.cpp
-  src/mqtt-subscriber.cpp
   src/progress-parser.cpp
   src/now-playing-state.cpp
   src/metadata-state-repository.cpp
@@ -36,14 +36,13 @@ target_include_directories(homepi-metadata PRIVATE
   ${HOMEPI_LOGGING_CPP}/include
   ${HOMEPI_STORAGE_CPP}/include
   ${HOMEPI_EVENTS_CPP}/include
-  ${MOSQUITTO_INCLUDE_DIRS}
+  ${HOMEPI_TRANSPORT_CPP}/include
 )
 
 target_link_libraries(homepi-metadata PRIVATE
   homepi_core_storage
   homepi_core_events
   Threads::Threads
-  ${MOSQUITTO_LIBRARIES}
 )
 
 target_compile_options(homepi-metadata PRIVATE -Wall -Wextra -Wpedantic)

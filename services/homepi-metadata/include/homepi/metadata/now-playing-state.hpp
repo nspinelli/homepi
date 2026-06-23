@@ -68,7 +68,17 @@ class NowPlayingState {
   bool mark_cover_art(int zone_id, bool force = false);
 
   /**
-   * Clears track text and artwork while preserving playback timing.
+   * Clears bundle text fields at mdst without removing cover art on disk.
+   */
+  void begin_metadata_bundle();
+
+  /**
+   * Clears duration and cover flags when the title changes without a new bundle.
+   */
+  void prepare_title_only_change();
+
+  /**
+   * Clears track text fields while preserving playback timing.
    */
   void clear_metadata_fields();
 

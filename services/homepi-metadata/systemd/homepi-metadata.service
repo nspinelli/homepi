@@ -1,7 +1,7 @@
 [Unit]
 Description=HomePi Metadata Service
-After=homepi-pcm-router.service homepi-shairport-supervisor.service mosquitto.service
-Wants=homepi-pcm-router.service mosquitto.service
+After=homepi-pcm-router.service homepi-events.service homepi-shairport-supervisor.service
+Wants=homepi-pcm-router.service homepi-events.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 

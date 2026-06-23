@@ -22,6 +22,10 @@ bool NowPlayingState::update_field(int zone_id, const std::string& field,
     if (snapshot_.title == value) {
       return false;
     }
+    if (!snapshot_.title.empty() && !value.empty() && snapshot_.title != value) {
+      snapshot_.duration_ms = 0;
+      snapshot_.has_cover_art = false;
+    }
     snapshot_.title = value;
     return true;
   }
@@ -104,6 +108,22 @@ bool NowPlayingState::mark_cover_art(int zone_id, bool force) {
   }
   snapshot_.has_cover_art = true;
   return true;
+}
+
+void NowPlayingState::begin_metadata_bundle() {
+  std::lock_guard lock(mutex_);
+  snapshot_.title.clear();
+  snapshot_.artist.clear();
+  snapshot_.album.clear();
+  snapshot_.track_id.clear();
+  snapshot_.duration_ms = 0;
+  snapshot_.position_ms = 0;
+}
+
+void NowPlayingState::prepare_title_only_change() {
+  std::lock_guard lock(mutex_);
+  snapshot_.duration_ms = 0;
+  snapshot_.has_cover_art = false;
 }
 
 void NowPlayingState::clear_metadata_fields() {

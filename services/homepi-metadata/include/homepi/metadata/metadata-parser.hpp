@@ -23,6 +23,7 @@ struct MetadataParserCallbacks {
   std::function<void(bool playing)> on_playback_state;
   std::function<void(const std::vector<std::uint8_t>&)> on_cover_art;
   std::function<void()> on_metadata_bundle_start;
+  std::function<void()> on_metadata_bundle_end;
   std::function<void()> on_session_cleared;
 };
 

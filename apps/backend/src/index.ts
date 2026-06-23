@@ -65,6 +65,7 @@ const usbRoutes = new UsbDevicesRoutes({ client: usbDevicesClient, logger });
 const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.sock`;
 const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
 const metadataSocketPath = `${serviceConfig.runtime.paths.socketDir}/metadata.sock`;
+const audioRealtimeSocketPath = `${serviceConfig.runtime.paths.socketDir}/audio-realtime.sock`;
 const eventsBrokerSocketPath = `${serviceConfig.runtime.paths.socketDir}/events.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
@@ -105,6 +106,7 @@ const server = createHttpServer({
   hifiSerialSocketPath: hifiSocketPath,
   pcmRouterSocketPath,
   metadataSocketPath,
+  audioRealtimeSocketPath,
   eventsBrokerSocketPath,
   usbDevicesSocketPath: usbSocketPath,
   usbDevicesClient,

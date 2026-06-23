@@ -6,6 +6,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "homepi/metadata/metadata-parser.hpp"
@@ -19,6 +20,7 @@ struct PipeManagerCallbacks {
   std::function<void(int zone_id, bool playing)> on_playback_state;
   std::function<void(int zone_id, const std::vector<std::uint8_t>&)> on_cover_art;
   std::function<void(int zone_id)> on_metadata_bundle_start;
+  std::function<void(int zone_id)> on_metadata_bundle_end;
   std::function<void(int zone_id)> on_session_cleared;
 };
 
@@ -51,6 +53,12 @@ class PipeManager {
    */
   void set_owner_zone(int owner_zone_id);
 
+  /**
+   * Restricts pipe opens to the given enabled zone ids.
+   * @param enabled_zone_ids Enabled zone numbers.
+   */
+  void set_enabled_zones(const std::vector<int>& enabled_zone_ids);
+
  private:
   struct ZonePipe {
     int zone_id = 0;
@@ -71,6 +79,7 @@ class PipeManager {
   std::thread thread_;
   std::atomic<bool> stop_{false};
   std::atomic<int> owner_zone_id_{0};
+  std::unordered_set<int> enabled_zones_;
   int epoll_fd_ = -1;
   int wake_fd_ = -1;
   std::mutex zones_mutex_;

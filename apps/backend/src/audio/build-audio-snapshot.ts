@@ -5,6 +5,7 @@ import type { MetadataClient } from "../metadata/metadata-client.js";
 import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
 import type { SystemStatusSnapshot } from "../types/system-status-types.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
+import { readAudioRealtimeSnapshot } from "./read-audio-realtime-snapshot.js";
 
 /**
  * Aggregated audio module snapshot for initial page load.
@@ -116,6 +117,20 @@ export async function buildAudioSnapshot(
 
   let positionMs = metadataSnapshot?.positionMs ?? 0;
   let durationMs = metadataSnapshot?.durationMs ?? 0;
+  let progressSyncedAt: number | undefined;
+  const realtimeSocketPath = `${deps.config.runtime.paths.socketDir}/audio-realtime.sock`;
+  const realtimeFrame = await readAudioRealtimeSnapshot(realtimeSocketPath).catch(() => null);
+  if (
+    realtimeFrame &&
+    realtimeFrame.ownerZoneId === ownerZoneId &&
+    (realtimeFrame.playing || realtimeFrame.positionMs > 0)
+  ) {
+    positionMs = realtimeFrame.positionMs;
+    durationMs = realtimeFrame.durationMs > 0 ? realtimeFrame.durationMs : durationMs;
+    progressSyncedAt = realtimeFrame.wallTime
+      ? Date.parse(realtimeFrame.wallTime)
+      : Date.now();
+  }
   if (
     ownerZoneId > 0 &&
     (metadataSnapshot?.playing ?? false) &&
@@ -157,10 +172,10 @@ export async function buildAudioSnapshot(
         clientName,
       },
       playback: {
-        playing: metadataSnapshot?.playing ?? false,
+        playing: realtimeFrame?.playing ?? metadataSnapshot?.playing ?? false,
         positionMs,
         durationMs,
-        progressSyncedAt: Date.now(),
+        progressSyncedAt: progressSyncedAt ?? Date.now(),
       },
       hasCoverArt: metadataSnapshot?.hasCoverArt,
     },

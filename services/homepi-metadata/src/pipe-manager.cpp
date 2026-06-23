@@ -65,10 +65,12 @@ void PipeManager::start(const std::string& pipe_prefix, int zone_count,
     std::lock_guard lock(zones_mutex_);
     zones_.clear();
     zones_.reserve(static_cast<std::size_t>(zone_count_));
+    enabled_zones_.clear();
     for (int zone = 1; zone <= zone_count_; ++zone) {
       ZonePipe entry;
       entry.zone_id = zone;
       zones_.push_back(std::move(entry));
+      enabled_zones_.insert(zone);
     }
   }
 
@@ -112,6 +114,30 @@ void PipeManager::set_owner_zone(int owner_zone_id) {
   }
 }
 
+void PipeManager::set_enabled_zones(const std::vector<int>& enabled_zone_ids) {
+  std::lock_guard lock(zones_mutex_);
+  enabled_zones_.clear();
+  for (const int zone_id : enabled_zone_ids) {
+    if (zone_id > 0) {
+      enabled_zones_.insert(zone_id);
+    }
+  }
+  for (auto& zone : zones_) {
+    if (enabled_zones_.contains(zone.zone_id)) {
+      continue;
+    }
+    if (zone.fd >= 0) {
+      epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, zone.fd, nullptr);
+      close(zone.fd);
+      zone.fd = -1;
+    }
+  }
+  if (wake_fd_ >= 0) {
+    const uint64_t value = 1;
+    write(wake_fd_, &value, sizeof(value));
+  }
+}
+
 void PipeManager::reset_owner_parser() {
   const int owner_zone_id = owner_zone_id_.load();
   if (owner_zone_id <= 0) {
@@ -148,6 +174,11 @@ void PipeManager::reset_owner_parser() {
   parser_callbacks.on_metadata_bundle_start = [this, owner_zone_id]() {
     if (callbacks_.on_metadata_bundle_start) {
       callbacks_.on_metadata_bundle_start(owner_zone_id);
+    }
+  };
+  parser_callbacks.on_metadata_bundle_end = [this, owner_zone_id]() {
+    if (callbacks_.on_metadata_bundle_end) {
+      callbacks_.on_metadata_bundle_end(owner_zone_id);
     }
   };
   parser_callbacks.on_session_cleared = [this, owner_zone_id]() {
@@ -193,6 +224,14 @@ void PipeManager::run_loop() {
 void PipeManager::open_missing_pipes() {
   std::lock_guard lock(zones_mutex_);
   for (auto& zone : zones_) {
+    if (!enabled_zones_.contains(zone.zone_id)) {
+      if (zone.fd >= 0) {
+        epoll_ctl(epoll_fd_, EPOLL_CTL_DEL, zone.fd, nullptr);
+        close(zone.fd);
+        zone.fd = -1;
+      }
+      continue;
+    }
     if (zone.fd >= 0) {
       continue;
     }

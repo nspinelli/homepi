@@ -18,6 +18,7 @@ struct ServiceConfig {
   std::string virtual_port = "/dev/vHifi";
   int baud_rate = 9600;
   int command_interval_ms = 50;
+  std::string events_socket = "/run/homepi/events.sock";
 };
 
 /** Daemon health for API consumers. */

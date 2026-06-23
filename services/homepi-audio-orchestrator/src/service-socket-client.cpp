@@ -91,6 +91,24 @@ void ServiceSocketClient::send_hifi_command_async(const std::string& command) co
   std::thread([this, command]() { send_hifi_command(command); }).detach();
 }
 
+void ServiceSocketClient::execute_hifi_command_async(const std::string& event,
+                                                     const std::string& payload_json) const {
+  const int fd = homepi::transport::connect_unix_stream_socket(paths_.hifi_serial);
+  if (fd < 0) {
+    return;
+  }
+
+  std::ostringstream request;
+  request << "{\"method\":\"executeHifiCommand\",\"correlationId\":\"audio-orchestrator\","
+          << "\"event\":\"" << event << "\"";
+  if (!payload_json.empty()) {
+    request << ',' << payload_json;
+  }
+  request << "}\n";
+  write_all(fd, request.str());
+  close(fd);
+}
+
 void ServiceSocketClient::nqptp_play_begin() const {
   const int fd = socket(AF_INET, SOCK_DGRAM, 0);
   if (fd < 0) {

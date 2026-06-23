@@ -8,6 +8,9 @@ find_package(SQLite3 REQUIRED)
 find_package(Threads REQUIRED)
 
 set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
+set(HOMEPI_EVENTS_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/events/cpp")
+
+add_subdirectory(${HOMEPI_EVENTS_CPP} ${CMAKE_BINARY_DIR}/homepi_core_events)
 
 add_executable(homepi-hifi-serial
   src/main.cpp
@@ -15,6 +18,8 @@ add_executable(homepi-hifi-serial
   src/serial-path-resolver.cpp
   src/serial-port.cpp
   src/command-queue.cpp
+  src/command-dispatcher.cpp
+  src/events-command-subscriber.cpp
   src/protocol-encoder.cpp
   src/protocol-parser.cpp
   src/state-repository.cpp
@@ -27,9 +32,11 @@ add_executable(homepi-hifi-serial
 target_include_directories(homepi-hifi-serial PRIVATE
   include
   ${HOMEPI_LOGGING_CPP}/include
+  ${HOMEPI_EVENTS_CPP}/include
 )
 
 target_link_libraries(homepi-hifi-serial PRIVATE
+  homepi_core_events
   SQLite::SQLite3
   Threads::Threads
 )

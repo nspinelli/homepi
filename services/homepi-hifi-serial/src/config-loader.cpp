@@ -88,6 +88,11 @@ ServiceConfig load_service_config(const std::string& config_path) {
     config.command_interval_ms = command_interval_ms;
   }
 
+  config.events_socket = json_get_string(json, "eventsSocket");
+  if (config.events_socket.empty()) {
+    config.events_socket = env_or("HOMEPI_EVENTS_SOCKET", "/run/homepi/events.sock");
+  }
+
   return config;
 }
 

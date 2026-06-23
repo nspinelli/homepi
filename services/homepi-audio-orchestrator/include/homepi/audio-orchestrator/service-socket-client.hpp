@@ -50,6 +50,14 @@ class ServiceSocketClient {
    */
   void send_hifi_command_async(const std::string& command) const;
 
+  /**
+   * Dispatches a typed Hi-Fi command without blocking the caller.
+   * @param event Typed command event name.
+   * @param payload_json Inner JSON fields without braces, e.g. "zoneNumber":3,"power":true.
+   */
+  void execute_hifi_command_async(const std::string& event,
+                                  const std::string& payload_json) const;
+
   /** Sends the NQPTP play-begin control message. */
   void nqptp_play_begin() const;
 

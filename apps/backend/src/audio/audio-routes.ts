@@ -11,16 +11,13 @@ import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
 import type { SystemStatusStore } from "../system-status-store.js";
 import { buildAudioSnapshot } from "./build-audio-snapshot.js";
 import {
-  buildZoneControllerCommands,
   requiresShairportRestart,
   type ShairportZonePatch,
   type ZoneControllerPatch,
 } from "./hifi-zone-commands.js";
 import {
-  buildSourceControllerCommands,
   type SourceControllerPatch,
 } from "./hifi-source-commands.js";
-import { buildNetNameCommand } from "./hifi-controller-commands.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 import { percentToAppleDb } from "./volume-conversion.js";
 
@@ -140,7 +137,11 @@ export class AudioRoutes {
         }
 
         await this.deps.client.patchController({ deviceName }, correlationId);
-        await this.deps.client.sendCommand(buildNetNameCommand(deviceName), correlationId);
+        await this.deps.client.executeHifiCommand(
+          "set_controller_netname",
+          { deviceName },
+          correlationId
+        );
 
         sendJson(
           res,
@@ -239,9 +240,11 @@ export class AudioRoutes {
           { volume: clamped },
           correlationId
         );
-        for (const command of buildZoneControllerCommands(zoneId, { volume: clamped })) {
-          await this.deps.client.sendCommand(command, correlationId);
-        }
+        await this.deps.client.executeHifiCommand(
+          "apply_zone_controller_patch",
+          { zoneNumber: zoneId, volume: clamped },
+          correlationId
+        );
 
         sendJson(
           res,
@@ -353,10 +356,11 @@ export class AudioRoutes {
             controllerPatch as Record<string, unknown>,
             correlationId
           );
-        }
-
-        for (const command of buildZoneControllerCommands(zoneNumber, controllerPatch)) {
-          await this.deps.client.sendCommand(command, correlationId);
+          await this.deps.client.executeHifiCommand(
+            "apply_zone_controller_patch",
+            { zoneNumber, ...controllerPatch },
+            correlationId
+          );
         }
 
         if (controllerPatch.enabled !== undefined) {
@@ -447,10 +451,11 @@ export class AudioRoutes {
             controllerPatch as Record<string, unknown>,
             correlationId
           );
-        }
-
-        for (const command of buildSourceControllerCommands(sourceNumber, controllerPatch)) {
-          await this.deps.client.sendCommand(command, correlationId);
+          await this.deps.client.executeHifiCommand(
+            "apply_source_patch",
+            { sourceNumber, ...controllerPatch },
+            correlationId
+          );
         }
 
         let shairportRestartRequired = false;

@@ -123,4 +123,30 @@ inline double json_get_double(std::string_view json, std::string_view field) {
   }
 }
 
+/**
+ * Parses a boolean field from a JSON object string.
+ * @param json JSON object text.
+ * @param field Field name.
+ * @returns Parsed boolean or false when missing.
+ */
+inline bool json_get_bool(std::string_view json, std::string_view field) {
+  const std::string key = "\"" + std::string(field) + "\"";
+  const auto key_pos = json.find(key);
+  if (key_pos == std::string_view::npos) {
+    return false;
+  }
+  const auto colon = json.find(':', key_pos + key.size());
+  if (colon == std::string_view::npos) {
+    return false;
+  }
+  const auto value = json.substr(colon + 1);
+  if (value.find("true") != std::string_view::npos) {
+    return true;
+  }
+  if (value.find("false") != std::string_view::npos) {
+    return false;
+  }
+  return json_get_int(json, field) == 1;
+}
+
 }  // namespace homepi::hifi_serial

@@ -154,6 +154,22 @@ std::string cmd_zone_group_set(int zone, int group) {
   return build_command("Z" + std::to_string(zone) + "GROUP" + std::to_string(group));
 }
 
+std::string cmd_zone_power_set(int zone, int power) {
+  return build_command("Z" + std::to_string(zone) + "POWER" + std::to_string(power));
+}
+
+std::string cmd_zone_volume_set(int zone, int volume) {
+  return build_command("Z" + std::to_string(zone) + "VOLUME" + std::to_string(volume));
+}
+
+std::string cmd_zone_src_set(int zone, int source) {
+  return build_command("Z" + std::to_string(zone) + "SRC" + std::to_string(source));
+}
+
+std::string cmd_zone_mute_set(int zone, int mute) {
+  return build_command("Z" + std::to_string(zone) + "MUTE" + std::to_string(mute));
+}
+
 std::string cmd_source_name_set(int source, const std::string& name) {
   return build_command("S" + std::to_string(source) + "NAME\"" + escape_protocol_string(name) +
                        "\"");

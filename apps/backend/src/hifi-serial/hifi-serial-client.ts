@@ -111,6 +111,24 @@ export class HifiSerialClient {
   }
 
   /**
+   * Dispatches a typed Hi-Fi command through the native command dispatcher.
+   * @param event - Typed command event name.
+   * @param payload - Command payload fields.
+   * @param correlationId - Request correlation id.
+   */
+  async executeHifiCommand(
+    event: string,
+    payload: Record<string, unknown>,
+    correlationId: string
+  ): Promise<{ queued: boolean; queuedCount: number }> {
+    return this.request<{ queued: boolean; queuedCount: number }>(
+      "executeHifiCommand",
+      correlationId,
+      { event, ...payload }
+    );
+  }
+
+  /**
    * Updates cached controller zone fields in SQLite (does not send serial commands).
    * @param zoneNumber - Zone 1-16.
    * @param fields - Controller fields to persist.

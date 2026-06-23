@@ -65,4 +65,19 @@ void EventPublisher::publish_snapshot(const std::string& snapshot_json,
   sink_(out.str());
 }
 
+void EventPublisher::publish_command_status(const std::string& event,
+                                            const std::string& correlation_id,
+                                            int queued_count) {
+  if (!sink_) {
+    return;
+  }
+  std::ostringstream payload;
+  payload << "{\"event\":\"" << json_escape(event) << "\",\"queued\":true,\"queuedCount\":"
+          << queued_count << "}";
+  ParsedUpdate update{.event_name = "command_queued",
+                      .topic = "modules.hifi.command_status",
+                      .payload_json = payload.str()};
+  publish(update, correlation_id);
+}
+
 }  // namespace homepi::hifi_serial

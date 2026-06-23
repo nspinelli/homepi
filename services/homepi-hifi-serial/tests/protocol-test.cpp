@@ -10,6 +10,10 @@ int main() {
   const std::string ver_cmd = cmd_ver_query();
   assert(ver_cmd == "*VER\r");
 
+  assert(cmd_zone_power_set(3, 1) == "*Z3POWER1\r");
+  assert(cmd_zone_volume_set(4, 50) == "*Z4VOLUME50\r");
+  assert(cmd_zone_src_set(2, 7) == "*Z2SRC7\r");
+
   const auto updates = parse_response_line("#Z4VOLUME50");
   assert(!updates.empty());
   assert(updates[0].event_name == "zone_volume_changed");

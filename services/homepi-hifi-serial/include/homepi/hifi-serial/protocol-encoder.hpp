@@ -120,6 +120,18 @@ std::string cmd_zone_pgvol_set(int zone, int volume);
 /** Sets zone group number. */
 std::string cmd_zone_group_set(int zone, int group);
 
+/** Sets zone power state. */
+std::string cmd_zone_power_set(int zone, int power);
+
+/** Sets zone volume level. */
+std::string cmd_zone_volume_set(int zone, int volume);
+
+/** Sets zone source input. */
+std::string cmd_zone_src_set(int zone, int source);
+
+/** Sets zone mute state. */
+std::string cmd_zone_mute_set(int zone, int mute);
+
 /** Sets source name. */
 std::string cmd_source_name_set(int source, const std::string& name);
 

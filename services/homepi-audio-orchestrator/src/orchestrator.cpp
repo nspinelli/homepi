@@ -8,6 +8,23 @@
 
 namespace homepi::audio_orchestrator {
 
+namespace {
+
+std::string zone_power_source_payload(int zone_id, int source_number) {
+  return "\"zoneNumber\":" + std::to_string(zone_id) + ",\"power\":true,\"sourceNumber\":" +
+         std::to_string(source_number);
+}
+
+std::string zone_power_payload(int zone_id, bool power) {
+  return "\"zoneNumber\":" + std::to_string(zone_id) + ",\"power\":" + (power ? "true" : "false");
+}
+
+std::string zone_volume_payload(int zone_id, int volume) {
+  return "\"zoneNumber\":" + std::to_string(zone_id) + ",\"volume\":" + std::to_string(volume);
+}
+
+}  // namespace
+
 Orchestrator::Orchestrator(ServiceConfig config, ServiceSocketClient client)
     : config_(std::move(config)), client_(std::move(client)) {
   refresh_airplay_source();
@@ -91,17 +108,15 @@ void Orchestrator::handle_zone_config_event(const std::string& event,
 
 void Orchestrator::on_active_begin(int zone_id) {
   client_.pcm_route("prewarm_capture", zone_id);
-  client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "POWER1");
-  client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "SRC" +
-                                  std::to_string(airplay_source()));
+  client_.execute_hifi_command_async("set_zone_power_source",
+                                     zone_power_source_payload(zone_id, airplay_source()));
 }
 
 void Orchestrator::on_play_begin(int zone_id) {
   client_.pcm_route("route_start", zone_id);
   client_.nqptp_play_begin();
-  client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "POWER1");
-  client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "SRC" +
-                                  std::to_string(airplay_source()));
+  client_.execute_hifi_command_async("set_zone_power_source",
+                                     zone_power_source_payload(zone_id, airplay_source()));
 }
 
 void Orchestrator::on_play_end(int /*zone_id*/) {
@@ -113,16 +128,15 @@ void Orchestrator::on_active_end(int zone_id) {
   const int fallback_owner = client_.pcm_owner_from_response(response);
   if (fallback_owner > 0 && fallback_owner != zone_id) {
     client_.nqptp_play_begin();
-    client_.send_hifi_command_async("*Z" + std::to_string(fallback_owner) + "POWER1");
-    client_.send_hifi_command_async("*Z" + std::to_string(fallback_owner) + "SRC" +
-                                    std::to_string(airplay_source()));
+    client_.execute_hifi_command_async("set_zone_power_source",
+                                       zone_power_source_payload(fallback_owner, airplay_source()));
   }
-  client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "POWER0");
+  client_.execute_hifi_command_async("set_zone_power", zone_power_payload(zone_id, false));
 }
 
 void Orchestrator::on_volume_changed(int zone_id, const std::string& volume_db) {
   const int percent = volume_db_to_percent(volume_db);
-  client_.send_hifi_command("*Z" + std::to_string(zone_id) + "VOLUME" + std::to_string(percent));
+  client_.execute_hifi_command_async("set_zone_volume", zone_volume_payload(zone_id, percent));
 }
 
 int Orchestrator::airplay_source() const { return airplay_source_; }

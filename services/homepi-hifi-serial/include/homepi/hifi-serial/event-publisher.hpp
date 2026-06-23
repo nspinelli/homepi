@@ -20,6 +20,15 @@ class EventPublisher {
 
   void publish_snapshot(const std::string& snapshot_json, const std::string& correlation_id);
 
+  /**
+   * Publishes a typed command queued status event.
+   * @param event Typed command event name.
+   * @param correlation_id Request correlation id.
+   * @param queued_count Number of protocol commands queued.
+   */
+  void publish_command_status(const std::string& event, const std::string& correlation_id,
+                              int queued_count);
+
  private:
   std::string next_id() const;
 

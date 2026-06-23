@@ -17,9 +17,11 @@
 #include <unistd.h>
 
 #include "homepi/log.hpp"
+#include "homepi/hifi-serial/command-dispatcher.hpp"
 #include "homepi/hifi-serial/command-queue.hpp"
 #include "homepi/hifi-serial/config-loader.hpp"
 #include "homepi/hifi-serial/event-publisher.hpp"
+#include "homepi/hifi-serial/events-command-subscriber.hpp"
 #include "homepi/hifi-serial/json-utils.hpp"
 #include "homepi/hifi-serial/protocol-encoder.hpp"
 #include "homepi/hifi-serial/protocol-parser.hpp"
@@ -37,6 +39,7 @@ std::mutex g_health_mutex;
 homepi::hifi_serial::ServiceHealth g_health;
 homepi::hifi_serial::StateRepository* g_repository = nullptr;
 homepi::hifi_serial::CommandQueue* g_queue = nullptr;
+homepi::hifi_serial::CommandDispatcher* g_dispatcher = nullptr;
 homepi::hifi_serial::UnixApiServer* g_server = nullptr;
 homepi::hifi_serial::EventPublisher* g_events = nullptr;
 
@@ -278,6 +281,19 @@ int main(int argc, char* argv[]) {
           return ok("{\"queued\":true}");
         }
 
+        if (method == "executeHifiCommand") {
+          if (g_dispatcher == nullptr) {
+            return err("command dispatcher unavailable");
+          }
+          const std::string event = homepi::hifi_serial::json_get_string(line, "event");
+          if (event.empty()) {
+            return err("event required");
+          }
+          const int queued_count =
+              g_dispatcher->dispatch(event, line, correlation_id.empty() ? "hifi-serial" : correlation_id);
+          return ok("{\"queued\":true,\"queuedCount\":" + std::to_string(queued_count) + "}");
+        }
+
         if (method == "patchZoneController") {
           const int zone_number = homepi::hifi_serial::json_get_int(line, "zoneNumber");
           if (zone_number < 1 || zone_number > 16) {
@@ -384,6 +400,17 @@ int main(int argc, char* argv[]) {
   });
   g_events = &events;
 
+  homepi::hifi_serial::CommandDispatcher dispatcher(
+      queue, [&](const std::string& event, const std::string& correlation_id, int queued_count) {
+        if (g_events != nullptr) {
+          g_events->publish_command_status(event, correlation_id, queued_count);
+        }
+      });
+  g_dispatcher = &dispatcher;
+
+  homepi::hifi_serial::EventsCommandSubscriber command_subscriber(config, dispatcher);
+  command_subscriber.start();
+
   port.set_line_callback([&](const std::string& line) {
     const auto updates = homepi::hifi_serial::parse_response_line(line);
     for (const auto& update : updates) {
@@ -465,6 +492,7 @@ int main(int argc, char* argv[]) {
 
   logger.log(log_level, "core.runtime", "lifecycle_stopping", "shutdown",
              "homepi-hifi-serial stopping");
+  command_subscriber.stop();
   server.stop();
   queue.stop();
   port.close();

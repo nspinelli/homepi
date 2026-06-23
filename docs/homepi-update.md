@@ -2391,7 +2391,7 @@ Status reflects the **end of `latest-agent-chat.md`** (user confirmed seamless z
 | **3** | `homepi-audio-orchestrator` | Done | **Recovered** | Verify on hardware |
 | **4** | PCM enabled-zone mask + broker commands | Done | **Recovered** | Verify on hardware |
 | **5** | Lazy per-zone capture | Done | **Recovered** | Verify on hardware |
-| **6** | Typed Hi-Fi commands | Done | Partial (raw `sendCommand`) | Rebuild |
+| **6** | Typed Hi-Fi commands | Done | **Recovered** | Verify on hardware |
 | **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Not started (MQTT still on) | Rebuild |
 | **8** | Broker-only migration (socket removal) | Orchestrator on broker only | Not started | After 2–7 |
 | **9** | UI parity + handoff polish | Done (owner promotion, client pill, metadata SSE) | Partial | Rebuild with 2–7 |

@@ -2389,7 +2389,7 @@ Status reflects the **end of `latest-agent-chat.md`** (user confirmed seamless z
 | **1** | `core/events` broker + transport helpers | Done | Partial (`d6cdf4d`) | Complete request-reply, bounded queues, retire duplicate SSE bridges |
 | **2** | Thin Shairport hook → broker events | Done | **Recovered** | Verify on hardware |
 | **3** | `homepi-audio-orchestrator` | Done | **Recovered** | Verify on hardware |
-| **4** | PCM enabled-zone mask + broker commands | Done | Not started | Rebuild |
+| **4** | PCM enabled-zone mask + broker commands | Done | **Recovered** | Verify on hardware |
 | **5** | Lazy per-zone capture | Done | Not started | Rebuild |
 | **6** | Typed Hi-Fi commands | Done | Partial (raw `sendCommand`) | Rebuild |
 | **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Not started (MQTT still on) | Rebuild |

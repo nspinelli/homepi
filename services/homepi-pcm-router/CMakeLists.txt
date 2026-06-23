@@ -19,6 +19,7 @@ add_executable(homepi-pcm-router
   src/main.cpp
   src/service.cpp
   src/audio-profile-loader.cpp
+  src/zone-enable-loader.cpp
   src/loopback-mapping.cpp
   src/frame-ring.cpp
   src/routing-state.cpp

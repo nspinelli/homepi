@@ -23,6 +23,28 @@ int parse_int_field(const std::string& json, const std::string& field) {
   return std::atoi(json.c_str() + colon + 1);
 }
 
+bool parse_bool_field(const std::string& json, const std::string& field) {
+  const auto pos = find_field(json, field);
+  if (pos == std::string::npos) {
+    return false;
+  }
+  const auto colon = json.find(':', pos);
+  if (colon == std::string::npos) {
+    return false;
+  }
+  const auto value_start = json.find_first_not_of(" \t", colon + 1);
+  if (value_start == std::string::npos) {
+    return false;
+  }
+  if (json.compare(value_start, 4, "true") == 0) {
+    return true;
+  }
+  if (json.compare(value_start, 5, "false") == 0) {
+    return false;
+  }
+  return std::atoi(json.c_str() + colon + 1) != 0;
+}
+
 std::vector<int> parse_int_array(const std::string& json, const std::string& field) {
   std::vector<int> values;
   const auto pos = find_field(json, field);

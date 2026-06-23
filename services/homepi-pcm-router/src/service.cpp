@@ -10,6 +10,7 @@
 
 #include "homepi/events/event-envelope.hpp"
 #include "homepi/events/event-emitter.hpp"
+#include "homepi/events/events-client.hpp"
 #include "homepi/log.hpp"
 #include "homepi/pcm-router/audio-bridge.hpp"
 #include "homepi/pcm-router/audio-profile-loader.hpp"
@@ -18,6 +19,7 @@
 #include "homepi/pcm-router/routing-state.hpp"
 #include "homepi/pcm-router/snapshot-builder.hpp"
 #include "homepi/pcm-router/unix-api-server.hpp"
+#include "homepi/pcm-router/zone-enable-loader.hpp"
 
 namespace homepi::pcm_router {
 
@@ -32,6 +34,19 @@ void apply_routing(AudioBridge& bridge, RoutingState& routing) {
   bridge.set_playback_owner(routing.owner_zone_id());
 }
 
+std::string stack_json(const std::vector<int>& stack) {
+  std::ostringstream out;
+  out << '[';
+  for (size_t i = 0; i < stack.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << stack[i];
+  }
+  out << ']';
+  return out.str();
+}
+
 }  // namespace
 
 struct Service::Impl {
@@ -40,6 +55,7 @@ struct Service::Impl {
   ActiveAudioConfig active_config;
   std::unique_ptr<UnixApiServer> server;
   EventSubscriber profile_subscriber;
+  std::unique_ptr<homepi::events::EventsClient> events_client;
   homepi::events::EventEmitter* events = nullptr;
 
   explicit Impl(ServiceConfig config) : bridge(config) {}
@@ -51,7 +67,8 @@ Service::Service(ServiceConfig config)
 Service::~Service() = default;
 
 std::string Service::build_snapshot_json() const {
-  return SnapshotBuilder::build_payload(impl_->routing, impl_->bridge, impl_->active_config);
+  return SnapshotBuilder::build_payload(impl_->routing, impl_->bridge, impl_->active_config,
+                                        config_.zone_count);
 }
 
 int Service::run() {
@@ -67,10 +84,15 @@ int Service::run() {
 
   AudioProfileLoader loader(config_.database_path, config_.artifact_path);
   impl_->active_config = loader.load();
+  impl_->routing.load_enabled_mask(
+      load_enabled_zone_mask(config_.database_path, config_.zone_count));
 
   homepi::events::EventEmitter events(config_.service, [&](const std::string& line) {
     if (impl_->server) {
       impl_->server->broadcast(line);
+    }
+    if (impl_->events_client) {
+      impl_->events_client->publish(line);
     }
   });
   impl_->events = &events;
@@ -78,6 +100,32 @@ int Service::run() {
   const auto emit_snapshot = [&](const std::string& correlation_id) {
     events.emit("modules.pcm.snapshot", "pcm_router_snapshot", correlation_id,
                 build_snapshot_json());
+  };
+
+  const auto apply_set_zone_enabled = [&](int zone_id, bool enabled,
+                                          const std::string& correlation_id) {
+    const SetZoneEnabledResult result = impl_->routing.set_zone_enabled(zone_id, enabled);
+    if (!result.changed) {
+      return;
+    }
+    apply_routing(impl_->bridge, impl_->routing);
+    emit_snapshot(correlation_id.empty() ? "zone_enabled_changed" : correlation_id);
+    if (!enabled) {
+      std::ostringstream disabled_payload;
+      disabled_payload << "{\"zoneId\":" << zone_id << "}";
+      events.emit("modules.pcm.routing", "zone_disabled", correlation_id,
+                  disabled_payload.str());
+      if (result.owner_changed) {
+        std::ostringstream owner_payload;
+        owner_payload << "{\"ownerZoneId\":" << result.new_owner_zone_id
+                      << ",\"previousOwnerZoneId\":" << result.previous_owner_zone_id
+                      << ",\"disabledZoneId\":" << zone_id << ",\"activeStack\":"
+                      << stack_json(impl_->routing.active_stack())
+                      << ",\"reason\":\"owner_disabled\"}";
+        events.emit("modules.pcm.routing", "owner_changed", correlation_id,
+                    owner_payload.str());
+      }
+    }
   };
 
   impl_->server = std::make_unique<UnixApiServer>(
@@ -93,8 +141,9 @@ int Service::run() {
         envelope.payload_json = build_snapshot_json();
         return homepi::events::build_event_line(envelope);
       },
-      [this, &emit_snapshot, &events](const std::string& method, int /*zone_id*/,
-                             const std::string& correlation_id, const std::string& body_json) {
+      [this, &emit_snapshot, &events, &apply_set_zone_enabled](
+          const std::string& method, int /*zone_id*/, const std::string& correlation_id,
+          const std::string& body_json) {
         if (method == "route_start") {
           const int zone_id = parse_int_field(body_json, "zoneId");
           const auto is_zone_active = [this](int stacked_zone_id) {
@@ -110,6 +159,11 @@ int Service::run() {
         } else if (method == "set_routing") {
           impl_->routing.set_routing(parse_int_field(body_json, "ownerZoneId"),
                                      parse_int_array(body_json, "activeStack"));
+        } else if (method == "set_zone_enabled") {
+          const int zone_id = parse_int_field(body_json, "zoneId");
+          const bool enabled = parse_bool_field(body_json, "enabled");
+          apply_set_zone_enabled(zone_id, enabled, correlation_id);
+          return;
         }
         apply_routing(impl_->bridge, impl_->routing);
         const std::string snapshot = build_snapshot_json();
@@ -126,6 +180,33 @@ int Service::run() {
                "failed to bind unix socket");
     return 1;
   }
+
+  impl_->events_client = std::make_unique<homepi::events::EventsClient>(config_.events_socket,
+                                                                        config_.service);
+  impl_->events_client->start(
+      {"modules.pcm.command", "modules.zone.config"},
+      {"modules.pcm.snapshot", "modules.pcm.routing", "modules.pcm", "modules.service.status"},
+      [this, &apply_set_zone_enabled](const std::string& line) {
+        const std::string event = parse_event_name(line);
+        if (event == "set_zone_enabled" || event == "zone_enabled_changed") {
+          const std::string payload = parse_payload_json(line);
+          const int zone_id = parse_int_field(payload, "zoneId");
+          const bool enabled = parse_bool_field(payload, "enabled");
+          std::string correlation_id = "broker";
+          const std::string key = "\"correlationId\"";
+          const auto pos = line.find(key);
+          if (pos != std::string::npos) {
+            const auto quote_start = line.find('"', pos + key.size());
+            if (quote_start != std::string::npos) {
+              const auto quote_end = line.find('"', quote_start + 1);
+              if (quote_end != std::string::npos) {
+                correlation_id = line.substr(quote_start + 1, quote_end - quote_start - 1);
+              }
+            }
+          }
+          apply_set_zone_enabled(zone_id, enabled, correlation_id);
+        }
+      });
 
   impl_->profile_subscriber.start(config_.usb_devices_socket,
                                   [this, &loader, &emit_snapshot](const std::string& event,
@@ -176,6 +257,10 @@ int Service::run() {
 }
 
 void Service::shutdown() {
+  if (impl_->events_client) {
+    impl_->events_client->stop();
+    impl_->events_client.reset();
+  }
   impl_->profile_subscriber.stop();
   if (impl_->bridge.is_running()) {
     impl_->bridge.stop();

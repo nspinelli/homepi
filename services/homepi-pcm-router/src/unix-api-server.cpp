@@ -162,6 +162,8 @@ void UnixApiServer::handle_client(int client_fd) {
           method = "route_join";
         } else if (line.find("set_routing") != std::string::npos) {
           method = "set_routing";
+        } else if (line.find("set_zone_enabled") != std::string::npos) {
+          method = "set_zone_enabled";
         }
         if (method != "unknown") {
           on_command_(method, 0, "socket", line);

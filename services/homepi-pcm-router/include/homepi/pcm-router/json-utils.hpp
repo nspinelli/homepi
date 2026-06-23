@@ -15,6 +15,14 @@ namespace homepi::pcm_router {
 int parse_int_field(const std::string& json, const std::string& field);
 
 /**
+ * Parses a boolean JSON field from a loosely structured object string.
+ * @param json - JSON object text.
+ * @param field - Field name without quotes.
+ * @returns Parsed boolean or false when missing.
+ */
+bool parse_bool_field(const std::string& json, const std::string& field);
+
+/**
  * Parses an integer array JSON field.
  * @param json - JSON object text.
  * @param field - Field name without quotes.

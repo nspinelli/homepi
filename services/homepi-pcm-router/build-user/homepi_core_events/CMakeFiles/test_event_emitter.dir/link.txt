@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/test_event_emitter.dir/link.d "CMakeFiles/test_event_emitter.dir/tests/test-event-emitter.cpp.o" -o test_event_emitter  libhomepi_core_events.a ../homepi_core_transport/libhomepi_core_transport.a

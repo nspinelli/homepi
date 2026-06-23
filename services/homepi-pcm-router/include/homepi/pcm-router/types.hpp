@@ -15,7 +15,7 @@ constexpr int64_t kOwnerPromotionWaitMs = 750;
 constexpr int64_t kCaptureStaleMs = 80;
 
 /** Zone capture behavior. */
-enum class ZoneCaptureMode { Off, Drain, Buffer };
+enum class ZoneCaptureMode { Off, Drain, Buffer, Disabled };
 
 /** DAC lifecycle for snapshots. */
 enum class DacLifecycleState { Unassigned, Unavailable, Idle, Open, Paused };
@@ -38,6 +38,7 @@ struct ServiceConfig {
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
   std::string artifact_path = "/opt/homepi/runtime/generated/audio/operating-profile.json";
   std::string usb_devices_socket = "/run/homepi/usb-devices.sock";
+  std::string events_socket = "/run/homepi/events.sock";
   std::string loopback_card_a = "HomePiZonesA";
   std::string loopback_card_b = "HomePiZonesB";
   int zone_count = 16;

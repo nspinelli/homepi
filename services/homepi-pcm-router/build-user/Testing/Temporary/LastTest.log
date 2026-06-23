@@ -1,0 +1,52 @@
+Start testing: Jun 22 22:37 EDT
+----------------------------------------------------------
+1/3 Testing: test_routing_state
+1/3 Test: test_routing_state
+Command: "/home/homepi/homepi/services/homepi-pcm-router/build-user/test_routing_state"
+Directory: /home/homepi/homepi/services/homepi-pcm-router/build-user
+"test_routing_state" start time: Jun 22 22:37 EDT
+Output:
+----------------------------------------------------------
+test_routing_state: /home/homepi/homepi/services/homepi-pcm-router/tests/test-routing-state.cpp:70: int main(): Assertion `routing.owner_zone_id() == 8' failed.
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Failed.
+"test_routing_state" end time: Jun 22 22:37 EDT
+"test_routing_state" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/3 Testing: test_audio_profile_repository
+2/3 Test: test_audio_profile_repository
+Command: "/home/homepi/homepi/services/homepi-pcm-router/build-user/homepi_core_storage/test_audio_profile_repository"
+Directory: /home/homepi/homepi/services/homepi-pcm-router/build-user/homepi_core_storage
+"test_audio_profile_repository" start time: Jun 22 22:37 EDT
+Output:
+----------------------------------------------------------
+terminate called after throwing an instance of 'std::filesystem::__cxx11::filesystem_error'
+  what():  filesystem error: cannot remove: Operation not permitted [/tmp/homepi-audio-profile-test.sqlite]
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Failed.
+"test_audio_profile_repository" end time: Jun 22 22:37 EDT
+"test_audio_profile_repository" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/3 Testing: test_event_emitter
+3/3 Test: test_event_emitter
+Command: "/home/homepi/homepi/services/homepi-pcm-router/build-user/homepi_core_events/test_event_emitter"
+Directory: /home/homepi/homepi/services/homepi-pcm-router/build-user/homepi_core_events
+"test_event_emitter" start time: Jun 22 22:37 EDT
+Output:
+----------------------------------------------------------
+test_event_emitter: OK
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"test_event_emitter" end time: Jun 22 22:37 EDT
+"test_event_emitter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Jun 22 22:37 EDT

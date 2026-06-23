@@ -16,10 +16,11 @@ class SnapshotBuilder {
    * @param routing Routing state.
    * @param bridge Audio bridge.
    * @param config Active audio config.
+   * @param zone_count Configured zone count.
    * @return JSON object without outer envelope.
    */
   static std::string build_payload(const RoutingState& routing, const AudioBridge& bridge,
-                                   const ActiveAudioConfig& config);
+                                   const ActiveAudioConfig& config, int zone_count);
 };
 
 }  // namespace homepi::pcm_router

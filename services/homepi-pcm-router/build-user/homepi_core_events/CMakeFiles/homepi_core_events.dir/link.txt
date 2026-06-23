@@ -1,0 +1,2 @@
+/usr/bin/ar qc libhomepi_core_events.a "CMakeFiles/homepi_core_events.dir/src/event-envelope.cpp.o" "CMakeFiles/homepi_core_events.dir/src/event-emitter.cpp.o" CMakeFiles/homepi_core_events.dir/src/broker.cpp.o "CMakeFiles/homepi_core_events.dir/src/events-client.cpp.o"
+/usr/bin/ranlib libhomepi_core_events.a

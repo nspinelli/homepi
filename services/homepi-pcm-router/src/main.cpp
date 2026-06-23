@@ -20,6 +20,9 @@ homepi::pcm_router::ServiceConfig load_config_from_env() {
   if (const char* value = std::getenv("HOMEPI_USB_DEVICES_SOCKET")) {
     config.usb_devices_socket = value;
   }
+  if (const char* value = std::getenv("HOMEPI_EVENTS_SOCKET")) {
+    config.events_socket = value;
+  }
   if (const char* value = std::getenv("LOG_LEVEL")) {
     config.log_level = value;
   }

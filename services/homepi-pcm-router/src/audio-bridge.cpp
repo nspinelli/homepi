@@ -80,7 +80,10 @@ ActiveAudioConfig AudioBridge::active_config() const { return active_config_; }
 void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones + 1>& modes) {
   for (int i = 1; i <= kMaxZones; ++i) {
     const ZoneCaptureMode previous = zone_modes_[i].load();
-    if (previous == ZoneCaptureMode::Buffer && modes[i] == ZoneCaptureMode::Drain && i <= config_.zone_count) {
+    if (previous == ZoneCaptureMode::Buffer &&
+        (modes[i] == ZoneCaptureMode::Drain || modes[i] == ZoneCaptureMode::Disabled ||
+         modes[i] == ZoneCaptureMode::Off) &&
+        i <= config_.zone_count) {
       rings_[static_cast<size_t>(i - 1)]->clear();
     }
     zone_modes_[i].store(modes[i]);
@@ -308,7 +311,7 @@ void AudioBridge::capture_loop(int zone_index) {
   std::vector<uint8_t> buffer(config_.period_frames * bytes_per_frame_);
   while (!stop_requested_.load()) {
     const ZoneCaptureMode mode = zone_modes_[zone_id].load();
-    if (mode == ZoneCaptureMode::Off) {
+    if (mode == ZoneCaptureMode::Off || mode == ZoneCaptureMode::Disabled) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       continue;
     }

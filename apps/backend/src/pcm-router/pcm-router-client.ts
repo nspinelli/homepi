@@ -27,6 +27,10 @@ export interface PcmProfileTuple {
 export interface PcmRouterSnapshotPayload {
   ownerZoneId: number;
   activeStack: number[];
+  pendingOwnerZoneId?: number;
+  zoneCount?: number;
+  enabledZones?: number[];
+  disabledZones?: number[];
   dacState: string;
   profileMode?: string;
   profileStatus?: string;
@@ -145,6 +149,15 @@ export class PcmRouterClient {
             finish({
               ownerZoneId: typeof p.ownerZoneId === "number" ? p.ownerZoneId : 0,
               activeStack: stack,
+              pendingOwnerZoneId:
+                typeof p.pendingOwnerZoneId === "number" ? p.pendingOwnerZoneId : undefined,
+              zoneCount: typeof p.zoneCount === "number" ? p.zoneCount : undefined,
+              enabledZones: Array.isArray(p.enabledZones)
+                ? (p.enabledZones as number[])
+                : undefined,
+              disabledZones: Array.isArray(p.disabledZones)
+                ? (p.disabledZones as number[])
+                : undefined,
               dacState: typeof p.dacState === "string" ? p.dacState : "unknown",
               profileMode: typeof p.profileMode === "string" ? p.profileMode : undefined,
               profileStatus:
@@ -179,6 +192,91 @@ export class PcmRouterClient {
                           : 0,
                     }
                   : undefined,
+            });
+            return;
+          } catch {
+            continue;
+          }
+        }
+      });
+
+      socket.on("connect", () => {
+        socket.write(`${payload}\n`);
+      });
+    });
+  }
+
+  /**
+   * Updates runtime zone enable state on the PCM router.
+   * @param zoneId - Zone number 1-16.
+   * @param enabled - True when the zone may participate in routing.
+   * @param correlationId - Request correlation id.
+   * @returns Snapshot payload or null when unavailable.
+   */
+  async setZoneEnabled(
+    zoneId: number,
+    enabled: boolean,
+    correlationId: string
+  ): Promise<PcmRouterSnapshotPayload | null> {
+    const payload = JSON.stringify({
+      method: "set_zone_enabled",
+      correlationId,
+      zoneId,
+      enabled,
+    });
+
+    return new Promise<PcmRouterSnapshotPayload | null>((resolve) => {
+      const socket = connect(this.socketPath);
+      let buffer = "";
+      let settled = false;
+
+      const finish = (value: PcmRouterSnapshotPayload | null): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(value);
+      };
+
+      const timer = setTimeout(() => finish(null), this.timeoutMs);
+
+      socket.on("error", () => finish(null));
+
+      socket.on("data", (chunk) => {
+        buffer += chunk.toString("utf8");
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) {
+            continue;
+          }
+          try {
+            const parsed = JSON.parse(line) as EventEnvelope & {
+              payload?: Record<string, unknown>;
+            };
+            if (parsed.event !== "pcm_router_snapshot") {
+              continue;
+            }
+            const p = parsed.payload ?? {};
+            const stack = Array.isArray(p.activeStack)
+              ? (p.activeStack as number[])
+              : [];
+            finish({
+              ownerZoneId: typeof p.ownerZoneId === "number" ? p.ownerZoneId : 0,
+              activeStack: stack,
+              pendingOwnerZoneId:
+                typeof p.pendingOwnerZoneId === "number" ? p.pendingOwnerZoneId : undefined,
+              zoneCount: typeof p.zoneCount === "number" ? p.zoneCount : undefined,
+              enabledZones: Array.isArray(p.enabledZones)
+                ? (p.enabledZones as number[])
+                : undefined,
+              disabledZones: Array.isArray(p.disabledZones)
+                ? (p.disabledZones as number[])
+                : undefined,
+              dacState: typeof p.dacState === "string" ? p.dacState : "unknown",
             });
             return;
           } catch {

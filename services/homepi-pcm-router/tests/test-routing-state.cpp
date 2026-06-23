@@ -3,8 +3,19 @@
 
 #include "homepi/pcm-router/routing-state.hpp"
 
+namespace {
+
+void enable_all_zones(homepi::pcm_router::RoutingState& routing) {
+  std::array<bool, homepi::pcm_router::kMaxZones + 1> mask{};
+  mask.fill(true);
+  routing.load_enabled_mask(mask);
+}
+
+}  // namespace
+
 int main() {
   homepi::pcm_router::RoutingState routing;
+  enable_all_zones(routing);
   routing.on_route_start(2);
   routing.on_route_join(5);
   assert(routing.owner_zone_id() == 2);
@@ -26,6 +37,7 @@ int main() {
   // call route_end on play_end; only deactivate should tear down routing.
   {
     homepi::pcm_router::RoutingState multi_zone;
+    enable_all_zones(multi_zone);
     multi_zone.on_route_start(1);
     multi_zone.on_route_join(2);
     multi_zone.on_route_end(1);
@@ -53,27 +65,24 @@ int main() {
   assert(promoted_stack[0] == 3);
   assert(promoted_stack[1] == 8);
 
-  routing.on_route_start(3);
-  routing.on_route_start(8, [](int zone_id) { return zone_id == 8; });
-  assert(routing.owner_zone_id() == 8);
-  const auto solo_stack = routing.active_stack();
-  assert(solo_stack.size() == 1);
-  assert(solo_stack[0] == 8);
+  {
+    homepi::pcm_router::RoutingState disabled_routing;
+    enable_all_zones(disabled_routing);
+    disabled_routing.on_route_start(2);
+    disabled_routing.on_route_join(5);
+    disabled_routing.set_zone_enabled(5, false);
+    assert(disabled_routing.active_stack().size() == 1);
+    assert(disabled_routing.active_stack()[0] == 2);
+    assert(disabled_routing.zone_modes()[5] ==
+           homepi::pcm_router::ZoneCaptureMode::Disabled);
+    disabled_routing.on_route_join(5);
+    assert(disabled_routing.active_stack().size() == 1);
 
-  routing.on_route_start(8);
-  routing.on_route_start(3, [](int /*zone_id*/) { return false; });
-  assert(routing.owner_zone_id() == 3);
-  const auto join_stack = routing.active_stack();
-  assert(join_stack.size() == 2);
-  assert(join_stack[0] == 3);
-  assert(join_stack[1] == 8);
-
-  routing.on_route_start(3);
-  routing.on_route_start(8, [](int /*zone_id*/) { return false; });
-  assert(routing.owner_zone_id() == 8);
-  const auto pruned_stack = routing.active_stack();
-  assert(pruned_stack.size() == 1);
-  assert(pruned_stack[0] == 8);
+    const auto owner_disable = disabled_routing.set_zone_enabled(2, false);
+    assert(owner_disable.owner_changed);
+    assert(disabled_routing.owner_zone_id() == 0);
+    assert(disabled_routing.active_stack().empty());
+  }
 
   std::cout << "test_routing_state: OK\n";
   return 0;

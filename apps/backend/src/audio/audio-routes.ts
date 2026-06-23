@@ -359,6 +359,14 @@ export class AudioRoutes {
           await this.deps.client.sendCommand(command, correlationId);
         }
 
+        if (controllerPatch.enabled !== undefined) {
+          await this.deps.pcmClient.setZoneEnabled(
+            zoneNumber,
+            controllerPatch.enabled === 1,
+            correlationId
+          );
+        }
+
         if (Object.keys(shairportPatch).length > 0) {
           await this.deps.client.updateShairportZoneSettings(
             zoneNumber,

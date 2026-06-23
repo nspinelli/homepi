@@ -47,8 +47,10 @@ std::string tuple_json(const AudioProfileTuple& tuple) {
 }  // namespace
 
 std::string SnapshotBuilder::build_payload(const RoutingState& routing, const AudioBridge& bridge,
-                                           const ActiveAudioConfig& config) {
+                                           const ActiveAudioConfig& config, int zone_count) {
   const auto stack = routing.active_stack();
+  const auto enabled_zones = routing.enabled_zones();
+  const auto disabled_zones = routing.disabled_zones();
   const auto stats = bridge.stats();
   std::ostringstream out;
   out << "{"
@@ -58,6 +60,21 @@ std::string SnapshotBuilder::build_payload(const RoutingState& routing, const Au
       out << ',';
     }
     out << stack[i];
+  }
+  out << "],\"pendingOwnerZoneId\":" << routing.pending_owner_zone_id()
+      << ",\"zoneCount\":" << zone_count << ",\"enabledZones\":[";
+  for (size_t i = 0; i < enabled_zones.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << enabled_zones[i];
+  }
+  out << "],\"disabledZones\":[";
+  for (size_t i = 0; i < disabled_zones.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << disabled_zones[i];
   }
   out << "],\"dacState\":\"" << dac_state_to_string(bridge.dac_state()) << "\","
       << "\"profileMode\":\""

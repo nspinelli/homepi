@@ -47,6 +47,14 @@ std::string stack_json(const std::vector<int>& stack) {
   return out.str();
 }
 
+void emit_zone_capture_closed(homepi::events::EventEmitter& events, int zone_id,
+                              const std::string& reason, const std::string& correlation_id) {
+  std::ostringstream payload;
+  payload << "{\"zoneId\":" << zone_id << ",\"captureOpen\":false,\"reason\":\"" << reason
+          << "\"}";
+  events.emit("modules.pcm.routing", "zone_capture_closed", correlation_id, payload.str());
+}
+
 }  // namespace
 
 struct Service::Impl {
@@ -109,6 +117,9 @@ int Service::run() {
       return;
     }
     apply_routing(impl_->bridge, impl_->routing);
+    if (!enabled) {
+      emit_zone_capture_closed(events, zone_id, "zone_disabled", correlation_id);
+    }
     emit_snapshot(correlation_id.empty() ? "zone_enabled_changed" : correlation_id);
     if (!enabled) {
       std::ostringstream disabled_payload;
@@ -128,6 +139,14 @@ int Service::run() {
     }
   };
 
+  const auto handle_prewarm_capture = [&](int zone_id, const std::string& correlation_id) {
+    if (zone_id < 1 || zone_id > config_.zone_count || !impl_->routing.is_zone_enabled(zone_id)) {
+      return;
+    }
+    impl_->bridge.prewarm_zone_capture(zone_id);
+    emit_snapshot(correlation_id.empty() ? "prewarm_capture" : correlation_id);
+  };
+
   impl_->server = std::make_unique<UnixApiServer>(
       config_.socket_path,
       [&](const std::string& correlation_id) {
@@ -141,37 +160,47 @@ int Service::run() {
         envelope.payload_json = build_snapshot_json();
         return homepi::events::build_event_line(envelope);
       },
-      [this, &emit_snapshot, &events, &apply_set_zone_enabled](
+      [this, &emit_snapshot, &events, &apply_set_zone_enabled, &handle_prewarm_capture](
           const std::string& method, int /*zone_id*/, const std::string& correlation_id,
           const std::string& body_json) {
+        const int zone_id = parse_int_field(body_json, "zoneId");
         if (method == "route_start") {
-          const int zone_id = parse_int_field(body_json, "zoneId");
           const auto is_zone_active = [this](int stacked_zone_id) {
             return impl_->bridge.zone_recently_buffered(stacked_zone_id, 5000) ||
                    impl_->routing.zone_recently_routed(stacked_zone_id, 5000);
           };
           impl_->routing.on_route_start(zone_id, is_zone_active);
         } else if (method == "route_end") {
-          const int zone_id = parse_int_field(body_json, "zoneId");
           impl_->routing.on_route_end(zone_id);
+          apply_routing(impl_->bridge, impl_->routing);
+          impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          const std::string snapshot = build_snapshot_json();
+          emit_snapshot(correlation_id.empty() ? "routing_changed" : correlation_id);
+          std::ostringstream routing_payload;
+          routing_payload << snapshot.substr(0, snapshot.size() - 1) << ",\"zoneId\":" << zone_id
+                          << ",\"method\":\"" << method << "\"}";
+          events.emit("modules.pcm", "routing_changed", correlation_id, routing_payload.str());
+          return;
         } else if (method == "route_join") {
-          impl_->routing.on_route_join(parse_int_field(body_json, "zoneId"));
+          impl_->routing.on_route_join(zone_id);
+          handle_prewarm_capture(zone_id, correlation_id);
         } else if (method == "set_routing") {
           impl_->routing.set_routing(parse_int_field(body_json, "ownerZoneId"),
                                      parse_int_array(body_json, "activeStack"));
         } else if (method == "set_zone_enabled") {
-          const int zone_id = parse_int_field(body_json, "zoneId");
           const bool enabled = parse_bool_field(body_json, "enabled");
           apply_set_zone_enabled(zone_id, enabled, correlation_id);
+          return;
+        } else if (method == "prewarm_capture") {
+          handle_prewarm_capture(zone_id, correlation_id);
           return;
         }
         apply_routing(impl_->bridge, impl_->routing);
         const std::string snapshot = build_snapshot_json();
         emit_snapshot(correlation_id.empty() ? "routing_changed" : correlation_id);
         std::ostringstream routing_payload;
-        routing_payload << snapshot.substr(0, snapshot.size() - 1) << ",\"zoneId\":"
-                        << parse_int_field(body_json, "zoneId") << ",\"method\":\"" << method
-                        << "\"}";
+        routing_payload << snapshot.substr(0, snapshot.size() - 1) << ",\"zoneId\":" << zone_id
+                        << ",\"method\":\"" << method << "\"}";
         events.emit("modules.pcm", "routing_changed", correlation_id, routing_payload.str());
       });
 
@@ -186,25 +215,53 @@ int Service::run() {
   impl_->events_client->start(
       {"modules.pcm.command", "modules.zone.config"},
       {"modules.pcm.snapshot", "modules.pcm.routing", "modules.pcm", "modules.service.status"},
-      [this, &apply_set_zone_enabled](const std::string& line) {
+      [this, &apply_set_zone_enabled, &handle_prewarm_capture, &events, &emit_snapshot](
+          const std::string& line) {
         const std::string event = parse_event_name(line);
-        if (event == "set_zone_enabled" || event == "zone_enabled_changed") {
-          const std::string payload = parse_payload_json(line);
-          const int zone_id = parse_int_field(payload, "zoneId");
-          const bool enabled = parse_bool_field(payload, "enabled");
-          std::string correlation_id = "broker";
-          const std::string key = "\"correlationId\"";
-          const auto pos = line.find(key);
-          if (pos != std::string::npos) {
-            const auto quote_start = line.find('"', pos + key.size());
-            if (quote_start != std::string::npos) {
-              const auto quote_end = line.find('"', quote_start + 1);
-              if (quote_end != std::string::npos) {
-                correlation_id = line.substr(quote_start + 1, quote_end - quote_start - 1);
-              }
+        std::string correlation_id = "broker";
+        const std::string key = "\"correlationId\"";
+        const auto pos = line.find(key);
+        if (pos != std::string::npos) {
+          const auto quote_start = line.find('"', pos + key.size());
+          if (quote_start != std::string::npos) {
+            const auto quote_end = line.find('"', quote_start + 1);
+            if (quote_end != std::string::npos) {
+              correlation_id = line.substr(quote_start + 1, quote_end - quote_start - 1);
             }
           }
-          apply_set_zone_enabled(zone_id, enabled, correlation_id);
+        }
+        const std::string payload = parse_payload_json(line);
+        const int zone_id = parse_int_field(payload, "zoneId");
+        if (event == "set_zone_enabled" || event == "zone_enabled_changed") {
+          apply_set_zone_enabled(zone_id, parse_bool_field(payload, "enabled"), correlation_id);
+          return;
+        }
+        if (event == "prewarm_capture") {
+          handle_prewarm_capture(zone_id, correlation_id);
+          return;
+        }
+        if (event == "route_start") {
+          const auto is_zone_active = [this](int stacked_zone_id) {
+            return impl_->bridge.zone_recently_buffered(stacked_zone_id, 5000) ||
+                   impl_->routing.zone_recently_routed(stacked_zone_id, 5000);
+          };
+          impl_->routing.on_route_start(zone_id, is_zone_active);
+          apply_routing(impl_->bridge, impl_->routing);
+          emit_snapshot(correlation_id);
+          return;
+        }
+        if (event == "route_end") {
+          impl_->routing.on_route_end(zone_id);
+          apply_routing(impl_->bridge, impl_->routing);
+          impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          emit_snapshot(correlation_id);
+          return;
+        }
+        if (event == "route_join") {
+          impl_->routing.on_route_join(zone_id);
+          handle_prewarm_capture(zone_id, correlation_id);
+          apply_routing(impl_->bridge, impl_->routing);
+          emit_snapshot(correlation_id);
         }
       });
 
@@ -239,6 +296,7 @@ int Service::run() {
   events.emit_service_status("service_started", "startup", started.ok ? "healthy" : "degraded");
   emit_snapshot("startup");
 
+  int64_t last_lifecycle_tick_ms = 0;
   while (!g_stop.load()) {
     const auto is_zone_ready = [this](int zone_id) {
       return impl_->bridge.zone_available_frames(zone_id) >= config_.period_frames;
@@ -247,7 +305,22 @@ int Service::run() {
       apply_routing(impl_->bridge, impl_->routing);
       emit_snapshot("owner_promoted");
     }
-    const int sleep_ms = impl_->routing.pending_owner_zone_id() > 0 ? 10 : 500;
+
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+    if (now_ms - last_lifecycle_tick_ms >= 100) {
+      last_lifecycle_tick_ms = now_ms;
+      const CaptureLifecycleTick tick = impl_->bridge.tick_capture_lifecycle();
+      if (!tick.closed_zones.empty()) {
+        for (int zone_id : tick.closed_zones) {
+          emit_zone_capture_closed(events, zone_id, "idle_grace_expired", "capture_lifecycle");
+        }
+        emit_snapshot("capture_lifecycle");
+      }
+    }
+
+    const int sleep_ms = impl_->routing.pending_owner_zone_id() > 0 ? 10 : 100;
     std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
   }
 

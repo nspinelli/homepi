@@ -58,13 +58,12 @@ int64_t steady_now_ms() {
 
 AudioBridge::AudioBridge(const ServiceConfig& config) : config_(config) {
   for (auto& mode : zone_modes_) {
-    mode.store(ZoneCaptureMode::Drain);
+    mode.store(ZoneCaptureMode::Off);
   }
   rings_.reserve(config.zone_count);
   for (int i = 0; i < config.zone_count; ++i) {
     rings_.push_back(std::make_unique<FrameRing>());
   }
-  capture_handles_.resize(config.zone_count, nullptr);
 }
 
 AudioBridge::~AudioBridge() { stop(); }
@@ -87,8 +86,142 @@ void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones +
       rings_[static_cast<size_t>(i - 1)]->clear();
     }
     zone_modes_[i].store(modes[i]);
+    if (i > config_.zone_count) {
+      continue;
+    }
+    if (modes[i] == ZoneCaptureMode::Buffer) {
+      ensure_zone_capture_open(i);
+    } else if (modes[i] == ZoneCaptureMode::Disabled) {
+      disable_zone_capture(i);
+    }
   }
   routing_revision_.fetch_add(1, std::memory_order_relaxed);
+}
+
+void AudioBridge::prewarm_zone_capture(int zone_id) {
+  if (zone_id < 1 || zone_id > config_.zone_count) {
+    return;
+  }
+  capture_slots_[zone_id].idle_close_at_ms.store(0);
+  ensure_zone_capture_open(zone_id);
+}
+
+void AudioBridge::disable_zone_capture(int zone_id) {
+  close_zone_capture_internal(zone_id);
+}
+
+void AudioBridge::schedule_zone_capture_idle_close(int zone_id) {
+  if (zone_id < 1 || zone_id > config_.zone_count) {
+    return;
+  }
+  ZoneCaptureSlot& slot = capture_slots_[zone_id];
+  if (!slot.running.load()) {
+    slot.idle_close_at_ms.store(0);
+    return;
+  }
+  slot.idle_close_at_ms.store(steady_now_ms() + config_.capture_idle_close_delay_ms);
+}
+
+CaptureLifecycleTick AudioBridge::tick_capture_lifecycle() {
+  CaptureLifecycleTick tick;
+  const int64_t now_ms = steady_now_ms();
+  const int owner = playback_owner_.load();
+  for (int zone_id = 1; zone_id <= config_.zone_count; ++zone_id) {
+    ZoneCaptureSlot& slot = capture_slots_[zone_id];
+    const int64_t close_at = slot.idle_close_at_ms.load();
+    if (close_at <= 0 || now_ms < close_at) {
+      continue;
+    }
+    if (zone_id == owner) {
+      continue;
+    }
+    if (zone_modes_[zone_id].load() == ZoneCaptureMode::Buffer) {
+      continue;
+    }
+    if (!slot.running.load()) {
+      slot.idle_close_at_ms.store(0);
+      continue;
+    }
+    close_zone_capture_internal(zone_id);
+    tick.closed_zones.push_back(zone_id);
+  }
+  return tick;
+}
+
+std::vector<int> AudioBridge::open_capture_zones() const {
+  std::vector<int> zones;
+  for (int zone_id = 1; zone_id <= config_.zone_count; ++zone_id) {
+    if (capture_slots_[zone_id].running.load()) {
+      zones.push_back(zone_id);
+    }
+  }
+  return zones;
+}
+
+std::vector<int> AudioBridge::closing_grace_capture_zones() const {
+  std::vector<int> zones;
+  for (int zone_id = 1; zone_id <= config_.zone_count; ++zone_id) {
+    if (capture_slots_[zone_id].idle_close_at_ms.load() > 0 &&
+        capture_slots_[zone_id].running.load()) {
+      zones.push_back(zone_id);
+    }
+  }
+  return zones;
+}
+
+bool AudioBridge::ensure_zone_capture_open(int zone_id) {
+  if (!running_.load() || zone_id < 1 || zone_id > config_.zone_count) {
+    return false;
+  }
+  ZoneCaptureSlot& slot = capture_slots_[zone_id];
+  if (slot.running.load()) {
+    slot.idle_close_at_ms.store(0);
+    return true;
+  }
+
+  const auto mapped = map_zone_capture_device(zone_id, config_);
+  if (!mapped.has_value()) {
+    return false;
+  }
+
+  snd_pcm_t* handle = nullptr;
+  if (snd_pcm_open(&handle, mapped->capture.c_str(), SND_PCM_STREAM_CAPTURE, 0) < 0) {
+    return false;
+  }
+  std::string error;
+  if (!configure_pcm(handle, active_config_.loopback_profile, config_.period_frames,
+                     config_.buffer_frames, error)) {
+    snd_pcm_close(handle);
+    return false;
+  }
+
+  rings_[static_cast<size_t>(zone_id - 1)]->init(config_.period_frames * 8, bytes_per_frame_);
+  {
+    std::lock_guard lock(slot.mutex);
+    slot.handle = handle;
+  }
+  slot.stop_requested.store(false);
+  slot.running.store(true);
+  const int zone_index = zone_id - 1;
+  slot.thread = std::thread([this, zone_index]() { capture_loop(zone_index); });
+  return true;
+}
+
+void AudioBridge::close_zone_capture_internal(int zone_id) {
+  if (zone_id < 1 || zone_id > config_.zone_count) {
+    return;
+  }
+  ZoneCaptureSlot& slot = capture_slots_[zone_id];
+  slot.idle_close_at_ms.store(0);
+  if (!slot.running.load()) {
+    return;
+  }
+  slot.stop_requested.store(true);
+  if (slot.thread.joinable()) {
+    slot.thread.join();
+  }
+  slot.stop_requested.store(false);
+  rings_[static_cast<size_t>(zone_id - 1)]->clear();
 }
 
 void AudioBridge::request_dac_idle() {
@@ -197,8 +330,7 @@ bool AudioBridge::playback_owner_unchanged(int owner, uint64_t revision) const {
          routing_revision_.load(std::memory_order_relaxed) == revision;
 }
 
-bool AudioBridge::open_devices(const ActiveAudioConfig& config) {
-  close_devices();
+bool AudioBridge::prepare_playback_config(const ActiveAudioConfig& config) {
   active_config_ = config;
   bytes_per_frame_ = config.loopback_profile.channels *
                      (config.loopback_profile.sample_format == homepi::storage::SampleFormat::S32Le
@@ -206,22 +338,7 @@ bool AudioBridge::open_devices(const ActiveAudioConfig& config) {
                           : sizeof(int16_t));
 
   for (int zone = 1; zone <= config_.zone_count; ++zone) {
-    const auto mapped = map_zone_capture_device(zone, config_);
-    if (!mapped.has_value()) {
-      continue;
-    }
-    snd_pcm_t* handle = nullptr;
-    if (snd_pcm_open(&handle, mapped->capture.c_str(), SND_PCM_STREAM_CAPTURE, 0) < 0) {
-      continue;
-    }
-    std::string error;
-    if (!configure_pcm(handle, config.loopback_profile, config_.period_frames, config_.buffer_frames,
-                       error)) {
-      snd_pcm_close(handle);
-      continue;
-    }
-    capture_handles_[zone - 1] = handle;
-    rings_[zone - 1]->init(config_.period_frames * 8, bytes_per_frame_);
+    rings_[static_cast<size_t>(zone - 1)]->init(config_.period_frames * 8, bytes_per_frame_);
   }
 
   if (config.mode == ProfileMode::DacAssigned && config.dac_profile.has_value() &&
@@ -237,13 +354,13 @@ bool AudioBridge::open_devices(const ActiveAudioConfig& config) {
   return true;
 }
 
-void AudioBridge::close_devices() {
-  for (snd_pcm_t* handle : capture_handles_) {
-    if (handle != nullptr) {
-      snd_pcm_close(handle);
-    }
+void AudioBridge::close_all_captures() {
+  for (int zone_id = 1; zone_id <= config_.zone_count; ++zone_id) {
+    close_zone_capture_internal(zone_id);
   }
-  capture_handles_.assign(config_.zone_count, nullptr);
+}
+
+void AudioBridge::close_playback_device() {
   std::lock_guard lock(dac_mutex_);
   drop_and_close_dac_locked();
 }
@@ -259,19 +376,14 @@ AudioBridge::StartResult AudioBridge::start(const ActiveAudioConfig& config) {
   }
 
   stop_requested_.store(false);
-  if (!open_devices(config)) {
-    result.error = "failed to open audio devices";
+  if (!prepare_playback_config(config)) {
+    result.error = "failed to prepare audio config";
     result.dac_state = dac_state_.load();
     return result;
   }
 
   running_.store(true);
   bridge_state_.store(AudioBridgeState::Running);
-  for (int i = 0; i < config_.zone_count; ++i) {
-    if (capture_handles_[i] != nullptr) {
-      capture_threads_.emplace_back([this, i]() { capture_loop(i); });
-    }
-  }
   playback_thread_ = std::thread([this]() { playback_loop(); });
   result.ok = true;
   result.dac_state = dac_state_.load();
@@ -292,24 +404,29 @@ void AudioBridge::pause() {
 void AudioBridge::stop() {
   stop_requested_.store(true);
   running_.store(false);
-  for (std::thread& thread : capture_threads_) {
-    if (thread.joinable()) {
-      thread.join();
-    }
-  }
-  capture_threads_.clear();
+  close_all_captures();
   if (playback_thread_.joinable()) {
     playback_thread_.join();
   }
-  close_devices();
+  close_playback_device();
   bridge_state_.store(AudioBridgeState::Stopped);
 }
 
 void AudioBridge::capture_loop(int zone_index) {
   const int zone_id = zone_index + 1;
-  snd_pcm_t* handle = capture_handles_[zone_index];
+  ZoneCaptureSlot& slot = capture_slots_[zone_id];
+  snd_pcm_t* handle = nullptr;
+  {
+    std::lock_guard lock(slot.mutex);
+    handle = slot.handle;
+  }
+  if (handle == nullptr) {
+    slot.running.store(false);
+    return;
+  }
+
   std::vector<uint8_t> buffer(config_.period_frames * bytes_per_frame_);
-  while (!stop_requested_.load()) {
+  while (!stop_requested_.load() && !slot.stop_requested.load()) {
     const ZoneCaptureMode mode = zone_modes_[zone_id].load();
     if (mode == ZoneCaptureMode::Off || mode == ZoneCaptureMode::Disabled) {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -328,6 +445,14 @@ void AudioBridge::capture_loop(int zone_index) {
       }
     }
   }
+
+  std::lock_guard lock(slot.mutex);
+  if (slot.handle != nullptr) {
+    snd_pcm_drop(slot.handle);
+    snd_pcm_close(slot.handle);
+    slot.handle = nullptr;
+  }
+  slot.running.store(false);
 }
 
 void AudioBridge::playback_loop() {

@@ -164,6 +164,8 @@ void UnixApiServer::handle_client(int client_fd) {
           method = "set_routing";
         } else if (line.find("set_zone_enabled") != std::string::npos) {
           method = "set_zone_enabled";
+        } else if (line.find("prewarm_capture") != std::string::npos) {
+          method = "prewarm_capture";
         }
         if (method != "unknown") {
           on_command_(method, 0, "socket", line);

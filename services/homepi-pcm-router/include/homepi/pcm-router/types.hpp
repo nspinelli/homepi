@@ -44,6 +44,7 @@ struct ServiceConfig {
   int zone_count = 16;
   uint32_t period_frames = 512;
   uint32_t buffer_frames = 4096;
+  int64_t capture_idle_close_delay_ms = 5000;
 };
 
 }  // namespace homepi::pcm_router

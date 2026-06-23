@@ -8,7 +8,7 @@
   "properties": {
     "method": {
       "type": "string",
-      "enum": ["subscribe", "set_routing", "route_start", "route_end", "route_join", "set_zone_enabled"]
+      "enum": ["subscribe", "set_routing", "route_start", "route_end", "route_join", "set_zone_enabled", "prewarm_capture"]
     },
     "correlationId": { "type": "string", "minLength": 1 },
     "ownerZoneId": { "type": "integer", "minimum": 0, "maximum": 16 },

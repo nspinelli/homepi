@@ -90,6 +90,7 @@ void Orchestrator::handle_zone_config_event(const std::string& event,
 }
 
 void Orchestrator::on_active_begin(int zone_id) {
+  client_.pcm_route("prewarm_capture", zone_id);
   client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "POWER1");
   client_.send_hifi_command_async("*Z" + std::to_string(zone_id) + "SRC" +
                                   std::to_string(airplay_source()));

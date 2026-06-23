@@ -35,6 +35,9 @@ homepi::pcm_router::ServiceConfig load_config_from_env() {
   if (const char* value = std::getenv("BUFFER_FRAMES")) {
     config.buffer_frames = static_cast<uint32_t>(std::atoi(value));
   }
+  if (const char* value = std::getenv("CAPTURE_IDLE_CLOSE_DELAY_MS")) {
+    config.capture_idle_close_delay_ms = std::atoll(value);
+  }
   if (const char* cards = std::getenv("ALSA_LOOPBACK_CARDS")) {
     std::string text = cards;
     const auto comma = text.find(',');

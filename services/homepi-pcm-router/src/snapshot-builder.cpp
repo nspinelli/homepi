@@ -95,6 +95,23 @@ std::string SnapshotBuilder::build_payload(const RoutingState& routing, const Au
   if (!config.alsa_dac_device.empty()) {
     out << ",\"alsaDacDevice\":\"" << config.alsa_dac_device << "\"";
   }
+  const auto open_zones = bridge.open_capture_zones();
+  const auto closing_grace = bridge.closing_grace_capture_zones();
+  out << ",\"capture\":{\"openZones\":[";
+  for (size_t i = 0; i < open_zones.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << open_zones[i];
+  }
+  out << "],\"closingGraceZones\":[";
+  for (size_t i = 0; i < closing_grace.size(); ++i) {
+    if (i > 0) {
+      out << ',';
+    }
+    out << closing_grace[i];
+  }
+  out << "],\"disabledZonesClosed\":true}";
   out << '}';
   return out.str();
 }

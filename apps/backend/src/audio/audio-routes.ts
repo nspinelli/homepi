@@ -19,6 +19,7 @@ import {
   type SourceControllerPatch,
 } from "./hifi-source-commands.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
+import type { AudioBrokerSnapshotStore } from "./audio-broker-snapshot-store.js";
 import { percentToAppleDb } from "./volume-conversion.js";
 
 /**
@@ -39,6 +40,8 @@ export interface AudioRouteDeps {
   config: ServiceConfig;
   /** Structured logger. */
   logger: Logger;
+  /** Optional broker snapshot cache for REST hydration. */
+  brokerSnapshotStore?: AudioBrokerSnapshotStore;
 }
 
 /**
@@ -88,6 +91,7 @@ export class AudioRoutes {
             metadataClient: this.deps.metadataClient,
             shairportRemote: this.deps.shairportRemote,
             systemStatus: this.deps.statusStore.getStatus(),
+            brokerSnapshotStore: this.deps.brokerSnapshotStore,
           },
           correlationId
         );

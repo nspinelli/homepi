@@ -6,6 +6,8 @@ import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
 import type { SystemStatusSnapshot } from "../types/system-status-types.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 import { readAudioRealtimeSnapshot } from "./read-audio-realtime-snapshot.js";
+import { isBrokerAudioSnapshotEnabled } from "./audio-ui-bridge.js";
+import type { AudioBrokerSnapshotStore } from "./audio-broker-snapshot-store.js";
 
 /**
  * Aggregated audio module snapshot for initial page load.
@@ -73,17 +75,27 @@ export async function buildAudioSnapshot(
     metadataClient: MetadataClient;
     shairportRemote: ShairportRemoteClient;
     systemStatus: SystemStatusSnapshot;
+    brokerSnapshotStore?: AudioBrokerSnapshotStore;
   },
   correlationId: string
 ): Promise<AudioSnapshot> {
+  const useBrokerCache =
+    isBrokerAudioSnapshotEnabled() && deps.brokerSnapshotStore?.hasAnySnapshot() === true;
+
   const [hifiSnapshot, shairportSettings, pcmSnapshot, metadataSnapshot, hifiHealth] =
     await Promise.all([
-    deps.hifiClient.getSnapshot(correlationId).catch(() => ({})),
+    useBrokerCache && deps.brokerSnapshotStore?.getHifiSnapshot()
+      ? Promise.resolve(deps.brokerSnapshotStore.getHifiSnapshot())
+      : deps.hifiClient.getSnapshot(correlationId).catch(() => ({})),
     deps.hifiClient
       .getShairportZoneSettings(correlationId)
       .catch(() => ({ shairportZoneSettings: [] as unknown[] })),
-    deps.pcmClient.getSnapshot(correlationId).catch(() => null),
-    deps.metadataClient.getSnapshot(correlationId).catch(() => null),
+    useBrokerCache && deps.brokerSnapshotStore?.getPcmSnapshot()
+      ? Promise.resolve(deps.brokerSnapshotStore.getPcmSnapshot())
+      : deps.pcmClient.getSnapshot(correlationId).catch(() => null),
+    useBrokerCache && deps.brokerSnapshotStore?.getMetadataSnapshot()
+      ? Promise.resolve(deps.brokerSnapshotStore.getMetadataSnapshot())
+      : deps.metadataClient.getSnapshot(correlationId).catch(() => null),
     deps.hifiClient.getHealth(correlationId).catch(() => null),
   ]);
 
@@ -108,7 +120,7 @@ export async function buildAudioSnapshot(
 
   const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
   let clientName = metadataSnapshot?.clientName;
-  if (!clientName && ownerZoneId > 0) {
+  if (!clientName && ownerZoneId > 0 && !useBrokerCache) {
     clientName =
       (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_name")) ??
       (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_model")) ??
@@ -133,6 +145,7 @@ export async function buildAudioSnapshot(
   }
   if (
     ownerZoneId > 0 &&
+    !useBrokerCache &&
     (metadataSnapshot?.playing ?? false) &&
     (durationMs <= 0 || positionMs <= 0)
   ) {

@@ -2392,8 +2392,8 @@ Status reflects the **end of `latest-agent-chat.md`** (user confirmed seamless z
 | **4** | PCM enabled-zone mask + broker commands | Done | **Recovered** | Verify on hardware |
 | **5** | Lazy per-zone capture | Done | **Recovered** | Verify on hardware |
 | **6** | Typed Hi-Fi commands | Done | **Recovered** | Verify on hardware |
-| **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Not started (MQTT still on) | Rebuild |
-| **8** | Broker-only migration (socket removal) | Orchestrator on broker only | Not started | After 2–7 |
+| **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Done (`0ad5498`) | — |
+| **8** | Broker-only migration (socket removal) | Orchestrator on broker only | Done | — |
 | **9** | UI parity + handoff polish | Done (owner promotion, client pill, metadata SSE) | Partial | Rebuild with 2–7 |
 
 ### 26.4 End-of-session behavior checklist

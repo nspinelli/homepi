@@ -198,21 +198,25 @@ export class AudioRealtimeBridge {
     };
     this.latestFrame = realtimeFrame;
 
+    const receivedAtMs = realtimeFrame.wallTime
+      ? Date.parse(realtimeFrame.wallTime)
+      : Date.now();
+
     this.options.broadcaster.broadcast(
       createEventEnvelope({
-        source: "homepi-metadata",
-        topic: "modules.metadata.progress",
-        event: "metadata_progress_updated",
+        source: "homepi-backend",
+        topic: "modules.audio.realtime",
+        event: "audio.realtime",
         correlationId: "audio-realtime-bridge",
         payload: {
+          ownerZoneId: realtimeFrame.ownerZoneId,
           zoneId: realtimeFrame.ownerZoneId,
+          trackId: realtimeFrame.trackId,
+          playing: realtimeFrame.playing,
           positionMs: realtimeFrame.positionMs,
           durationMs: realtimeFrame.durationMs,
-          playing: realtimeFrame.playing,
-          trackId: realtimeFrame.trackId,
-          progressSyncedAt: realtimeFrame.wallTime
-            ? Date.parse(realtimeFrame.wallTime)
-            : Date.now(),
+          receivedAtMs,
+          progressSyncedAt: receivedAtMs,
         },
       })
     );

@@ -12,6 +12,7 @@ import { AudioRoutes } from "./audio/audio-routes.js";
 import { ShairportRemoteClient } from "./audio/shairport-remote-client.js";
 import { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
+import { AudioBrokerSnapshotStore } from "./audio/audio-broker-snapshot-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, "..", "config", "service-config.json");
@@ -72,6 +73,7 @@ const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
 const metadataClient = new MetadataClient({ socketPath: metadataSocketPath });
 const shairportRemoteClient = new ShairportRemoteClient();
+const brokerSnapshotStore = new AudioBrokerSnapshotStore();
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
@@ -80,6 +82,7 @@ const audioRoutes = new AudioRoutes({
   statusStore,
   config: serviceConfig,
   logger,
+  brokerSnapshotStore,
 });
 
 const host = "127.0.0.1";
@@ -113,6 +116,7 @@ const server = createHttpServer({
   hifiSerialClient,
   pcmRouterClient,
   metadataClient,
+  brokerSnapshotStore,
 });
 
 process.on("SIGINT", () => {

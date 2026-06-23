@@ -316,6 +316,12 @@ function applyMetadataProgressToPcm(
   const positionMs = typeof payload.positionMs === "number" ? payload.positionMs : null;
   const durationMs = typeof payload.durationMs === "number" ? payload.durationMs : null;
   const playing = typeof payload.playing === "boolean" ? payload.playing : null;
+  const syncedAt =
+    typeof payload.progressSyncedAt === "number"
+      ? payload.progressSyncedAt
+      : typeof payload.receivedAtMs === "number"
+        ? payload.receivedAtMs
+        : Date.now();
 
   if (positionMs === 0 && durationMs === 0 && playing === false) {
     if (pcm.playback.playing || pcm.playback.positionMs > 0) {
@@ -324,8 +330,12 @@ function applyMetadataProgressToPcm(
     playback.positionMs = 0;
     playback.durationMs = 0;
     playback.playing = false;
-    playback.progressSyncedAt = Date.now();
+    playback.progressSyncedAt = syncedAt;
     return { ...pcm, playback };
+  }
+
+  if (positionMs === 0 && pcm.playback.playing && pcm.playback.positionMs > 0) {
+    return pcm;
   }
 
   if (positionMs !== null) {
@@ -337,7 +347,7 @@ function applyMetadataProgressToPcm(
   if (playing !== null) {
     playback.playing = playing;
   }
-  playback.progressSyncedAt = Date.now();
+  playback.progressSyncedAt = syncedAt;
   return { ...pcm, playback };
 }
 
@@ -802,10 +812,7 @@ function useAudioModuleState(): {
           snapshot.pcm = applyMetadataSnapshotToPcm(snapshot.pcm, payload);
         } else if (envelope.event === "metadata_field_updated") {
           snapshot.pcm = applyMetadataFieldToPcm(snapshot.pcm, payload);
-        } else if (
-          envelope.event === "metadata_progress_updated" ||
-          envelope.event === "playback_state_changed"
-        ) {
+        } else if (envelope.event === "playback_state_changed") {
           snapshot.pcm = applyMetadataProgressToPcm(snapshot.pcm, payload);
         } else if (envelope.event === "metadata_cover_updated") {
           const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
@@ -821,6 +828,13 @@ function useAudioModuleState(): {
             hasCoverArt: false,
           };
         }
+      }
+
+      if (envelope.source === "homepi-backend" && envelope.event === "audio.realtime") {
+        snapshot.pcm = applyMetadataProgressToPcm(
+          snapshot.pcm,
+          envelope.payload as Record<string, unknown>
+        );
       }
 
       return { ...current, snapshot };
@@ -873,7 +887,8 @@ function useAudioModuleState(): {
         if (
           envelope.source === "homepi-hifi-serial" ||
           envelope.source === "homepi-pcm-router" ||
-          envelope.source === "homepi-metadata"
+          envelope.source === "homepi-metadata" ||
+          envelope.source === "homepi-backend"
         ) {
           applyEnvelope(envelope);
         }

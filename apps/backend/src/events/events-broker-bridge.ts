@@ -8,6 +8,12 @@ import type { EventBroadcaster } from "../event-broadcaster.js";
 import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
 import { mapEnvelopeToStatusPatch } from "../status/service-event-handlers.js";
 import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
+import {
+  adaptBrokerEnvelopeForUi,
+  BROKER_AUDIO_TOPICS,
+  shouldDropBrokerEnvelope,
+} from "../audio/audio-ui-bridge.js";
+import type { AudioBrokerSnapshotStore } from "../audio/audio-broker-snapshot-store.js";
 
 /**
  * Options for the central core/events SSE bridge.
@@ -25,23 +31,13 @@ export interface EventsBrokerBridgeOptions {
   coordinator: StatusUpdateCoordinator;
   /** Topic patterns to subscribe to. */
   topics?: string[];
+  /** Optional broker snapshot cache for REST hydration. */
+  snapshotStore?: AudioBrokerSnapshotStore;
   /** Called when connection state changes. */
   onConnectionChange?: (connected: boolean) => void;
 }
 
-const DEFAULT_TOPICS = [
-  "core.service",
-  "modules.hifi.zone",
-  "modules.hifi.controller",
-  "modules.pcm.routing",
-  "modules.pcm.snapshot",
-  "modules.metadata.now_playing",
-  "modules.metadata.cover_art",
-  "modules.metadata.playback",
-  "modules.metadata.history",
-  "modules.audio.state",
-  "modules.zone.config",
-];
+const DEFAULT_TOPICS = [...BROKER_AUDIO_TOPICS];
 
 /**
  * Subscribes to the HomePi core/events broker and forwards envelopes to SSE clients.
@@ -189,6 +185,12 @@ export class EventsBrokerBridge {
     }
 
     const envelope = this.adaptEnvelope(parsed as EventEnvelope);
+    if (shouldDropBrokerEnvelope(envelope)) {
+      return;
+    }
+
+    this.options.snapshotStore?.ingest(parsed as EventEnvelope);
+
     const result = validateEventEnvelope(envelope);
     if (!result.valid) {
       return;
@@ -214,33 +216,6 @@ export class EventsBrokerBridge {
    * @returns Adapted envelope for UI consumers.
    */
   private adaptEnvelope(envelope: EventEnvelope): EventEnvelope {
-    const adapted = { ...envelope };
-
-    if (envelope.topic === "modules.pcm.routing" && envelope.event === "owner_changed") {
-      adapted.event = "routing_changed";
-      adapted.source = "homepi-pcm-router";
-    }
-
-    if (envelope.topic === "modules.metadata.now_playing") {
-      adapted.source = "homepi-metadata";
-      if (envelope.event === "metadata_track_changed") {
-        adapted.event = "metadata_field_updated";
-      }
-    }
-
-    if (envelope.topic === "modules.metadata.cover_art" && envelope.event === "cover_art_updated") {
-      adapted.event = "metadata_cover_updated";
-      adapted.source = "homepi-metadata";
-    }
-
-    if (envelope.topic === "modules.metadata.playback" && envelope.event === "playback_state_changed") {
-      adapted.source = "homepi-metadata";
-    }
-
-    if (envelope.topic.startsWith("modules.hifi.")) {
-      adapted.source = "homepi-hifi-serial";
-    }
-
-    return adapted;
+    return adaptBrokerEnvelopeForUi(envelope);
   }
 }

@@ -138,6 +138,20 @@ export type PlaybackRemoteCommand =
   | "shuffle_songs";
 
 /**
+ * Live progress frame from backend audio.realtime SSE events.
+ */
+export interface AudioRealtimePayload {
+  ownerZoneId?: number;
+  zoneId?: number;
+  trackId?: string;
+  playing: boolean;
+  positionMs: number;
+  durationMs: number;
+  receivedAtMs?: number;
+  progressSyncedAt?: number;
+}
+
+/**
  * View model for the Home Audio player bar.
  */
 export interface AudioPlaybackView {

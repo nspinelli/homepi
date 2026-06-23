@@ -42,6 +42,8 @@ import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
 import { UsbDevicesEventBridge } from "./usb-devices/usb-devices-event-bridge.js";
 import type { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
 import { EventsBrokerBridge } from "./events/events-broker-bridge.js";
+import { isBrokerOnlyAudioSseEnabled } from "./audio/audio-ui-bridge.js";
+import { AudioBrokerSnapshotStore } from "./audio/audio-broker-snapshot-store.js";
 
 /**
  * HTTP server configuration for the backend vertical slice.
@@ -85,6 +87,8 @@ export interface HttpServerOptions {
   pcmRouterClient: PcmRouterClient;
   /** Metadata socket client for startup snapshots. */
   metadataClient: MetadataClient;
+  /** Shared broker snapshot cache for audio REST hydration. */
+  brokerSnapshotStore?: AudioBrokerSnapshotStore;
 }
 
 /**
@@ -113,8 +117,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
     hifiSerialClient,
     pcmRouterClient,
     metadataClient: _metadataClient,
+    brokerSnapshotStore,
   } = options;
   void _metadataClient;
+
+  const brokerOnlyAudioSse = isBrokerOnlyAudioSseEnabled();
 
   const getStatus = () => statusStore.getStatus();
   const broadcaster = new EventBroadcaster(logger, getStatus);
@@ -163,8 +170,9 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
-  const pcmEventBridge = pcmRouterSocketPath
-    ? new PcmRouterEventBridge({
+  const pcmEventBridge =
+    pcmRouterSocketPath && !brokerOnlyAudioSse
+      ? new PcmRouterEventBridge({
         socketPath: pcmRouterSocketPath,
         logger,
         broadcaster,
@@ -175,8 +183,9 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
-  const metadataEventBridge = metadataSocketPath
-    ? new MetadataEventBridge({
+  const metadataEventBridge =
+    metadataSocketPath && !brokerOnlyAudioSse
+      ? new MetadataEventBridge({
         socketPath: metadataSocketPath,
         logger,
         broadcaster,
@@ -203,6 +212,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
         logger,
         broadcaster,
         coordinator,
+        snapshotStore: brokerSnapshotStore,
         onConnectionChange: (connected) => {
           bridgeState.eventsBroker = connected;
         },
@@ -235,8 +245,12 @@ export function createHttpServer(options: HttpServerOptions): Server {
     getBridgeState: () => ({
       usbDevices: usbEventBridge?.isConnected() ?? false,
       hifiSerial: hifiEventBridge?.isConnected() ?? false,
-      pcmRouter: pcmEventBridge?.isConnected() ?? false,
-      metadata: metadataEventBridge?.isConnected() ?? false,
+      pcmRouter: brokerOnlyAudioSse
+        ? (eventsBrokerBridge?.isConnected() ?? false)
+        : (pcmEventBridge?.isConnected() ?? false),
+      metadata: brokerOnlyAudioSse
+        ? (eventsBrokerBridge?.isConnected() ?? false)
+        : (metadataEventBridge?.isConnected() ?? false),
     }),
     intervalMs: fallbackSettings.intervalMs,
   });

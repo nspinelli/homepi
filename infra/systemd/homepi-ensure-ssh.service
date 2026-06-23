@@ -1,0 +1,12 @@
+[Unit]
+Description=HomePi SSH access hardening on boot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/homepi/scripts/ensure-ssh-access.sh
+
+[Install]
+WantedBy=multi-user.target

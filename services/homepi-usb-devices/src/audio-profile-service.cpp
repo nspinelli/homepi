@@ -6,6 +6,7 @@
 
 #include "homepi/storage/audio-profile-repository.hpp"
 #include "homepi/storage/database-connection.hpp"
+#include "homepi/storage/repository-error.hpp"
 #include "homepi/usb-devices/audio-profile-validator.hpp"
 #include "homepi/usb-devices/json-utils.hpp"
 
@@ -41,19 +42,24 @@ std::optional<homepi::storage::AudioCapabilities> AudioProfileService::load_capa
   if (!fs::exists(database_path_)) {
     return std::nullopt;
   }
-  homepi::storage::DatabaseConnection db(database_path_, homepi::storage::DatabaseOpenMode::ReadOnly);
-  homepi::storage::AudioProfileRepository repo(db);
-  const auto direct = repo.get_capabilities(device_id);
-  if (direct.has_value() && !direct->supported_profile_tuples.empty()) {
-    return direct;
+  try {
+    homepi::storage::DatabaseConnection db(database_path_,
+                                            homepi::storage::DatabaseOpenMode::ReadOnly);
+    homepi::storage::AudioProfileRepository repo(db);
+    const auto direct = repo.get_capabilities(device_id);
+    if (direct.has_value() && !direct->supported_profile_tuples.empty()) {
+      return direct;
+    }
+    const auto inherited = repo.get_capabilities_for_identity(device_id);
+    if (!inherited.has_value() || inherited->supported_profile_tuples.empty()) {
+      return direct;
+    }
+    homepi::storage::AudioCapabilities resolved = *inherited;
+    resolved.device_id = device_id;
+    return resolved;
+  } catch (const homepi::storage::RepositoryError&) {
+    return std::nullopt;
   }
-  const auto inherited = repo.get_capabilities_for_identity(device_id);
-  if (!inherited.has_value() || inherited->supported_profile_tuples.empty()) {
-    return direct;
-  }
-  homepi::storage::AudioCapabilities resolved = *inherited;
-  resolved.device_id = device_id;
-  return resolved;
 }
 
 void AudioProfileService::refresh_audio_capabilities(const std::vector<UsbDevice>& devices) {

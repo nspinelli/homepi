@@ -2346,3 +2346,91 @@ homepi-metadata
 ```
 
 The result is a HomePi architecture where disabled zones have zero audio runtime cost, enabled idle zones are lightweight, AirPlay session changes are explicit events, PCM capture is opened only when a zone needs it, metadata is reduced from Shairport pipes into one global now-playing state, progress is delivered to the UI without loading the event bus, and every native service uses the shared core services.
+
+---
+
+## 26. Implementation Progress
+
+This section tracks rollout status against §23. The canonical recovery spec for work lost in the June 2026 Pi reflash is [`docs/latest-agent-chat.md`](latest-agent-chat.md) (Cursor session ending ~2026-06-22).
+
+### 26.1 Git baseline vs. target
+
+| Item | State |
+|------|--------|
+| **GitHub `main` HEAD** | `d6cdf4d` — Phase 1 broker foundation only |
+| **Prior session achievement** | Phases 1–7 complete on Pi, orchestrator broker migration, seamless multi-zone handoff, now-playing UI parity |
+| **Lost in reflash** | All code after `d6cdf4d` (never committed) |
+| **Recovery approach** | Rebuild in phase order using `latest-agent-chat.md` as the functional spec |
+
+### 26.2 Operational fix — primary audio save (completed 2026-06-22)
+
+**Symptom:** Saving Primary Audio Output in Settings failed; USB devices disappeared; `pcm-router` and `shairport` stayed stopped; Sources tab unreachable.
+
+**Root cause:** `setAssignments` blocked synchronously on `post-assignment-hook.sh` during ALSA USB reload. Concurrent udev hotplug + SQLite writes from `homepi-hifi-serial` restart caused `homepi-usb-devices` to abort (`database is locked`). The hook stopped audio consumers but did not finish restarting them.
+
+**Fix (in repo, post-`d6cdf4d`):**
+
+| Change | File |
+|--------|------|
+| Detached async hook (no socket timeout) | `services/homepi-usb-devices/src/post-assignment-hook.cpp` |
+| Skip hotplug rescans while hook lock held | `services/homepi-usb-devices/src/main.cpp` |
+| `EXIT` trap restarts pcm-router/shairport + rebinds USB | `services/homepi-usb-devices/scripts/post-assignment-hook.sh` |
+| WAL + longer SQLite busy timeout | `core/storage/cpp/src/database-connection.cpp` |
+| Graceful capability load on lock | `services/homepi-usb-devices/src/audio-profile-service.cpp` |
+
+**Verify after fresh install:** Save all three USB roles in **Audio → Settings**; all devices remain listed; `systemctl is-active homepi-pcm-router homepi-shairport-supervisor` stays `active`; `grep HomePiPrimary /proc/asound/cards` succeeds.
+
+### 26.3 Phase status (recovery target)
+
+Status reflects the **end of `latest-agent-chat.md`** (user confirmed seamless zone add/drop and AirPlay icon correctness).
+
+| Phase | §23 scope | Prior session | In git now | Recovery |
+|-------|-----------|---------------|------------|----------|
+| **1** | `core/events` broker + transport helpers | Done | Partial (`d6cdf4d`) | Complete request-reply, bounded queues, retire duplicate SSE bridges |
+| **2** | Thin Shairport hook → broker events | Done | **Recovered** | Verify on hardware |
+| **3** | `homepi-audio-orchestrator` | Done | **Recovered** | Verify on hardware |
+| **4** | PCM enabled-zone mask + broker commands | Done | Not started | Rebuild |
+| **5** | Lazy per-zone capture | Done | Not started | Rebuild |
+| **6** | Typed Hi-Fi commands | Done | Partial (raw `sendCommand`) | Rebuild |
+| **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Not started (MQTT still on) | Rebuild |
+| **8** | Broker-only migration (socket removal) | Orchestrator on broker only | Not started | After 2–7 |
+| **9** | UI parity + handoff polish | Done (owner promotion, client pill, metadata SSE) | Partial | Rebuild with 2–7 |
+
+### 26.4 End-of-session behavior checklist
+
+Use this to confirm recovery matches the prior session:
+
+1. **AirPlay single zone** — power, source switch, PCM route, now-playing metadata, progress bar, cover art
+2. **Multi-zone add** — no audible gap; AirPlay icon follows DAC owner (`ownerZoneId` / `latest_ready_wins`)
+3. **Multi-zone drop** — remaining zone continues; Hi-Fi follows owner
+4. **Zone disable from UI** — Shairport stops; PCM capture closes without router restart
+5. **Volume from AirPlay client** — Hi-Fi zone volume updates
+6. **Now-playing dropdown** — client name pill under album; artwork aligned with title/artist/album
+7. **Play history** — last 20 streams in `audio_play_history` after track change
+8. **Progress** — smooth updates via `audio-realtime.sock` (not event-bus spam)
+9. **USB assignment save** — no service crash (§26.2 fix)
+
+### 26.5 Recovery build order
+
+```text
+1. Phase 2+3 — thin hook + homepi-audio-orchestrator (dual-stack sockets OK initially)
+2. Phase 4 — PCM enabled mask + broker subscription
+3. Phase 5 — lazy per-zone capture + prewarm_capture
+4. Phase 6 — typed Hi-Fi commands (demote raw sendCommand)
+5. Phase 7 — metadata rebuild (no MQTT, audio-realtime.sock, play history)
+6. Phase 8 — orchestrator + backend broker-only; retire legacy event sockets
+7. Phase 9 — UI/handoff fixes (owner promotion, client_name persistence, Shairport active_state_timeout)
+8. Commit + push each stable milestone
+```
+
+### 26.6 Known gaps to close after recovery
+
+- `core/events`: request-reply, full envelope validation, per-client output queues (§23 Phase 1 items 3–6)
+- `core/logging`: native services still mix `std::cout` / ad-hoc loggers
+- Consolidate `metadata.db` → `homepi.sqlite` (optional, noted in prior session)
+- Move remaining hook Python (`send_hifi_typed`) into `homepi-shairport-hook` C++ binary
+
+### 26.7 Commit discipline
+
+The prior session lost all work after `d6cdf4d` because changes were not pushed before power loss. **Commit and push after each phase milestone passes hardware verification.**
+

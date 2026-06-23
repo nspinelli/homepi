@@ -19,6 +19,7 @@
 #include "homepi/usb-devices/alsa-capability-probe.hpp"
 #include "homepi/usb-devices/config-loader.hpp"
 #include "homepi/usb-devices/device-scanner.hpp"
+#include "homepi/usb-devices/post-assignment-hook.hpp"
 #include "homepi/usb-devices/udev-monitor.hpp"
 #include "homepi/usb-devices/service-health-emitter.hpp"
 #include "homepi/usb-devices/unix-api-server.hpp"
@@ -72,26 +73,34 @@ void refresh_devices() {
   if (g_repository == nullptr || g_artifacts == nullptr) {
     return;
   }
-  const auto scanned = homepi::usb_devices::scan_usb_devices();
-  g_repository->upsert_devices(scanned);
-  auto assignments = g_repository->get_assignments();
-  const auto devices = g_repository->list_devices();
-  if (homepi::usb_devices::AssignmentRepository::heal_assignments(assignments, devices)) {
-    g_repository->persist_healed_assignments(assignments, devices);
+  if (homepi::usb_devices::post_assignment_hook_active()) {
+    return;
   }
-  if (g_audio_profiles != nullptr) {
-    g_audio_profiles->refresh_audio_capabilities(devices);
-    g_audio_profiles->validate_active_profile(assignments, "hotplug");
-  }
-  g_artifacts->regenerate(assignments, devices);
 
-  std::lock_guard lock(g_state_mutex);
-  g_health.connected_device_count = static_cast<int>(scanned.size());
-  g_health.assignments_degraded =
-      homepi::usb_devices::AssignmentRepository::assignments_degraded(assignments, devices);
-  g_health.last_scan_at = "now";
-  emit_health_event(
-      g_health.assignments_degraded ? "assignments_degraded" : "assignments_recovered", "hotplug");
+  try {
+    const auto scanned = homepi::usb_devices::scan_usb_devices();
+    g_repository->upsert_devices(scanned);
+    auto assignments = g_repository->get_assignments();
+    const auto devices = g_repository->list_devices();
+    if (homepi::usb_devices::AssignmentRepository::heal_assignments(assignments, devices)) {
+      g_repository->persist_healed_assignments(assignments, devices);
+    }
+    if (g_audio_profiles != nullptr) {
+      g_audio_profiles->refresh_audio_capabilities(devices);
+      g_audio_profiles->validate_active_profile(assignments, "hotplug");
+    }
+    g_artifacts->regenerate(assignments, devices);
+
+    std::lock_guard lock(g_state_mutex);
+    g_health.connected_device_count = static_cast<int>(scanned.size());
+    g_health.assignments_degraded =
+        homepi::usb_devices::AssignmentRepository::assignments_degraded(assignments, devices);
+    g_health.last_scan_at = "now";
+    emit_health_event(
+        g_health.assignments_degraded ? "assignments_degraded" : "assignments_recovered", "hotplug");
+  } catch (const std::exception& ex) {
+    std::cerr << "refresh_devices failed: " << ex.what() << "\n";
+  }
 }
 
 }  // namespace

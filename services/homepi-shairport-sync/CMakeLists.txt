@@ -9,8 +9,11 @@ find_package(Threads REQUIRED)
 
 set(HOMEPI_LOGGING_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/logging/cpp")
 set(HOMEPI_STORAGE_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/storage/cpp")
+set(HOMEPI_EVENTS_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/events/cpp")
+set(HOMEPI_TRANSPORT_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../core/transport/cpp")
 
 add_subdirectory(${HOMEPI_STORAGE_CPP} ${CMAKE_BINARY_DIR}/homepi_core_storage)
+add_subdirectory(${HOMEPI_EVENTS_CPP} ${CMAKE_BINARY_DIR}/homepi_core_events)
 
 add_executable(homepi-shairport-supervisor
   src/main.cpp
@@ -38,4 +41,19 @@ target_link_libraries(homepi-shairport-supervisor PRIVATE
 
 target_compile_options(homepi-shairport-supervisor PRIVATE -Wall -Wextra -Wpedantic)
 
-install(TARGETS homepi-shairport-supervisor RUNTIME DESTINATION bin)
+add_executable(homepi-shairport-hook
+  src/shairport-hook-main.cpp
+)
+
+target_include_directories(homepi-shairport-hook PRIVATE
+  ${HOMEPI_EVENTS_CPP}/include
+  ${HOMEPI_TRANSPORT_CPP}/include
+)
+
+target_link_libraries(homepi-shairport-hook PRIVATE
+  homepi_core_events
+)
+
+target_compile_options(homepi-shairport-hook PRIVATE -Wall -Wextra -Wpedantic)
+
+install(TARGETS homepi-shairport-supervisor homepi-shairport-hook RUNTIME DESTINATION bin)

@@ -16,6 +16,7 @@
 #include "homepi/usb-devices/assignment-repository.hpp"
 #include "homepi/usb-devices/audio-profile-service.hpp"
 #include "homepi/usb-devices/json-utils.hpp"
+#include "homepi/usb-devices/post-assignment-hook.hpp"
 #include "homepi/storage/audio-profile-types.hpp"
 
 namespace fs = std::filesystem;
@@ -23,9 +24,6 @@ namespace fs = std::filesystem;
 namespace homepi::usb_devices {
 
 namespace {
-
-constexpr const char* kPostAssignmentHook =
-    "/opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh";
 
 std::optional<homepi::storage::AudioProfileTuple> parse_audio_primary_profile(
     const std::string& assignments_block) {
@@ -63,17 +61,6 @@ bool profiles_equal(const std::optional<homepi::storage::AudioProfileTuple>& lef
   }
   return left->sample_rate == right->sample_rate && left->channels == right->channels &&
          left->sample_format == right->sample_format;
-}
-
-void run_post_assignment_hook(bool serial_changed, bool audio_changed) {
-  if (!serial_changed && !audio_changed) {
-    return;
-  }
-  std::ostringstream command;
-  command << "sudo -n " << kPostAssignmentHook << ' ' << (serial_changed ? "1" : "0") << ' '
-          << (audio_changed ? "1" : "0")
-          << " >>/opt/homepi/runtime/cache/post-assignment-hook.log 2>&1";
-  std::system(command.str().c_str());
 }
 
 }  // namespace
@@ -344,8 +331,8 @@ std::string UnixApiServer::handle_request(const std::string& line) const {
         assignments.audio_primary != previous.audio_primary ||
         assignments.paging != previous.paging ||
         !profiles_equal(assignments.audio_primary_profile, previous.audio_primary_profile);
-    if (fs::exists(kPostAssignmentHook)) {
-      run_post_assignment_hook(serial_changed, audio_changed);
+    if (fs::exists("/opt/homepi/services/usb-devices/scripts/post-assignment-hook.sh")) {
+      run_post_assignment_hook_async(serial_changed, audio_changed);
     }
     return ok(assignments_to_json(context_.repository->get_assignments()));
   }

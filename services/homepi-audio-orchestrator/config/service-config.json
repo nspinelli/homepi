@@ -1,0 +1,25 @@
+{
+  "service": "homepi-audio-orchestrator",
+  "version": "0.1.0",
+  "logging": {
+    "level": "INFO"
+  },
+  "runtime": {
+    "paths": {
+      "socketDir": "/run/homepi",
+      "databasePath": "/opt/homepi/runtime/state/homepi.sqlite"
+    }
+  },
+  "sockets": {
+    "eventsSocket": "/run/homepi/events.sock",
+    "pcmRouterSocket": "/run/homepi/pcm-router.sock",
+    "hifiSerialSocket": "/run/homepi/hifi-serial.sock"
+  },
+  "defaults": {
+    "airplaySource": 5
+  },
+  "nqptp": {
+    "host": "127.0.0.1",
+    "port": 9000
+  }
+}

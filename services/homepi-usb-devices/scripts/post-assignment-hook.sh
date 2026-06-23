@@ -7,8 +7,42 @@ LOCK_FILE="/run/homepi/post-assignment-hook.lock"
 SERIAL_CHANGED="${1:-${SERIAL_CHANGED:-1}}"
 AUDIO_CHANGED="${2:-${AUDIO_CHANGED:-1}}"
 HOMEPI_ALLOW_REBOOT="${HOMEPI_ALLOW_REBOOT:-0}"
+AUDIO_SERVICES_FINALIZED=0
 
 log() { echo "==> $*"; }
+
+rebind_stranded_usb_ports() {
+  local dev port
+  for dev in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
+    [[ -f "${dev}/idVendor" ]] || continue
+    [[ -e "${dev}/driver" ]] && continue
+    port=$(basename "${dev}")
+    log "Re-binding stranded USB port ${port}"
+    echo "${port}" > /sys/bus/usb/drivers/usb/bind 2>/dev/null || true
+  done
+}
+
+restart_audio_dependent_services() {
+  if [[ "${AUDIO_CHANGED}" != "1" ]]; then
+    return 0
+  fi
+
+  restart_service "homepi-pcm-router.service" "/run/homepi/pcm-router.sock" || true
+  if systemctl is-enabled homepi-shairport-supervisor.service >/dev/null 2>&1; then
+    log "Restarting homepi-shairport-supervisor.service"
+    systemctl restart homepi-shairport-supervisor.service || true
+  fi
+  modprobe snd-usb-audio 2>/dev/null || true
+  rebind_stranded_usb_ports
+}
+
+finalize_hook() {
+  local rc=$?
+  if [[ "${AUDIO_SERVICES_FINALIZED}" != "1" ]]; then
+    restart_audio_dependent_services || true
+  fi
+  exit "${rc}"
+}
 
 schedule_reboot() {
   local reason="$1"
@@ -37,6 +71,8 @@ if ! flock -n 9; then
   log "Another post-assignment hook is running; waiting"
   flock 9
 fi
+
+trap finalize_hook EXIT
 
 wait_for_service() {
   local unit="$1"
@@ -105,11 +141,8 @@ if [[ "${AUDIO_CHANGED}" == "1" ]]; then
 fi
 
 if [[ "${AUDIO_CHANGED}" == "1" ]]; then
-  restart_service "homepi-pcm-router.service" "/run/homepi/pcm-router.sock"
-  if systemctl is-enabled homepi-shairport-supervisor.service >/dev/null 2>&1; then
-    log "Restarting homepi-shairport-supervisor.service"
-    systemctl restart homepi-shairport-supervisor.service || true
-  fi
+  restart_audio_dependent_services
+  AUDIO_SERVICES_FINALIZED=1
 fi
 
 log "Post-assignment hook complete"

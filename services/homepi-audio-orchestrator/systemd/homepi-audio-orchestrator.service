@@ -1,0 +1,21 @@
+[Unit]
+Description=HomePi Audio Orchestrator
+After=network-online.target homepi-events.service homepi-pcm-router.service homepi-hifi-serial.service
+Wants=network-online.target homepi-events.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+WorkingDirectory=/opt/homepi/services/audio-orchestrator
+EnvironmentFile=-/opt/homepi/services/audio-orchestrator/env/.env
+ExecStart=/opt/homepi/services/audio-orchestrator/bin/homepi-audio-orchestrator /opt/homepi/services/audio-orchestrator/config/service-config.json
+Restart=on-failure
+RestartSec=5
+StartLimitAction=none
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -75,89 +75,13 @@ const ZoneSettings* settings_for(const std::vector<ZoneSettings>& settings, int 
   return nullptr;
 }
 
-std::string render_hook_script(const ServiceConfig& config, int airplay_source) {
+std::string render_hook_script(int airplay_source) {
   std::ostringstream out;
   out << "#!/usr/bin/env bash\n"
       << "set -euo pipefail\n"
-      << "ACTION=\"${1:-}\"\n"
-      << "ZONE=\"${2:-}\"\n"
-      << "VOLUME_DB=\"${3:-}\"\n"
-      << "SOCKET=\"" << config.hifi_socket_path << "\"\n"
-      << "PCM_SOCKET=\"" << config.pcm_router_socket_path << "\"\n"
-      << "AIRPLAY_SOURCE=\"" << airplay_source << "\"\n"
-      << "pcm_route() {\n"
-      << "  local method=\"$1\"\n"
-      << "  printf '{\"method\":\"%s\",\"zoneId\":%s}\\n' \"${method}\" \"${ZONE}\" | "
-      << "nc -U -w 1 \"${PCM_SOCKET}\" | head -1\n"
-      << "}\n"
-      << "pcm_owner_from_response() {\n"
-      << "  python3 -c \"import json,sys; d=json.loads(sys.argv[1]); "
-      << "print(d.get('payload',{}).get('ownerZoneId',0))\" \"$1\" 2>/dev/null || echo 0\n"
-      << "}\n"
-      << "pcm_route_zone() {\n"
-      << "  local method=\"$1\"\n"
-      << "  local zone_id=\"$2\"\n"
-      << "  printf '{\"method\":\"%s\",\"zoneId\":%s}\\n' \"${method}\" \"${zone_id}\" | "
-      << "nc -U -w 1 \"${PCM_SOCKET}\" | head -1\n"
-      << "}\n"
-      << "send_cmd() {\n"
-      << "  local cmd=\"$1\"\n"
-      << "  timeout 2 bash -c \"printf '{\\\"method\\\":\\\"sendCommand\\\","
-      << "\\\"correlationId\\\":\\\"shairport-hook\\\",\\\"command\\\":\\\"%s\\\"}\\\\n' "
-      << "\\\"${cmd}\\\" | nc -U -w 2 \\\"${SOCKET}\\\" >/dev/null\" 2>/dev/null || true\n"
-      << "}\n"
-      << "send_cmd_async() {\n"
-      << "  send_cmd \"$1\" &\n"
-      << "}\n"
-      << "nqptp_play_begin() {\n"
-      << "  printf '/nqptp B\\n' | nc -u -w 1 127.0.0.1 9000 >/dev/null 2>&1 || true\n"
-      << "}\n"
-      << "pcm_handoff_on_zone_end() {\n"
-      << "  resp=\"$(pcm_route \"route_end\")\"\n"
-      << "  fallback_owner=\"$(pcm_owner_from_response \"${resp}\")\"\n"
-      << "  if [[ -n \"${fallback_owner}\" && \"${fallback_owner}\" != \"0\" && "
-      << "\"${fallback_owner}\" != \"${ZONE}\" ]]; then\n"
-      << "    nqptp_play_begin\n"
-      << "    send_cmd_async \"*Z${fallback_owner}POWER1\"\n"
-      << "    send_cmd_async \"*Z${fallback_owner}SRC${AIRPLAY_SOURCE}\"\n"
-      << "  fi\n"
-      << "}\n"
-      << "case \"${ACTION}\" in\n"
-      << "  activate)\n"
-      << "    send_cmd_async \"*Z${ZONE}POWER1\"\n"
-      << "    send_cmd_async \"*Z${ZONE}SRC${AIRPLAY_SOURCE}\"\n"
-      << "    ;;\n"
-      << "  play_begin)\n"
-      << "    pcm_route \"route_start\" >/dev/null || true\n"
-      << "    nqptp_play_begin\n"
-      << "    send_cmd_async \"*Z${ZONE}POWER1\"\n"
-      << "    send_cmd_async \"*Z${ZONE}SRC${AIRPLAY_SOURCE}\"\n"
-      << "    ;;\n"
-      << "  play_end)\n"
-      << "    # Track boundaries must not tear down PCM routing; both zones fire play_end\n"
-      << "    # at song end and route_end would empty the active stack and drop the DAC.\n"
-      << "    ;;\n"
-      << "  deactivate)\n"
-      << "    pcm_handoff_on_zone_end\n"
-      << "    send_cmd_async \"*Z${ZONE}POWER0\"\n"
-      << "    ;;\n"
-      << "  volume)\n"
-      << "    db=\"${VOLUME_DB}\"\n"
-      << "    zone_id=\"${ZONE}\"\n"
-      << "    if [[ -z \"${db}\" && \"${zone_id}\" =~ ^([0-9]+)-([0-9.]+)$ ]]; then\n"
-      << "      zone_id=\"${BASH_REMATCH[1]}\"\n"
-      << "      db=\"-${BASH_REMATCH[2]}\"\n"
-      << "    fi\n"
-      << "    if [[ -n \"${db}\" ]]; then\n"
-      << "      pct=$(awk -v db=\"${db}\" 'BEGIN { v=((db+30)/30)*100; if (v<0) v=0; "
-      << "if (v>100) v=100; printf \"%.0f\", v }')\n"
-      << "      send_cmd \"*Z${zone_id}VOLUME${pct}\"\n"
-      << "    fi\n"
-      << "    ;;\n"
-      << "  error)\n"
-      << "    logger -t homepi-shairport-error \"zone=${ZONE} unfixable error\"\n"
-      << "    ;;\n"
-      << "esac\n";
+      << "export AIRPLAY_SOURCE=\"" << airplay_source << "\"\n"
+      << "export HOMEPI_EVENTS_SOCKET=\"/run/homepi/events.sock\"\n"
+      << "exec \"/opt/homepi/services/shairport/bin/homepi-shairport-hook\" \"$@\"\n";
   return out.str();
 }
 
@@ -171,7 +95,7 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
                                                      const homepi::storage::AudioProfileTuple&
                                                          loopback_profile) const {
   std::map<int, std::string> hashes;
-  const std::string hook_script = render_hook_script(config_, airplay_source);
+  const std::string hook_script = render_hook_script(airplay_source);
   write_executable(fs::path(config_.hooks_dir) / "homepi-shairport-hook.sh", hook_script);
 
   for (const auto& zone : zones) {

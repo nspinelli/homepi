@@ -146,6 +146,8 @@ install_homepi_files() {
 
   install -m 0755 "${SUPERVISOR_BUILD}/homepi-shairport-supervisor" \
     "${INSTALL_ROOT}/bin/homepi-shairport-supervisor"
+  install -m 0755 "${SUPERVISOR_BUILD}/homepi-shairport-hook" \
+    "${INSTALL_ROOT}/bin/homepi-shairport-hook"
   install -m 0644 "${SERVICE_ROOT}/config/service-config.json" \
     "${INSTALL_ROOT}/config/service-config.json"
   install -m 0644 "${SERVICE_ROOT}/storage/migrations/003-shairport-sync.sql" \

@@ -94,7 +94,7 @@ AssignmentRepository::AssignmentRepository(const std::string& database_path,
     throw std::runtime_error("Failed to open sqlite database: " + database_path);
   }
   db_ = raw;
-  sqlite3_busy_timeout(static_cast<sqlite3*>(db_), 5000);
+  sqlite3_busy_timeout(static_cast<sqlite3*>(db_), 10000);
   char* err = nullptr;
   if (sqlite3_exec(static_cast<sqlite3*>(db_), migrations_sql.c_str(), nullptr, nullptr, &err) !=
       SQLITE_OK) {

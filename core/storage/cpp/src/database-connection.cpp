@@ -17,7 +17,10 @@ DatabaseConnection::DatabaseConnection(const std::string& path, DatabaseOpenMode
     }
     throw RepositoryError("database open failed: " + message);
   }
+  sqlite3_busy_timeout(db_, 10000);
   sqlite3_exec(db_, "PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
+  sqlite3_exec(db_, "PRAGMA journal_mode = WAL;", nullptr, nullptr, nullptr);
+  sqlite3_exec(db_, "PRAGMA synchronous = NORMAL;", nullptr, nullptr, nullptr);
 }
 
 DatabaseConnection::~DatabaseConnection() {

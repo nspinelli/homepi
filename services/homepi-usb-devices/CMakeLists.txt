@@ -27,6 +27,7 @@ add_executable(homepi-usb-devices
   src/artifact-writer.cpp
   src/service-health-emitter.cpp
   src/unix-api-server.cpp
+  src/post-assignment-hook.cpp
   src/alsa-capability-probe.cpp
   src/platform-loopback-policy.cpp
   src/audio-profile-validator.cpp

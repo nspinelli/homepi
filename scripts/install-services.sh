@@ -12,6 +12,7 @@ SERVICE_DIRS=(
   "homepi-metadata"
   "homepi-hifi-serial"
   "homepi-shairport-sync"
+  "homepi-audio-orchestrator"
 )
 
 log() {

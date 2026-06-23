@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhomepi_core_storage.a "CMakeFiles/homepi_core_storage.dir/src/database-connection.cpp.o" "CMakeFiles/homepi_core_storage.dir/src/migration-runner.cpp.o" "CMakeFiles/homepi_core_storage.dir/src/audio-profile-repository.cpp.o"
-/usr/bin/ranlib libhomepi_core_storage.a

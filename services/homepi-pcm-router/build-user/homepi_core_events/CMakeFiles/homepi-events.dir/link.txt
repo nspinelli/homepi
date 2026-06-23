@@ -1,1 +1,0 @@
-/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/homepi-events.dir/link.d "CMakeFiles/homepi-events.dir/home/homepi/homepi/core/events/daemon/main.cpp.o" -o homepi-events  libhomepi_core_events.a ../homepi_core_transport/libhomepi_core_transport.a

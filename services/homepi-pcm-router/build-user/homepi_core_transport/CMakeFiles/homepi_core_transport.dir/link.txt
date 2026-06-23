@@ -1,2 +1,0 @@
-/usr/bin/ar qc libhomepi_core_transport.a "CMakeFiles/homepi_core_transport.dir/src/unix-socket.cpp.o" "CMakeFiles/homepi_core_transport.dir/src/latest-value-publisher.cpp.o"
-/usr/bin/ranlib libhomepi_core_transport.a

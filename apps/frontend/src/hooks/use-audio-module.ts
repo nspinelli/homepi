@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getAppConfig } from "@/config/app-config.js";
+import {
+  hasMetadataText,
+  hasNowPlayingDisplayContent,
+  pickDisplayTitle,
+  sanitizeClientName,
+} from "@/lib/audio-metadata-utils.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
 import { zoneInitialVolume } from "@/lib/zone-initial-volume.js";
 import { showToast } from "@/lib/toast.js";
@@ -47,17 +53,68 @@ const defaultPcmPlayback: AudioSnapshot["pcm"]["playback"] = {
  * @param snapshot - Raw audio snapshot from the API or SSE.
  * @returns Snapshot with normalized PCM playback state.
  */
-function normalizeAudioSnapshot(snapshot: AudioSnapshot): AudioSnapshot {
+function normalizeAudioSnapshot(
+  snapshot: AudioSnapshot,
+  previous: AudioSnapshot | null = null
+): AudioSnapshot {
+  const incomingPlayback = { ...defaultPcmPlayback, ...snapshot.pcm.playback };
+  const priorPlayback = previous?.pcm.playback;
+  const priorMetadata = previous?.pcm.metadata ?? {};
+  const incomingMetadata = snapshot.pcm.metadata;
+  const mergedTrackId = incomingMetadata.trackId?.trim() || priorMetadata.trackId;
+  const trackChanged =
+    Boolean(priorMetadata.trackId?.trim()) &&
+    Boolean(incomingMetadata.trackId?.trim()) &&
+    priorMetadata.trackId?.trim() !== incomingMetadata.trackId?.trim();
+  const metadata: PcmMetadata = {
+    ...priorMetadata,
+    ...incomingMetadata,
+    title: trackChanged
+      ? incomingMetadata.title?.trim()
+      : incomingMetadata.title?.trim() || priorMetadata.title,
+    artist: trackChanged
+      ? incomingMetadata.artist?.trim()
+      : incomingMetadata.artist?.trim() || priorMetadata.artist,
+    album: trackChanged
+      ? incomingMetadata.album?.trim()
+      : incomingMetadata.album?.trim() || priorMetadata.album,
+    trackId: mergedTrackId,
+    clientName: sanitizeClientName(
+      incomingMetadata.clientName,
+      incomingMetadata.clientModel,
+      mergedTrackId
+    ) ?? sanitizeClientName(priorMetadata.clientName, priorMetadata.clientModel, mergedTrackId),
+    coverArtId: trackChanged
+      ? incomingMetadata.coverArtId?.trim()
+      : incomingMetadata.coverArtId?.trim() || priorMetadata.coverArtId,
+    coverArtUrl: trackChanged
+      ? incomingMetadata.coverArtUrl?.trim()
+      : incomingMetadata.coverArtUrl?.trim() || priorMetadata.coverArtUrl,
+    updatedAt: incomingMetadata.updatedAt ?? priorMetadata.updatedAt,
+  };
   const playback = {
-    ...defaultPcmPlayback,
-    ...snapshot.pcm.playback,
-    progressSyncedAt: Date.now(),
+    ...incomingPlayback,
+    durationMs:
+      incomingPlayback.durationMs <= 0 && (priorPlayback?.durationMs ?? 0) > 0
+        ? priorPlayback!.durationMs
+        : incomingPlayback.durationMs,
+    positionMs:
+      incomingPlayback.positionMs === 0 &&
+      (priorPlayback?.positionMs ?? 0) > 0 &&
+      incomingPlayback.playing
+        ? priorPlayback!.positionMs
+        : incomingPlayback.positionMs,
+    progressSyncedAt: incomingPlayback.progressSyncedAt ?? Date.now(),
   };
   return {
     ...snapshot,
     pcm: {
       ...snapshot.pcm,
+      metadata,
       playback,
+      hasCoverArt: trackChanged
+        ? Boolean(incomingMetadata.coverArtId?.trim())
+        : snapshot.pcm.hasCoverArt,
     },
   };
 }
@@ -86,16 +143,6 @@ const initialSnapshot: AudioSnapshot = {
 };
 
 /**
- * Moves a zone to the front of the PCM active stack (route_start semantics).
- * @param stack - Current stack.
- * @param zoneId - Zone to prioritize.
- * @returns Updated stack.
- */
-function pushPcmStack(stack: number[], zoneId: number): number[] {
-  return [zoneId, ...stack.filter((zone) => zone !== zoneId)];
-}
-
-/**
  * Removes a zone from the PCM active stack.
  * @param stack - Current stack.
  * @param zoneId - Zone leaving the stack.
@@ -116,11 +163,19 @@ function clearZoneFromPcmRouting(
   zoneNumber: number
 ): AudioSnapshot["pcm"] {
   const activeStack = removePcmStack(pcm.activeStack, zoneNumber);
-  const ownerZoneId = activeStack[0] ?? 0;
+  let ownerZoneId = pcm.ownerZoneId;
+  let pendingOwnerZoneId = pcm.pendingOwnerZoneId ?? 0;
+  if (ownerZoneId === zoneNumber) {
+    ownerZoneId = activeStack[0] ?? 0;
+  }
+  if (pendingOwnerZoneId === zoneNumber) {
+    pendingOwnerZoneId = 0;
+  }
   return {
     ...pcm,
     activeStack,
     ownerZoneId,
+    pendingOwnerZoneId,
     metadata: ownerZoneId === 0 ? {} : pcm.metadata,
     playback:
       ownerZoneId === 0
@@ -130,15 +185,31 @@ function clearZoneFromPcmRouting(
 }
 
 /**
- * Returns the zone currently feeding the DAC (stack head).
+ * Returns the zone currently feeding the DAC.
  * @param pcm - PCM routing state.
  * @returns Owner zone id or 0.
  */
 function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
+  if (pcm.ownerZoneId > 0) {
+    return pcm.ownerZoneId;
+  }
   if (pcm.activeStack.length > 0) {
     return pcm.activeStack[0] ?? 0;
   }
-  return pcm.ownerZoneId;
+  return 0;
+}
+
+/**
+ * Returns the zone that should show the streaming / AirPlay indicator.
+ * @param pcm - PCM routing state.
+ * @returns Zone id to highlight, or 0 when none.
+ */
+function getStreamIndicatorZoneId(pcm: AudioSnapshot["pcm"]): number {
+  const pending = pcm.pendingOwnerZoneId ?? 0;
+  if (pending > 0) {
+    return pending;
+  }
+  return getDacOwnerZoneId(pcm);
 }
 
 function metadataTargetsOwnerZone(
@@ -151,14 +222,21 @@ function metadataTargetsOwnerZone(
       : typeof payload.zoneId === "number"
         ? payload.zoneId
         : 0;
-  const ownerZoneId = getDacOwnerZoneId(pcm);
   if (payloadOwner <= 0) {
     return false;
   }
+  const ownerZoneId = getDacOwnerZoneId(pcm);
   if (ownerZoneId <= 0) {
     return true;
   }
-  return payloadOwner === ownerZoneId;
+  if (payloadOwner === ownerZoneId) {
+    return true;
+  }
+  const pendingOwner = pcm.pendingOwnerZoneId ?? 0;
+  if (pendingOwner > 0 && payloadOwner === pendingOwner) {
+    return true;
+  }
+  return pcm.activeStack.includes(payloadOwner);
 }
 
 /**
@@ -217,7 +295,33 @@ function readMetadataField(
   if (typeof value !== "string") {
     return current;
   }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return current;
+  }
   return value;
+}
+
+/**
+ * Returns true when a metadata snapshot payload only carries owner routing fields.
+ * @param payload - Metadata event payload.
+ * @returns Whether the payload lacks track display fields.
+ */
+function isOwnerOnlyMetadataPayload(payload: Record<string, unknown>): boolean {
+  if (hasMetadataText(payload) || payload.hasCoverArt === true) {
+    return false;
+  }
+  if (typeof payload.trackId === "string" && payload.trackId.length > 0) {
+    return false;
+  }
+  if (typeof payload.durationMs === "number" && payload.durationMs > 0) {
+    return false;
+  }
+  return (
+    typeof payload.ownerZoneId === "number" ||
+    typeof payload.zoneId === "number" ||
+    typeof payload.previousOwnerZoneId === "number"
+  );
 }
 
 /**
@@ -246,22 +350,70 @@ function readPlaybackMs(
 }
 
 /**
- * Returns true when a metadata snapshot carries displayable track text.
- * @param payload - Metadata snapshot payload.
- * @returns Whether any text field is non-empty.
+ * Resolves the metadata freshness timestamp from an envelope payload.
+ * @param envelope - Metadata SSE envelope.
+ * @param payload - Metadata event payload.
+ * @returns Parsed epoch milliseconds, or 0 when unavailable.
  */
-function hasMetadataText(payload: Record<string, unknown>): boolean {
-  return ["title", "artist", "album", "clientName"].some(
-    (key) => typeof payload[key] === "string" && (payload[key] as string).length > 0
-  );
+function resolveMetadataUpdatedAt(
+  envelope: EventEnvelope,
+  payload: Record<string, unknown>
+): number {
+  if (typeof payload.updatedAt === "string") {
+    const parsed = Date.parse(payload.updatedAt);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  if (typeof envelope.timestamp === "string") {
+    const parsed = Date.parse(envelope.timestamp);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
 }
 
 /**
- * Applies a metadata snapshot payload to PCM now-playing state.
- * @param pcm - Current PCM state.
- * @param payload - Metadata snapshot payload.
- * @returns Updated PCM state.
+ * Returns true when a metadata event is older than the last applied snapshot.
+ * @param updatedAtMs - Incoming metadata timestamp.
+ * @param lastAppliedAtMs - Last applied metadata timestamp.
+ * @returns Whether the event should be ignored.
  */
+function isStaleMetadataEvent(updatedAtMs: number, lastAppliedAtMs: number): boolean {
+  return updatedAtMs > 0 && lastAppliedAtMs > 0 && updatedAtMs < lastAppliedAtMs;
+}
+
+/**
+ * Returns true when incoming metadata differs from the current PCM snapshot.
+ * @param pcm - Current PCM state.
+ * @param payload - Metadata event payload.
+ * @returns Whether the payload carries changed track identity or text.
+ */
+function metadataContentChanged(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): boolean {
+  const incomingTrackId =
+    typeof payload.trackId === "string" && payload.trackId.length > 0 ? payload.trackId : undefined;
+  if (incomingTrackId !== undefined && incomingTrackId !== (pcm.metadata.trackId ?? "")) {
+    return true;
+  }
+  const incomingTitle = typeof payload.title === "string" ? payload.title.trim() : "";
+  if (incomingTitle.length > 0 && incomingTitle !== (pcm.metadata.title ?? "").trim()) {
+    return true;
+  }
+  const incomingArtist = typeof payload.artist === "string" ? payload.artist.trim() : "";
+  if (incomingArtist.length > 0 && incomingArtist !== (pcm.metadata.artist ?? "").trim()) {
+    return true;
+  }
+  if (payload.hasCoverArt === true && pcm.hasCoverArt !== true) {
+    return true;
+  }
+  return false;
+}
+
+
 function applyMetadataSnapshotToPcm(
   pcm: AudioSnapshot["pcm"],
   payload: Record<string, unknown>
@@ -270,41 +422,96 @@ function applyMetadataSnapshotToPcm(
     return pcm;
   }
 
-  const hasText = hasMetadataText(payload);
-  if (!hasText && payload.playing !== true && payload.hasCoverArt !== true) {
+  if (isOwnerOnlyMetadataPayload(payload)) {
     return pcm;
   }
 
+  const incomingTrackId =
+    typeof payload.trackId === "string" && payload.trackId.length > 0 ? payload.trackId : undefined;
+  const metadataChanged = metadataContentChanged(pcm, payload);
+
+  const currentDisplay = {
+    title: pcm.metadata.title,
+    artist: pcm.metadata.artist,
+    album: pcm.metadata.album,
+    clientName: pcm.metadata.clientName,
+    clientModel: pcm.metadata.clientModel,
+    trackId: pcm.metadata.trackId,
+    playing: pcm.playback?.playing ?? false,
+    durationMs: pcm.playback?.durationMs ?? 0,
+    hasCoverArt: pcm.hasCoverArt ?? false,
+  };
+  if (
+    !hasNowPlayingDisplayContent(payload) &&
+    hasNowPlayingDisplayContent(currentDisplay) &&
+    payload.playing !== true
+  ) {
+    return pcm;
+  }
+
+  const hasText = hasMetadataText(payload);
+  if (!hasText && payload.playing !== true && payload.hasCoverArt !== true) {
+    if (!hasNowPlayingDisplayContent(payload)) {
+      return pcm;
+    }
+  }
+
+  const resolvedClientName = sanitizeClientName(
+    readMetadataField(payload, "clientName", metadataChanged ? undefined : pcm.metadata.clientName) ??
+      readMetadataField(payload, "client_name", metadataChanged ? undefined : pcm.metadata.clientName),
+    readMetadataField(payload, "clientModel", metadataChanged ? undefined : pcm.metadata.clientModel) ??
+      readMetadataField(payload, "client_model", metadataChanged ? undefined : pcm.metadata.clientModel),
+    incomingTrackId ?? pcm.metadata.trackId
+  );
+
+  const metadata: PcmMetadata = {
+    ...(metadataChanged ? {} : pcm.metadata),
+    title: readMetadataField(payload, "title", metadataChanged ? undefined : pcm.metadata.title),
+    artist: readMetadataField(payload, "artist", metadataChanged ? undefined : pcm.metadata.artist),
+    album: readMetadataField(payload, "album", metadataChanged ? undefined : pcm.metadata.album),
+    clientName: resolvedClientName,
+    clientModel:
+      readMetadataField(payload, "clientModel", metadataChanged ? undefined : pcm.metadata.clientModel) ??
+      readMetadataField(payload, "client_model", metadataChanged ? undefined : pcm.metadata.clientModel),
+    trackId: incomingTrackId ?? pcm.metadata.trackId,
+    coverArtId: readMetadataField(payload, "coverArtId", metadataChanged ? undefined : pcm.metadata.coverArtId),
+    coverArtUrl: readMetadataField(payload, "coverArtUrl", metadataChanged ? undefined : pcm.metadata.coverArtUrl),
+    updatedAt:
+      typeof payload.updatedAt === "string"
+        ? payload.updatedAt
+        : pcm.metadata.updatedAt,
+  };
+
   return {
     ...pcm,
-    metadata: {
-      title: readMetadataField(payload, "title", pcm.metadata.title),
-      artist: readMetadataField(payload, "artist", pcm.metadata.artist),
-      album: readMetadataField(payload, "album", pcm.metadata.album),
-      clientName: readMetadataField(payload, "clientName", pcm.metadata.clientName),
-      clientModel: readMetadataField(payload, "clientModel", pcm.metadata.clientModel),
-    },
-    hasCoverArt:
-      typeof payload.hasCoverArt === "boolean" ? payload.hasCoverArt : pcm.hasCoverArt,
-    playback: {
-      ...pcm.playback,
-      playing:
-        payload.playing === true
-          ? true
-          : hasText && payload.playing === false
-            ? false
-            : pcm.playback.playing,
-    },
+    metadata,
+      hasCoverArt: metadataChanged
+        ? payload.hasCoverArt === true ||
+          (typeof payload.coverArtId === "string" && payload.coverArtId.length > 0)
+        : typeof payload.hasCoverArt === "boolean"
+          ? payload.hasCoverArt
+          : pcm.hasCoverArt,
+    playback: metadataChanged
+      ? {
+          playing: typeof payload.playing === "boolean" ? payload.playing : pcm.playback.playing,
+          positionMs: readPlaybackMs(payload, "positionMs", 0),
+          durationMs: readPlaybackMs(payload, "durationMs", 0),
+          progressSyncedAt: Date.now(),
+        }
+      : {
+          ...pcm.playback,
+          durationMs: readPlaybackMs(payload, "durationMs", pcm.playback.durationMs),
+        },
   };
 }
 
 /**
- * Applies metadata progress or playback state to PCM playback fields.
+ * Applies live progress timing from the audio realtime socket only.
  * @param pcm - Current PCM state.
- * @param payload - Metadata progress payload.
+ * @param payload - Realtime progress payload.
  * @returns Updated PCM state.
  */
-function applyMetadataProgressToPcm(
+function applyRealtimeProgressToPcm(
   pcm: AudioSnapshot["pcm"],
   payload: Record<string, unknown>
 ): AudioSnapshot["pcm"] {
@@ -323,12 +530,11 @@ function applyMetadataProgressToPcm(
         ? payload.receivedAtMs
         : Date.now();
 
-  if (positionMs === 0 && durationMs === 0 && playing === false) {
+  if (positionMs === 0 && playing === false) {
     if (pcm.playback.playing || pcm.playback.positionMs > 0) {
       return pcm;
     }
     playback.positionMs = 0;
-    playback.durationMs = 0;
     playback.playing = false;
     playback.progressSyncedAt = syncedAt;
     return { ...pcm, playback };
@@ -341,8 +547,8 @@ function applyMetadataProgressToPcm(
   if (positionMs !== null) {
     playback.positionMs = positionMs;
   }
-  if (durationMs !== null) {
-    playback.durationMs = readPlaybackMs(payload, "durationMs", playback.durationMs);
+  if (durationMs !== null && durationMs > 0 && pcm.playback.durationMs <= 0) {
+    playback.durationMs = durationMs;
   }
   if (playing !== null) {
     playback.playing = playing;
@@ -397,24 +603,42 @@ function patchPcmFromEvent(
   };
   let activeStack = [...normalizedPcm.activeStack];
   let ownerZoneId = normalizedPcm.ownerZoneId;
+  let pendingOwnerZoneId = normalizedPcm.pendingOwnerZoneId ?? 0;
   let dacState = normalizedPcm.dacState;
   pcm = normalizedPcm;
 
-  if (event === "routing_changed" || event === "pcm_router_snapshot") {
+  if (
+    event === "routing_changed" ||
+    event === "pcm_router_snapshot" ||
+    event === "owner_promoted"
+  ) {
     if (Array.isArray(payload.activeStack)) {
       activeStack = payload.activeStack as number[];
     }
     if (typeof payload.ownerZoneId === "number") {
       ownerZoneId = payload.ownerZoneId;
     }
+    if (typeof payload.pendingOwnerZoneId === "number") {
+      pendingOwnerZoneId = payload.pendingOwnerZoneId;
+    }
     if (
-      event === "pcm_router_snapshot" &&
+      (event === "pcm_router_snapshot" || event === "owner_promoted") &&
       ownerZoneId === 0 &&
       activeStack.length === 0 &&
       getDacOwnerZoneId(normalizedPcm) > 0
     ) {
       activeStack = [...normalizedPcm.activeStack];
       ownerZoneId = normalizedPcm.ownerZoneId;
+      pendingOwnerZoneId = normalizedPcm.pendingOwnerZoneId ?? 0;
+    }
+    if (payload.method === "route_end" && typeof payload.zoneId === "number") {
+      activeStack = removePcmStack(activeStack, payload.zoneId);
+      if (ownerZoneId === payload.zoneId) {
+        ownerZoneId = getDacOwnerZoneId({ ...pcm, activeStack, ownerZoneId: 0 });
+      }
+      if (pendingOwnerZoneId === payload.zoneId) {
+        pendingOwnerZoneId = 0;
+      }
     }
     if (typeof payload.dacState === "string") {
       dacState = payload.dacState;
@@ -457,6 +681,7 @@ function patchPcmFromEvent(
       ...pcm,
       ownerZoneId,
       activeStack,
+      pendingOwnerZoneId,
       dacState,
       profileMode,
       profileStatus,
@@ -529,19 +754,35 @@ function patchPcmFromEvent(
     };
   }
 
-  if (event === "owner_changed") {
+  if (event === "owner_changed" || event === "owner_pending") {
+    const previousOwner = getDacOwnerZoneId(pcm);
+    if (typeof payload.ownerZoneId === "number") {
+      ownerZoneId = payload.ownerZoneId;
+    }
     if (Array.isArray(payload.activeStack)) {
       activeStack = payload.activeStack as number[];
-      ownerZoneId = activeStack[0] ?? 0;
-    } else if (typeof payload.ownerZoneId === "number") {
-      ownerZoneId = payload.ownerZoneId;
-      if (ownerZoneId === 0) {
-        activeStack = [];
-      } else {
-        activeStack = pushPcmStack(activeStack, ownerZoneId);
-      }
+    } else if (ownerZoneId === 0) {
+      activeStack = [];
     }
-    return { ...pcm, ownerZoneId, activeStack };
+    if (typeof payload.pendingOwnerZoneId === "number") {
+      pendingOwnerZoneId = payload.pendingOwnerZoneId;
+    } else if (event === "owner_pending" && ownerZoneId > 0) {
+      pendingOwnerZoneId = ownerZoneId;
+    } else if (event === "owner_changed") {
+      pendingOwnerZoneId = 0;
+    }
+    const ownerChanged =
+      event === "owner_changed" && ownerZoneId > 0 && ownerZoneId !== previousOwner;
+    return {
+      ...pcm,
+      ownerZoneId,
+      activeStack,
+      pendingOwnerZoneId,
+      metadata: ownerChanged ? {} : pcm.metadata,
+      playback: ownerChanged
+        ? { ...pcm.playback, positionMs: 0 }
+        : pcm.playback,
+    };
   }
 
   if (event === "zone_updated") {
@@ -582,7 +823,9 @@ function patchZonesFromEvent(
       ? payload.zone
       : typeof payload.zoneId === "number"
         ? payload.zoneId
-        : null;
+        : typeof payload.zoneNumber === "number"
+          ? payload.zoneNumber
+          : null;
   if (zoneNum === null) {
     return zones;
   }
@@ -716,13 +959,12 @@ function useAudioModuleState(): {
     sseConnected: false,
   });
   const eventSourceRef = useRef<EventSource | null>(null);
+  const lastMetadataUpdatedAtRef = useRef(0);
 
   const applyEnvelope = useCallback((envelope: EventEnvelope) => {
     setState((current) => {
-      if (!current.snapshot) {
-        return current;
-      }
-      const snapshot = { ...current.snapshot };
+      const baseSnapshot = current.snapshot ?? initialSnapshot;
+      const snapshot = { ...baseSnapshot };
 
       if (envelope.source === "homepi-hifi-serial") {
         if (envelope.event === "audio_state_snapshot") {
@@ -750,6 +992,20 @@ function useAudioModuleState(): {
             envelope.event,
             envelope.payload as Record<string, unknown>
           );
+          if (envelope.event === "zone_power_changed") {
+            const payload = envelope.payload as Record<string, unknown>;
+            const zoneNumber =
+              typeof payload.zone === "number"
+                ? payload.zone
+                : typeof payload.zoneNumber === "number"
+                  ? payload.zoneNumber
+                  : typeof payload.zoneId === "number"
+                    ? payload.zoneId
+                    : null;
+            if (zoneNumber !== null && payload.power === 0) {
+              snapshot.pcm = clearZoneFromPcmRouting(snapshot.pcm, zoneNumber);
+            }
+          }
         } else if (
           envelope.event.startsWith("source_") ||
           envelope.event === "source_airplay_changed"
@@ -808,30 +1064,68 @@ function useAudioModuleState(): {
 
       if (envelope.source === "homepi-metadata") {
         const payload = envelope.payload as Record<string, unknown>;
+        const metadataUpdatedAt = resolveMetadataUpdatedAt(envelope, payload);
+        const metadataChanged = metadataContentChanged(snapshot.pcm, payload);
+        if (!metadataChanged && isStaleMetadataEvent(metadataUpdatedAt, lastMetadataUpdatedAtRef.current)) {
+          return current;
+        }
         if (envelope.event === "metadata_snapshot") {
+          snapshot.pcm = applyMetadataSnapshotToPcm(snapshot.pcm, payload);
+        } else if (
+          envelope.event === "metadata_owner_changed" ||
+          envelope.event === "metadata_track_changed"
+        ) {
           snapshot.pcm = applyMetadataSnapshotToPcm(snapshot.pcm, payload);
         } else if (envelope.event === "metadata_field_updated") {
           snapshot.pcm = applyMetadataFieldToPcm(snapshot.pcm, payload);
-        } else if (envelope.event === "playback_state_changed") {
-          snapshot.pcm = applyMetadataProgressToPcm(snapshot.pcm, payload);
         } else if (envelope.event === "metadata_cover_updated") {
           const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
           const zoneId = typeof payload.zoneId === "number" ? payload.zoneId : ownerZoneId;
-          if (zoneId === ownerZoneId && ownerZoneId > 0) {
-            snapshot.pcm = { ...snapshot.pcm, hasCoverArt: true };
+          if (
+            zoneId > 0 &&
+            (zoneId === ownerZoneId ||
+              zoneId === (snapshot.pcm.pendingOwnerZoneId ?? 0) ||
+              snapshot.pcm.activeStack.includes(zoneId))
+          ) {
+            const payloadTrackId =
+              typeof payload.trackId === "string" && payload.trackId.length > 0
+                ? payload.trackId
+                : undefined;
+            const currentTrackId = snapshot.pcm.metadata.trackId ?? "";
+            if (payloadTrackId && currentTrackId && payloadTrackId !== currentTrackId) {
+              return current;
+            }
+            snapshot.pcm = applyMetadataSnapshotToPcm(snapshot.pcm, {
+              ...payload,
+              hasCoverArt: true,
+            });
           }
         } else if (envelope.event === "metadata_cleared") {
-          snapshot.pcm = {
-            ...snapshot.pcm,
-            metadata: {},
-            playback: { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
-            hasCoverArt: false,
-          };
+          const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
+          if (ownerZoneId <= 0 || snapshot.pcm.activeStack.length === 0) {
+            snapshot.pcm = {
+              ...snapshot.pcm,
+              metadata: {},
+              playback: { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
+              hasCoverArt: false,
+            };
+          }
+        }
+        if (metadataUpdatedAt > 0) {
+          lastMetadataUpdatedAtRef.current = Math.max(
+            lastMetadataUpdatedAtRef.current,
+            metadataUpdatedAt
+          );
+        } else if (
+          typeof payload.trackId === "string" &&
+          payload.trackId.length > 0
+        ) {
+          lastMetadataUpdatedAtRef.current = Date.now();
         }
       }
 
       if (envelope.source === "homepi-backend" && envelope.event === "audio.realtime") {
-        snapshot.pcm = applyMetadataProgressToPcm(
+        snapshot.pcm = applyRealtimeProgressToPcm(
           snapshot.pcm,
           envelope.payload as Record<string, unknown>
         );
@@ -850,10 +1144,16 @@ function useAudioModuleState(): {
       );
       setState((current) => ({
         ...current,
-        snapshot: normalizeAudioSnapshot(data),
+        snapshot: normalizeAudioSnapshot(data, current.snapshot),
         loading: false,
         error: null,
       }));
+      const snapshotUpdatedAt =
+        typeof data.pcm.metadata?.updatedAt === "string"
+          ? Date.parse(data.pcm.metadata.updatedAt)
+          : 0;
+      lastMetadataUpdatedAtRef.current =
+        snapshotUpdatedAt > 0 && !Number.isNaN(snapshotUpdatedAt) ? snapshotUpdatedAt : 0;
     } catch (error) {
       setState((current) => ({
         ...current,
@@ -875,6 +1175,7 @@ function useAudioModuleState(): {
 
     source.onopen = () => {
       setState((current) => ({ ...current, sseConnected: true }));
+      void refresh();
     };
 
     source.onerror = () => {
@@ -1227,7 +1528,7 @@ function useAudioModuleState(): {
       if (!zone || !isZoneEnabled(zone)) {
         return false;
       }
-      return snapshot.pcm.activeStack.includes(zoneNumber);
+      return getStreamIndicatorZoneId(snapshot.pcm) === zoneNumber;
     },
     [state.snapshot]
   );
@@ -1249,18 +1550,28 @@ function useAudioModuleState(): {
       return null;
     }
     const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
-    const { title, artist, album, clientName } = snapshot.pcm.metadata;
     if (ownerZoneId <= 0) {
       return null;
     }
-    if (!title && !artist) {
+    const { title, artist, album, clientName, clientModel } = snapshot.pcm.metadata;
+    const displayPayload = {
+      title,
+      artist,
+      album,
+      clientName,
+      clientModel,
+      playing: snapshot.pcm.playback?.playing ?? false,
+      durationMs: snapshot.pcm.playback?.durationMs ?? 0,
+      hasCoverArt: snapshot.pcm.hasCoverArt ?? false,
+    };
+    if (!hasNowPlayingDisplayContent(displayPayload) && !displayPayload.playing) {
       return null;
     }
     return {
-      track: title,
+      track: pickDisplayTitle({ title, artist, clientName, clientModel, album }),
       artist,
       album,
-      source: clientName ?? `Zone ${ownerZoneId}`,
+      source: clientName ?? clientModel ?? "AirPlay",
     };
   })();
 
@@ -1276,7 +1587,24 @@ function useAudioModuleState(): {
 
     const ownerZone = snapshot.zones.find((zone) => zone.zoneNumber === ownerZoneId);
     const airplaySource = snapshot.sources.find((source) => source.isAirplay === 1);
-    const { title, artist, album, clientName, clientModel } = snapshot.pcm.metadata;
+    const { title, artist, album, clientName, clientModel, trackId } = snapshot.pcm.metadata;
+    const zoneName = ownerZone?.name ?? `Zone ${ownerZoneId}`;
+    const displayPayload = {
+      title,
+      artist,
+      album,
+      clientName,
+      clientModel,
+      trackId,
+      playing: snapshot.pcm.playback?.playing ?? false,
+      durationMs: snapshot.pcm.playback?.durationMs ?? 0,
+      hasCoverArt: snapshot.pcm.hasCoverArt ?? false,
+    };
+
+    if (!hasNowPlayingDisplayContent(displayPayload) && !displayPayload.playing) {
+      return null;
+    }
+
     const sourceParts: string[] = [];
     if (airplaySource?.sourceNumber !== undefined) {
       sourceParts.push(`Source ${airplaySource.sourceNumber}`);
@@ -1285,18 +1613,22 @@ function useAudioModuleState(): {
     }
 
     const config = getAppConfig();
-    const coverUrl = snapshot.pcm.hasCoverArt
-      ? `${config.apiBaseUrl}/api/audio/playback/cover/${ownerZoneId}?v=${snapshot.pcm.playback?.progressSyncedAt ?? Date.now()}`
-      : undefined;
+    const coverArtUrl = snapshot.pcm.metadata.coverArtUrl;
+    const coverUrl =
+      snapshot.pcm.hasCoverArt || snapshot.pcm.metadata.coverArtId
+        ? coverArtUrl
+          ? `${config.apiBaseUrl}${coverArtUrl}`
+          : `${config.apiBaseUrl}/api/audio/now-playing/cover?v=${snapshot.pcm.metadata.coverArtId ? `sha256-${snapshot.pcm.metadata.coverArtId}` : snapshot.pcm.playback?.progressSyncedAt ?? Date.now()}`
+        : undefined;
 
     return {
       visible: true,
       zoneId: ownerZoneId,
-      zoneName: ownerZone?.name ?? `Zone ${ownerZoneId}`,
-      track: title,
+      zoneName,
+      track: pickDisplayTitle({ title, artist, clientName, clientModel, album }),
       artist,
       album,
-      clientName: clientName || clientModel,
+      clientName: sanitizeClientName(clientName, clientModel, trackId),
       sourceLabel: sourceParts.length > 0 ? sourceParts.join(" • ") : undefined,
       playing: snapshot.pcm.playback?.playing ?? false,
       positionMs: snapshot.pcm.playback?.positionMs ?? 0,

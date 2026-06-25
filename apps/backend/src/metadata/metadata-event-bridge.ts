@@ -87,6 +87,7 @@ export class MetadataEventBridge {
     socket.on("connect", () => {
       this.reconnect.resetBackoff();
       this.setConnected(true);
+      this.options.coordinator.patchAndBroadcast({ metadata: "healthy" }, "metadata-event-bridge");
       this.options.logger.info({
         module: "app.backend.metadata",
         event: "event_bridge_connected",
@@ -163,6 +164,14 @@ export class MetadataEventBridge {
 
     const envelope = parsed as EventEnvelope;
     this.options.broadcaster.broadcast(envelope);
+
+    if (envelope.source === "homepi-metadata") {
+      this.options.coordinator.patchAndBroadcast(
+        { metadata: "healthy" },
+        "metadata-event-bridge",
+        envelope.timestamp
+      );
+    }
 
     const patch = mapEnvelopeToStatusPatch(envelope);
     if (patch) {

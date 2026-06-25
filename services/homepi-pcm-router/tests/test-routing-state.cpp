@@ -48,7 +48,7 @@ int main() {
   }
 
   routing.on_route_start(8);
-  routing.on_route_start(3, [](int zone_id) { return zone_id == 8; });
+  routing.on_route_start(3, [](int zone_id) { return zone_id == 8; }, 8);
   assert(routing.owner_zone_id() == 8);
   assert(routing.pending_owner_zone_id() == 3);
   const auto deferred_stack = routing.active_stack();

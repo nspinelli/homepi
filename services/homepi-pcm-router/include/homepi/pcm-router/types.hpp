@@ -9,7 +9,13 @@ namespace homepi::pcm_router {
 constexpr int kMaxZones = 16;
 
 /** Max wait before promoting a joining zone to DAC owner. */
-constexpr int64_t kOwnerPromotionWaitMs = 750;
+constexpr int64_t kOwnerPromotionWaitMs = 0;
+
+/** Live PCM must arrive within this window to count as active. */
+constexpr int64_t kLivePcmActiveMs = 500;
+
+/** Fresh frames for handoff promotion. */
+constexpr int64_t kHandoffFreshBufferMs = 250;
 
 /** Discard buffered PCM not refreshed within this window (stream ended). */
 constexpr int64_t kCaptureStaleMs = 80;

@@ -24,6 +24,9 @@ ServiceConfig load_config_from_env() {
   if (const char* value = std::getenv("HOMEPI_METADATA_PIPE_PREFIX")) {
     config.pipe_prefix = value;
   }
+  if (const char* value = std::getenv("HOMEPI_PCM_ROUTER_SOCKET")) {
+    config.pcm_router_socket = value;
+  }
   if (const char* value = std::getenv("LOG_LEVEL")) {
     config.log_level = value;
   }

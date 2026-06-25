@@ -66,12 +66,26 @@ void RoutingState::recompute_modes_locked() {
       zone_modes_[zone_id] = ZoneCaptureMode::Disabled;
     }
   }
-  for (int zone_id : active_stack_) {
+
+  const auto mark_buffer = [&](int zone_id) {
     if (zone_id >= 1 && zone_id <= kMaxZones && zone_enabled_[zone_id]) {
       zone_modes_[zone_id] = ZoneCaptureMode::Buffer;
     }
+  };
+
+  for (int zone_id : active_stack_) {
+    mark_buffer(zone_id);
   }
-  owner_zone_id_ = active_stack_.empty() ? 0 : active_stack_.front();
+  mark_buffer(handoff_owner_zone_id_);
+  if (pending_owner_zone_id_ > 0) {
+    mark_buffer(pending_owner_zone_id_);
+  }
+
+  if (handoff_owner_zone_id_ > 0) {
+    owner_zone_id_ = handoff_owner_zone_id_;
+  } else {
+    owner_zone_id_ = active_stack_.empty() ? 0 : active_stack_.front();
+  }
 }
 
 void RoutingState::load_enabled_mask(const std::array<bool, kMaxZones + 1>& mask) {
@@ -142,9 +156,12 @@ void RoutingState::set_routing(int owner_zone_id, const std::vector<int>& active
   recompute_modes_locked();
 }
 
-void RoutingState::on_route_start(int zone_id) { on_route_start(zone_id, nullptr); }
+void RoutingState::on_route_start(int zone_id) {
+  on_route_start(zone_id, nullptr, 0);
+}
 
-void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_active) {
+void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_active,
+                                  int current_playback_zone) {
   if (zone_id < 1 || zone_id > kMaxZones) {
     return;
   }
@@ -168,14 +185,20 @@ void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_act
   }
 
   const auto is_session_active = [&](int stacked_zone_id) {
+    if (is_zone_active && is_zone_active(stacked_zone_id)) {
+      return true;
+    }
     if (stacked_zone_id >= 1 && stacked_zone_id <= kMaxZones) {
       const int64_t last_route_at = route_at_snapshot[stacked_zone_id];
-      if (last_route_at > 0 && steady_now_ms() - last_route_at <= 5000) {
+      if (last_route_at > 0 && steady_now_ms() - last_route_at <= kLivePcmActiveMs) {
         return true;
       }
     }
-    return is_zone_active ? is_zone_active(stacked_zone_id) : false;
+    return false;
   };
+
+  const int playback_owner =
+      current_playback_zone > 0 ? current_playback_zone : owner_snapshot;
 
   std::lock_guard lock(mutex_);
   if (!zone_enabled_[zone_id]) {
@@ -199,10 +222,12 @@ void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_act
     }
   }
 
+
   const int current_owner = active_stack_.empty() ? 0 : active_stack_.front();
-  const bool defer_to_active_owner = is_zone_active && current_owner > 0 &&
-                                     current_owner != zone_id &&
-                                     is_session_active(current_owner);
+  const int defer_source = playback_owner > 0 ? playback_owner : current_owner;
+  const bool defer_to_active_owner = is_zone_active && defer_source > 0 &&
+                                     defer_source != zone_id &&
+                                     is_session_active(defer_source);
   if (defer_to_active_owner) {
     if (std::find(active_stack_.begin(), active_stack_.end(), zone_id) == active_stack_.end()) {
       active_stack_.push_back(zone_id);
@@ -210,12 +235,14 @@ void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_act
     last_route_at_ms_[zone_id] = steady_now_ms();
     pending_owner_zone_id_ = zone_id;
     pending_owner_at_ms_ = steady_now_ms();
+    handoff_owner_zone_id_ = 0;
     recompute_modes_locked();
     return;
   }
 
   pending_owner_zone_id_ = 0;
   pending_owner_at_ms_ = 0;
+  handoff_owner_zone_id_ = 0;
   push_stack_locked(zone_id);
   last_route_at_ms_[zone_id] = steady_now_ms();
   recompute_modes_locked();
@@ -228,14 +255,14 @@ bool RoutingState::try_promote_pending_owner(const ZoneActivityFn& is_ready) {
     return false;
   }
   const int pending_zone = pending_owner_zone_id_;
-  const int64_t elapsed_ms = steady_now_ms() - pending_owner_at_ms_;
   const bool ready = is_ready && is_ready(pending_zone);
-  if (!ready && elapsed_ms < kOwnerPromotionWaitMs) {
+  if (!ready) {
     return false;
   }
   push_stack_locked(pending_zone);
   pending_owner_zone_id_ = 0;
   pending_owner_at_ms_ = 0;
+  handoff_owner_zone_id_ = 0;
   recompute_modes_locked();
   return true;
 }
@@ -248,11 +275,24 @@ void RoutingState::on_route_end(int zone_id) {
   if (!zone_enabled_[zone_id]) {
     return;
   }
+
+  const bool was_owner = owner_zone_id_ == zone_id || handoff_owner_zone_id_ == zone_id;
   remove_from_stack_locked(zone_id);
-  if (pending_owner_zone_id_ == zone_id || active_stack_.empty()) {
+
+  if (was_owner && !active_stack_.empty()) {
+    pending_owner_zone_id_ = active_stack_.front();
+    pending_owner_at_ms_ = steady_now_ms();
+    handoff_owner_zone_id_ = zone_id;
+  } else if (was_owner) {
+    owner_zone_id_ = 0;
+    handoff_owner_zone_id_ = 0;
+    pending_owner_zone_id_ = 0;
+    pending_owner_at_ms_ = 0;
+  } else if (pending_owner_zone_id_ == zone_id) {
     pending_owner_zone_id_ = 0;
     pending_owner_at_ms_ = 0;
   }
+
   recompute_modes_locked();
 }
 
@@ -278,6 +318,11 @@ int RoutingState::owner_zone_id() const {
 int RoutingState::pending_owner_zone_id() const {
   std::lock_guard lock(mutex_);
   return pending_owner_zone_id_;
+}
+
+int RoutingState::handoff_owner_zone_id() const {
+  std::lock_guard lock(mutex_);
+  return handoff_owner_zone_id_;
 }
 
 std::vector<int> RoutingState::active_stack() const {

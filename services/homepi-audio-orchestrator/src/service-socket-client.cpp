@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <cstring>
@@ -44,6 +45,14 @@ std::string read_line(int fd) {
   return line;
 }
 
+void set_socket_timeouts(int fd, int seconds) {
+  timeval tv{};
+  tv.tv_sec = seconds;
+  tv.tv_usec = 0;
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
+
 }  // namespace
 
 ServiceSocketClient::ServiceSocketClient(SocketPaths paths) : paths_(std::move(paths)) {}
@@ -53,6 +62,7 @@ std::string ServiceSocketClient::pcm_route(const std::string& method, int zone_i
   if (fd < 0) {
     return {};
   }
+  set_socket_timeouts(fd, 3);
 
   std::ostringstream request;
   request << "{\"method\":\"" << method << "\",\"zoneId\":" << zone_id << "}\n";
@@ -93,20 +103,27 @@ void ServiceSocketClient::send_hifi_command_async(const std::string& command) co
 
 void ServiceSocketClient::execute_hifi_command_async(const std::string& event,
                                                      const std::string& payload_json) const {
-  const int fd = homepi::transport::connect_unix_stream_socket(paths_.hifi_serial);
-  if (fd < 0) {
-    return;
-  }
+  std::thread([this, event, payload_json]() {
+    const int fd = homepi::transport::connect_unix_stream_socket(paths_.hifi_serial);
+    if (fd < 0) {
+      return;
+    }
+    set_socket_timeouts(fd, 3);
 
-  std::ostringstream request;
-  request << "{\"method\":\"executeHifiCommand\",\"correlationId\":\"audio-orchestrator\","
-          << "\"event\":\"" << event << "\"";
-  if (!payload_json.empty()) {
-    request << ',' << payload_json;
-  }
-  request << "}\n";
-  write_all(fd, request.str());
-  close(fd);
+    std::ostringstream request;
+    request << "{\"method\":\"executeHifiCommand\",\"correlationId\":\"audio-orchestrator\","
+            << "\"event\":\"" << event << "\"";
+    if (!payload_json.empty()) {
+      request << ',' << payload_json;
+    }
+    request << "}\n";
+    if (!write_all(fd, request.str())) {
+      close(fd);
+      return;
+    }
+    (void)read_line(fd);
+    close(fd);
+  }).detach();
 }
 
 void ServiceSocketClient::nqptp_play_begin() const {

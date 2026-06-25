@@ -97,7 +97,8 @@ export class FallbackReconciliation {
     if (!bridgeState.hifiSerial) {
       await this.reconcileHifiHealth();
     }
-    if (!bridgeState.pcmRouter) {
+  const pcmStatus = this.options.statusStore.getStatus().pcmRouter;
+    if (!bridgeState.pcmRouter || pcmStatus === "offline") {
       await this.reconcileSystemd("pcmRouter", "homepi-pcm-router");
     }
 

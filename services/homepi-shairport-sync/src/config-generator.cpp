@@ -106,7 +106,10 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
       continue;
     }
     const ZoneSettings* zone_settings = settings_for(settings, zone.zone_number);
-    const double active_timeout = zone_settings ? zone_settings->active_state_timeout : 1.0;
+    double active_timeout = zone_settings ? zone_settings->active_state_timeout : 0.5;
+    if (active_timeout > 1.0) {
+      active_timeout = 0.5;
+    }
     const int session_timeout = zone_settings ? zone_settings->session_timeout : 60;
     const int log_verbosity = zone_settings ? zone_settings->log_verbosity : 1;
     const std::string profile =
@@ -134,7 +137,7 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
          << "  ignore_volume_control = \"yes\";\n"
          << "  volume_control_profile = \"" << profile << "\";\n"
          << "  default_airplay_volume = " << default_volume << ";\n"
-         << "  audio_backend_buffer_desired_length_in_seconds = 0.2;\n"
+         << "  audio_backend_buffer_desired_length_in_seconds = 0.05;\n"
          << "  run_this_when_volume_is_set = \"" << hook << " volume " << zone.zone_number
          << " \";\n"
          << "};\n\n"
@@ -170,7 +173,7 @@ std::map<int, std::string> ConfigGenerator::generate(const std::vector<ZoneRow>&
          << "  include_cover_art = \"yes\";\n"
          << "  cover_art_cache_directory = \"\";\n"
          << "  pipe_name = \"/tmp/homepi-metadata-zone-" << zone.zone_number << "\";\n"
-         << "  progress_interval = 5.0;\n"
+         << "  progress_interval = 1.0;\n"
          << "};\n\n"
          << "mqtt =\n"
          << "{\n"

@@ -14,6 +14,7 @@ struct ServiceConfig {
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
   std::string cache_dir = "/opt/homepi/runtime/cache";
   std::string pipe_prefix = "/tmp/homepi-metadata-zone-";
+  std::string pcm_router_socket = "/run/homepi/pcm-router.sock";
   std::string log_level = "INFO";
   int zone_count = 16;
   int metadata_debounce_ms = 250;

@@ -7,8 +7,10 @@ import {
 } from "@/components/audio/audio-playback-ui.js";
 import { ZonePowerButton } from "@/components/audio/zone-power-button.js";
 import { ZoneVolumeKnob } from "@/components/audio/zone-volume-knob.js";
+import { Badge } from "@/components/ui/badge.js";
 import { getZoneActivityPriority } from "@/hooks/use-audio-module.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
+import { pickDisplayTitle } from "@/lib/audio-metadata-utils.js";
 import { isZoneEnabled } from "@/lib/is-zone-enabled.js";
 import { zoneCardVolume } from "@/lib/zone-card-volume.js";
 import { cn } from "@/lib/utils.js";
@@ -37,9 +39,10 @@ export function AudioNowPlayingDropdownPanel({
     isZoneSendingAudio,
   } = useAudioModule();
   const positionMs = usePlaybackPosition(playback);
-  const title = playback.track?.trim() || "Now Playing";
+  const title = pickDisplayTitle(playback);
   const artist = playback.artist?.trim();
   const album = playback.album?.trim();
+  const clientPill = playback.clientName?.trim() || "AirPlay";
 
   const enabledZones = useMemo(() => {
     const zones = (state.snapshot?.zones ?? []).filter(isZoneEnabled);
@@ -66,8 +69,8 @@ export function AudioNowPlayingDropdownPanel({
 
   return (
     <div className="flex w-full flex-col">
-      <div className="flex items-stretch gap-3">
-        <AudioCoverArt coverUrl={playback.coverUrl} sizeClassName="h-16 w-16" />
+      <div className="flex items-center gap-3">
+        <AudioCoverArt coverUrl={playback.coverUrl} sizeClassName="h-24 w-24" />
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
           <p className="truncate text-sm font-semibold leading-tight text-foreground">{title}</p>
           {artist ? (
@@ -76,6 +79,9 @@ export function AudioNowPlayingDropdownPanel({
           {album ? (
             <p className="truncate text-xs leading-tight text-muted-foreground">{album}</p>
           ) : null}
+          <Badge variant="secondary" className="mt-1 w-fit max-w-full truncate text-[10px] font-normal">
+            {clientPill}
+          </Badge>
         </div>
       </div>
 

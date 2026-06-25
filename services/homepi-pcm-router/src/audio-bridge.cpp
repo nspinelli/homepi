@@ -77,12 +77,14 @@ AudioBridgeStats AudioBridge::stats() const { return stats_; }
 ActiveAudioConfig AudioBridge::active_config() const { return active_config_; }
 
 void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones + 1>& modes) {
+  const int playback_zone = playback_owner_.load();
+  const int handoff_zone = handoff_source_zone_.load();
   for (int i = 1; i <= kMaxZones; ++i) {
     const ZoneCaptureMode previous = zone_modes_[i].load();
     if (previous == ZoneCaptureMode::Buffer &&
         (modes[i] == ZoneCaptureMode::Drain || modes[i] == ZoneCaptureMode::Disabled ||
          modes[i] == ZoneCaptureMode::Off) &&
-        i <= config_.zone_count) {
+        i <= config_.zone_count && i != playback_zone && i != handoff_zone) {
       rings_[static_cast<size_t>(i - 1)]->clear();
     }
     zone_modes_[i].store(modes[i]);
@@ -276,6 +278,18 @@ void AudioBridge::end_session_idle() {
   dac_idle_requested_.store(false);
 }
 
+int AudioBridge::playback_owner() const { return playback_owner_.load(); }
+
+int AudioBridge::handoff_source_zone() const { return handoff_source_zone_.load(); }
+
+void AudioBridge::clear_zone_ring(int zone_id) {
+  if (zone_id < 1 || zone_id > config_.zone_count) {
+    return;
+  }
+  rings_[static_cast<size_t>(zone_id - 1)]->clear();
+  last_buffered_at_ms_[zone_id].store(0);
+}
+
 void AudioBridge::set_playback_owner(int zone_id) {
   if (zone_id <= 0) {
     end_session_idle();
@@ -286,14 +300,19 @@ void AudioBridge::set_playback_owner(int zone_id) {
   {
     std::lock_guard lock(dac_mutex_);
     if (!ensure_dac_open_locked()) {
-      playback_owner_.store(0);
+      if (previous_owner > 0) {
+        playback_owner_.store(previous_owner);
+      }
       return;
     }
   }
-  playback_owner_.store(zone_id);
-  if (previous_owner != zone_id) {
+  if (previous_owner > 0 && previous_owner != zone_id) {
+    handoff_source_zone_.store(previous_owner);
+    owner_handoff_at_ms_.store(steady_now_ms());
+  } else if (previous_owner != zone_id) {
     owner_handoff_at_ms_.store(steady_now_ms());
   }
+  playback_owner_.store(zone_id);
   routing_revision_.fetch_add(1, std::memory_order_relaxed);
 }
 
@@ -475,9 +494,23 @@ void AudioBridge::playback_loop() {
       std::this_thread::sleep_for(std::chrono::milliseconds(5));
       continue;
     }
-    FrameRing& ring = *rings_[owner - 1];
-    discard_stale_owner_frames(owner, ring, buffer.data());
-    const int64_t last_buffered_at = last_buffered_at_ms_[owner].load();
+
+    int read_zone = owner;
+    const int handoff_zone = handoff_source_zone_.load();
+    if (handoff_zone > 0 && handoff_zone <= config_.zone_count) {
+      const bool target_ready =
+          zone_available_frames(owner) >= config_.period_frames &&
+          zone_recently_buffered(owner, kHandoffFreshBufferMs);
+      if (!target_ready) {
+        read_zone = handoff_zone;
+      } else {
+        handoff_source_zone_.store(0);
+      }
+    }
+
+    FrameRing& ring = *rings_[read_zone - 1];
+    discard_stale_owner_frames(read_zone, ring, buffer.data());
+    const int64_t last_buffered_at = last_buffered_at_ms_[read_zone].load();
     const bool capture_stale =
         last_buffered_at > 0 && steady_now_ms() - last_buffered_at > kCaptureStaleMs;
     if (capture_stale) {
@@ -488,10 +521,13 @@ void AudioBridge::playback_loop() {
     const int64_t now_ms = steady_now_ms();
     const bool recent_handoff = handoff_at > 0 && now_ms - handoff_at <= 2000;
     const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(recent_handoff ? 750 : 250);
+                          std::chrono::milliseconds(recent_handoff ? 50 : 250);
     while (ring.available_frames() < config_.period_frames && !stop_requested_.load()) {
       if (playback_owner_.load() != owner ||
           routing_revision_.load(std::memory_order_relaxed) != revision) {
+        break;
+      }
+      if (handoff_source_zone_.load() != handoff_zone) {
         break;
       }
       if (std::chrono::steady_clock::now() >= deadline) {

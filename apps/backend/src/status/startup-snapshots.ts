@@ -83,12 +83,20 @@ export function createStartupSnapshotLoaders(deps: StartupSnapshotDeps): Startup
         const correlationId = createCorrelationId("startup-snapshot");
         try {
           const snapshot = await pcmRouterClient.getSnapshot(correlationId);
-          if (!snapshot) {
-            coordinator.patchAndBroadcast({ pcmRouter: "offline" }, "startup-snapshot");
+          if (snapshot) {
+            const pcm = mapPcmRouterFromDacState(snapshot.dacState);
+            coordinator.patchAndBroadcast({ pcmRouter: pcm }, "startup-snapshot");
             return;
           }
-          const pcm = mapPcmRouterFromDacState(snapshot.dacState);
-          coordinator.patchAndBroadcast({ pcmRouter: pcm }, "startup-snapshot");
+        } catch {
+          /* fall through to systemd probe */
+        }
+        try {
+          const state = await getSystemdUnitActiveState("homepi-pcm-router");
+          coordinator.patchAndBroadcast(
+            { pcmRouter: mapSystemdServiceStatus(state) },
+            "startup-snapshot"
+          );
         } catch {
           coordinator.patchAndBroadcast({ pcmRouter: "offline" }, "startup-snapshot");
         }

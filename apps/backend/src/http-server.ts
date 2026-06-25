@@ -14,6 +14,10 @@ import {
 import { createHealthReport } from "@homepi/core-health";
 import { resolveCorrelationId } from "@homepi/core-logging";
 import { EventBroadcaster } from "./event-broadcaster.js";
+import {
+  buildAudioRealtimeEnvelope,
+  buildMetadataSnapshotEnvelope,
+} from "./sse-subscribe-bootstrap.js";
 import { SseHandler } from "./sse-handler.js";
 import { WsHandler } from "./ws-handler.js";
 import { buildCoreStatusPayload } from "./core-status-builder.js";
@@ -116,15 +120,28 @@ export function createHttpServer(options: HttpServerOptions): Server {
     usbDevicesClient,
     hifiSerialClient,
     pcmRouterClient,
-    metadataClient: _metadataClient,
+    metadataClient,
     brokerSnapshotStore,
   } = options;
-  void _metadataClient;
 
   const brokerOnlyAudioSse = isBrokerOnlyAudioSseEnabled();
 
   const getStatus = () => statusStore.getStatus();
-  const broadcaster = new EventBroadcaster(logger, getStatus);
+  let audioRealtimeBridge: AudioRealtimeBridge | undefined;
+  const broadcaster = new EventBroadcaster(logger, getStatus, async (correlationId) => {
+    const envelopes = [];
+    const metadataSnapshot = await metadataClient
+      .getSnapshot(correlationId)
+      .catch(() => null);
+    if (metadataSnapshot && metadataSnapshot.ownerZoneId > 0) {
+      envelopes.push(buildMetadataSnapshotEnvelope(metadataSnapshot, correlationId));
+    }
+    const realtimeFrame = audioRealtimeBridge?.getLatestFrame();
+    if (realtimeFrame && realtimeFrame.ownerZoneId > 0) {
+      envelopes.push(buildAudioRealtimeEnvelope(realtimeFrame, correlationId));
+    }
+    return envelopes;
+  });
   const sseHandler = new SseHandler(logger, broadcaster);
   const wsHandler = new WsHandler(logger, getStatus);
   const coordinator = new StatusUpdateCoordinator({
@@ -184,7 +201,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     : undefined;
 
   const metadataEventBridge =
-    metadataSocketPath && !brokerOnlyAudioSse
+    metadataSocketPath
       ? new MetadataEventBridge({
         socketPath: metadataSocketPath,
         logger,
@@ -196,7 +213,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
       })
     : undefined;
 
-  const audioRealtimeBridge = audioRealtimeSocketPath
+  const audioRealtimeBridgeInstance = audioRealtimeSocketPath
     ? new AudioRealtimeBridge({
         socketPath: audioRealtimeSocketPath,
         logger,
@@ -205,6 +222,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
         onConnectionChange: () => {},
       })
     : undefined;
+  audioRealtimeBridge = audioRealtimeBridgeInstance;
 
   const eventsBrokerBridge = eventsBrokerSocketPath
     ? new EventsBrokerBridge({

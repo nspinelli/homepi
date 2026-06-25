@@ -165,6 +165,15 @@ install_systemd() {
   systemctl restart "${SERVICE_NAME}.service"
 }
 
+clamp_zone_timeouts() {
+  local db="/opt/homepi/runtime/state/homepi.sqlite"
+  if [[ -f "${db}" ]]; then
+    log "Clamping shairport active_state_timeout to 0.5s where above 1.0s"
+    sqlite3 "${db}" \
+      "UPDATE shairport_zone_settings SET active_state_timeout = 0.5, updated_at = datetime('now') WHERE active_state_timeout > 1.0;"
+  fi
+}
+
 restart_backend() {
   if systemctl is-enabled homepi-backend >/dev/null 2>&1; then
     log "Restarting homepi-backend"
@@ -195,6 +204,7 @@ main() {
   build_supervisor
   install_homepi_files
   chown_homepi_runtime
+  clamp_zone_timeouts
   install_systemd
   restart_backend
   verify_install

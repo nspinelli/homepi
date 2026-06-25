@@ -3,6 +3,8 @@ import type { EventEnvelope } from "@homepi/core-events";
 /** Broker topic patterns used for audio UI SSE. */
 export const BROKER_AUDIO_TOPICS = [
   "core.service",
+  "modules.audio.zone",
+  "modules.audio.snapshot",
   "modules.hifi.zone",
   "modules.hifi.controller",
   "modules.hifi.command_status",
@@ -12,8 +14,8 @@ export const BROKER_AUDIO_TOPICS = [
   "modules.metadata.snapshot",
   "modules.metadata.now_playing",
   "modules.metadata.cover_art",
-  "modules.metadata.playback",
   "modules.metadata.history",
+  "modules.metadata.playback",
   "modules.audio.state",
   "modules.audio.snapshot",
   "modules.zone.config",
@@ -58,8 +60,10 @@ export function shouldDropBrokerEnvelope(envelope: EventEnvelope): boolean {
 export function adaptBrokerEnvelopeForUi(envelope: EventEnvelope): EventEnvelope {
   const adapted: EventEnvelope = { ...envelope };
 
-  if (envelope.topic === "modules.pcm.routing" && envelope.event === "owner_changed") {
-    adapted.event = "routing_changed";
+  if (
+    envelope.topic === "modules.pcm.routing" &&
+    (envelope.event === "owner_changed" || envelope.event === "owner_pending")
+  ) {
     adapted.source = "homepi-pcm-router";
   }
 
@@ -75,23 +79,33 @@ export function adaptBrokerEnvelopeForUi(envelope: EventEnvelope): EventEnvelope
     envelope.topic === "modules.metadata.now_playing"
   ) {
     adapted.source = "homepi-metadata";
-    if (envelope.event === "metadata_track_changed") {
+    if (
+      envelope.event === "metadata_track_changed" ||
+      envelope.event === "metadata_client_updated"
+    ) {
       adapted.event = "metadata_snapshot";
     }
   }
 
   if (envelope.topic === "modules.metadata.cover_art") {
     adapted.source = "homepi-metadata";
-    if (envelope.event === "cover_art_updated") {
+    if (envelope.event === "cover_art_updated" || envelope.event === "metadata_cover_updated") {
       adapted.event = "metadata_cover_updated";
     }
+  }
+
+  if (envelope.topic === "modules.metadata.history") {
+    adapted.source = "homepi-metadata";
   }
 
   if (envelope.topic === "modules.metadata.playback") {
     adapted.source = "homepi-metadata";
   }
 
-  if (envelope.topic.startsWith("modules.hifi.")) {
+  if (
+    envelope.topic.startsWith("modules.hifi.") ||
+    envelope.topic.startsWith("modules.audio.")
+  ) {
     adapted.source = "homepi-hifi-serial";
   }
 

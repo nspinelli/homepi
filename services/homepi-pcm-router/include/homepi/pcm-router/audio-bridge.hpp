@@ -49,6 +49,9 @@ class AudioBridge {
 
   void apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones + 1>& modes);
   void set_playback_owner(int zone_id);
+  int playback_owner() const;
+  int handoff_source_zone() const;
+  void clear_zone_ring(int zone_id);
   bool zone_recently_buffered(int zone_id, int64_t within_ms) const;
   size_t zone_available_frames(int zone_id) const;
 
@@ -103,6 +106,7 @@ class AudioBridge {
   std::array<std::atomic<ZoneCaptureMode>, kMaxZones + 1> zone_modes_{};
   std::array<ZoneCaptureSlot, kMaxZones + 1> capture_slots_{};
   std::atomic<int> playback_owner_{0};
+  std::atomic<int> handoff_source_zone_{0};
   std::atomic<int64_t> owner_handoff_at_ms_{0};
   std::atomic<bool> dac_idle_requested_{false};
   std::array<std::atomic<int64_t>, kMaxZones + 1> last_buffered_at_ms_{};

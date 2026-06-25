@@ -10,13 +10,15 @@
 namespace homepi::metadata {
 
 using SnapshotLineFn = std::function<std::string(const std::string& correlation_id)>;
+using HistoryLineFn = std::function<std::string(const std::string& correlation_id, int limit)>;
 
 /**
  * Unix socket server that streams metadata event envelopes to subscribers.
  */
 class UnixApiServer {
  public:
-  UnixApiServer(std::string socket_path, SnapshotLineFn snapshot_line_fn);
+  UnixApiServer(std::string socket_path, SnapshotLineFn snapshot_line_fn,
+                HistoryLineFn history_line_fn = nullptr);
   ~UnixApiServer();
 
   UnixApiServer(const UnixApiServer&) = delete;
@@ -43,6 +45,7 @@ class UnixApiServer {
 
   std::string socket_path_;
   SnapshotLineFn snapshot_line_fn_;
+  HistoryLineFn history_line_fn_;
   int server_fd_ = -1;
   std::thread thread_;
   std::atomic<bool> stop_{false};

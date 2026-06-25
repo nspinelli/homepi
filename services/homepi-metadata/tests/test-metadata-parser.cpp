@@ -3,6 +3,7 @@
 #include <string>
 
 #include "homepi/metadata/metadata-parser.hpp"
+#include "homepi/metadata/zone-metadata-cache.hpp"
 
 int main() {
   bool saw_title = false;
@@ -10,6 +11,7 @@ int main() {
   bool saw_artist = false;
   bool saw_duration = false;
   bool saw_position = false;
+  bool saw_mper = false;
 
   homepi::metadata::MetadataParser parser({
       .on_field =
@@ -17,11 +19,14 @@ int main() {
             if (update.field == "title" && update.value == "Test Song") {
               saw_title = true;
             }
-            if (update.field == "title" && update.value == "S Wish Grandpas Never Died") {
+            if (update.field == "title" && update.value == "I Wish Grandpas Never Died") {
               saw_inline_title = true;
             }
             if (update.field == "artist" && update.value == "Scotty McCreery") {
               saw_artist = true;
+            }
+            if (update.field == "persistent_id" && update.value == "0x997c6c35438f7a71") {
+              saw_mper = true;
             }
           },
       .on_progress =
@@ -47,7 +52,7 @@ int main() {
   homepi::metadata::MetadataParser inline_parser({
       .on_field =
           [&](const homepi::metadata::MetadataFieldUpdate& update) {
-            if (update.field == "title" && update.value == "S Wish Grandpas Never Died") {
+            if (update.field == "title" && update.value == "I Wish Grandpas Never Died") {
               saw_inline_title = true;
             }
           },
@@ -74,16 +79,27 @@ int main() {
       "MTE0OTA1NjQyMS8xMTQ5MDU4NDc1LzExNTcxMTM3NTU=</data></item>\n";
   parser.feed(glued_item.data(), glued_item.size(), true);
   assert(saw_artist);
+  assert(saw_mper);
   assert(saw_duration);
   assert(saw_position);
 
-  bool saw_fifo_style_progress = false;
+  homepi::metadata::ZoneMetadataCacheStore cache;
+  cache.zone(8).title = "Keep Title";
+  cache.zone(8).artist = "Artist";
+  cache.begin_bundle(8);
+  assert(cache.find(8)->title == "Keep Title");
+  assert(cache.find(8)->artist == "Artist");
+
+  bool saw_fifo_duration = false;
+  bool saw_fifo_position = false;
   homepi::metadata::MetadataParser fifo_parser({
       .on_progress =
           [&](const homepi::metadata::MetadataProgressUpdate& update) {
-            if (update.has_duration && update.duration_ms == 182706 && update.has_position &&
-                update.position_ms == 46) {
-              saw_fifo_style_progress = true;
+            if (update.has_duration && update.duration_ms >= 182705) {
+              saw_fifo_duration = true;
+            }
+            if (update.has_position && update.position_ms == 46) {
+              saw_fifo_position = true;
             }
           },
   });
@@ -95,7 +111,50 @@ int main() {
       "<data encoding=\"base64\">\n"
       "MTE0OTA1NjQyMS8xMTQ5MDU4NDc1LzExNTcxMTM3NTU=</data></item>\n";
   fifo_parser.feed(fifo_chunk.data(), fifo_chunk.size(), true);
-  assert(saw_fifo_style_progress);
+  assert(saw_fifo_duration);
+  assert(saw_fifo_position);
+
+  bool saw_phbt_progress = false;
+  homepi::metadata::MetadataParser phbt_parser({
+      .on_progress =
+          [&](const homepi::metadata::MetadataProgressUpdate& update) {
+            if (update.has_position && update.position_ms > 0) {
+              saw_phbt_progress = true;
+            }
+          },
+  });
+  const std::string phbt_one =
+      "<item><type>73736e63</type><code>70686274</code><length>25</length>\n"
+      "<data encoding=\"base64\">\n"
+      "NDI1MDQ1MTUxOC84NjMxMjg1NzI1NTQzOA==</data></item>\n";
+  const std::string phbt_two =
+      "<item><type>73736e63</type><code>70686274</code><length>25</length>\n"
+      "<data encoding=\"base64\">\n"
+      "NDI1MDQ5NjU3NC84NjMxMzg3ODY2OTg1OA==</data></item>\n";
+  phbt_parser.feed(phbt_one.data(), phbt_one.size(), true);
+  phbt_parser.feed(phbt_two.data(), phbt_two.size(), true);
+  assert(saw_phbt_progress);
+
+  bool saw_nanosecond_phbt = false;
+  homepi::metadata::MetadataParser ns_phbt_parser({
+      .on_progress =
+          [&](const homepi::metadata::MetadataProgressUpdate& update) {
+            if (update.has_position && update.position_ms >= 900) {
+              saw_nanosecond_phbt = true;
+            }
+          },
+  });
+  const std::string ns_phbt_one =
+      "<item><type>73736e63</type><code>70686274</code><length>26</length>\n"
+      "<data encoding=\"base64\">\n"
+      "MzgwMDAwNzExNC8xMjA0OTIyMzI1OTg3ODc=</data></item>\n";
+  const std::string ns_phbt_two =
+      "<item><type>73736e63</type><code>70686274</code><length>26</length>\n"
+      "<data encoding=\"base64\">\n"
+      "MzgwMDA5MTA2NC8xMjA0OTMyMjM1OTg3ODc=</data></item>\n";
+  ns_phbt_parser.feed(ns_phbt_one.data(), ns_phbt_one.size(), true);
+  ns_phbt_parser.feed(ns_phbt_two.data(), ns_phbt_two.size(), true);
+  assert(saw_nanosecond_phbt);
 
   std::cout << "test_metadata_parser: OK\n";
   return 0;

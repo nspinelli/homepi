@@ -5,6 +5,10 @@
 #include "homepi/audio-orchestrator/service-config.hpp"
 #include "homepi/audio-orchestrator/service-socket-client.hpp"
 
+namespace homepi::events {
+class EventsClient;
+}
+
 namespace homepi::audio_orchestrator {
 
 /**
@@ -16,8 +20,10 @@ class Orchestrator {
    * Creates an orchestrator with service configuration and socket client.
    * @param config Runtime configuration.
    * @param client Legacy socket RPC client.
+   * @param events_client Broker client used to publish Hi-Fi commands.
    */
-  Orchestrator(ServiceConfig config, ServiceSocketClient client);
+  Orchestrator(ServiceConfig config, ServiceSocketClient client,
+               homepi::events::EventsClient* events_client);
 
   /**
    * Refreshes the AirPlay source number from SQLite or environment defaults.
@@ -44,8 +50,12 @@ class Orchestrator {
   int airplay_source() const;
   int volume_db_to_percent(const std::string& volume_db) const;
 
+  void publish_hifi_command(const std::string& event, const std::string& payload_json,
+                            const std::string& correlation_id) const;
+
   ServiceConfig config_;
   ServiceSocketClient client_;
+  homepi::events::EventsClient* events_client_ = nullptr;
   int airplay_source_ = 5;
 };
 

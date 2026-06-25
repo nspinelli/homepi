@@ -79,6 +79,10 @@ export interface PcmMetadata {
   album?: string;
   clientName?: string;
   clientModel?: string;
+  trackId?: string;
+  coverArtId?: string;
+  coverArtUrl?: string;
+  updatedAt?: string;
 }
 
 /**
@@ -107,6 +111,8 @@ export interface PcmProfileTuple {
 export interface PcmState {
   ownerZoneId: number;
   activeStack: number[];
+  /** Zone waiting to take over the DAC during latest_ready_wins handoff. */
+  pendingOwnerZoneId?: number;
   dacState: string;
   profileMode?: string;
   profileStatus?: string;

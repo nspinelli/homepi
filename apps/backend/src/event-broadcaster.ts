@@ -8,6 +8,30 @@ const STATUS_TOPIC = "system.status";
 const MAX_REPLAY_EVENTS = 200;
 
 /**
+ * Returns true when an envelope must not be buffered or replayed to late SSE subscribers.
+ * @param envelope - Event envelope.
+ * @returns True when replay could wipe live UI state.
+ */
+function shouldExcludeFromReplay(envelope: EventEnvelope): boolean {
+  if (envelope.source === "homepi-metadata") {
+    return true;
+  }
+  if (envelope.source === "homepi-backend" && envelope.event === "audio.realtime") {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Supplies fresh envelopes when a new SSE client connects.
+ * @param correlationId - Request correlation identifier.
+ * @returns Envelopes to send after the system status snapshot.
+ */
+export type SseSubscribeBootstrap = (
+  correlationId: string
+) => Promise<EventEnvelope[]>;
+
+/**
  * Manages SSE subscribers and emits HomePi event envelopes.
  */
 export class EventBroadcaster {
@@ -19,10 +43,12 @@ export class EventBroadcaster {
    * Creates an event broadcaster.
    * @param logger - Structured logger instance.
    * @param getStatus - Callback returning the latest system status.
+   * @param subscribeBootstrap - Optional provider of fresh envelopes on connect.
    */
   constructor(
     private readonly logger: Logger,
-    private readonly getStatus: () => SystemStatusSnapshot
+    private readonly getStatus: () => SystemStatusSnapshot,
+    private readonly subscribeBootstrap?: SseSubscribeBootstrap
   ) {}
 
   /**
@@ -42,7 +68,32 @@ export class EventBroadcaster {
 
     this.sendEnvelope(res, this.createSnapshotEnvelope(correlationId));
     for (const envelope of this.recentEnvelopes) {
-      this.sendEnvelope(res, envelope);
+      if (!shouldExcludeFromReplay(envelope)) {
+        this.sendEnvelope(res, envelope);
+      }
+    }
+
+    if (this.subscribeBootstrap) {
+      void this.subscribeBootstrap(correlationId)
+        .then((envelopes) => {
+          if (!this.subscribers.has(res)) {
+            return;
+          }
+          for (const envelope of envelopes) {
+            this.sendEnvelope(res, envelope);
+          }
+        })
+        .catch((error: unknown) => {
+          this.logger.warn({
+            module: "app.backend.events",
+            event: "sse_subscribe_bootstrap_failed",
+            correlationId,
+            message: "Failed to bootstrap SSE subscriber",
+            data: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
+        });
     }
   }
 
@@ -114,7 +165,7 @@ export class EventBroadcaster {
    * @param envelope - Event envelope to send.
    */
   broadcast(envelope: EventEnvelope): void {
-    if (envelope.event !== "heartbeat") {
+    if (envelope.event !== "heartbeat" && !shouldExcludeFromReplay(envelope)) {
       this.recentEnvelopes.push(envelope);
       if (this.recentEnvelopes.length > MAX_REPLAY_EVENTS) {
         this.recentEnvelopes.shift();

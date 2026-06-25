@@ -18,6 +18,8 @@ add_executable(homepi-metadata
   src/main.cpp
   src/service-config.cpp
   src/service.cpp
+  src/service-event-loop.cpp
+  src/cover-art-validator.cpp
   src/events-owner-subscriber.cpp
   src/metadata-coalescer.cpp
   src/realtime-progress-server.cpp
@@ -27,8 +29,11 @@ add_executable(homepi-metadata
   src/now-playing-state.cpp
   src/metadata-state-repository.cpp
   src/snapshot-builder.cpp
+  src/content-hash.cpp
   src/unix-api-server.cpp
+  src/zone-metadata-cache.cpp
   src/json-utils.cpp
+  src/metadata-normalizer.cpp
 )
 
 target_include_directories(homepi-metadata PRIVATE
@@ -55,9 +60,10 @@ add_executable(test_metadata_parser
   tests/test-metadata-parser.cpp
   src/metadata-parser.cpp
   src/progress-parser.cpp
+  src/zone-metadata-cache.cpp
 )
 target_include_directories(test_metadata_parser PRIVATE include)
-target_compile_options(test_metadata_parser PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(test_metadata_parser PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
 add_test(NAME test_metadata_parser COMMAND test_metadata_parser)
 
 add_executable(test_metadata_capture
@@ -68,7 +74,7 @@ add_executable(test_metadata_capture
 target_include_directories(test_metadata_capture PRIVATE include)
 target_compile_definitions(test_metadata_capture PRIVATE
   METADATA_CAPTURE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/metadata-capture-zone8.txt")
-target_compile_options(test_metadata_capture PRIVATE -Wall -Wextra -Wpedantic)
+target_compile_options(test_metadata_capture PRIVATE -Wall -Wextra -Wpedantic -UNDEBUG)
 add_test(NAME test_metadata_capture COMMAND test_metadata_capture)
 
 add_executable(test_progress_parser tests/test-progress-parser.cpp src/progress-parser.cpp)

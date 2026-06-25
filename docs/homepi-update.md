@@ -2394,7 +2394,7 @@ Status reflects the **end of `latest-agent-chat.md`** (user confirmed seamless z
 | **6** | Typed Hi-Fi commands | Done | **Recovered** | Verify on hardware |
 | **7** | Pipe-only metadata + `audio-realtime.sock` | Done | Done (`0ad5498`) | — |
 | **8** | Broker-only migration (socket removal) | Orchestrator on broker only | Done | — |
-| **9** | UI parity + handoff polish | Done (owner promotion, client pill, metadata SSE) | Partial | Rebuild with 2–7 |
+| **9** | UI parity + handoff polish | Done (owner promotion, client pill, metadata SSE) | Done | — |
 
 ### 26.4 End-of-session behavior checklist
 

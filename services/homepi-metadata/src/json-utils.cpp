@@ -2,6 +2,7 @@
 
 #include <sstream>
 #include <cstdlib>
+#include <vector>
 
 namespace {
 
@@ -38,6 +39,44 @@ void append_escaped(std::ostringstream& out, const std::string& value) {
 }  // namespace
 
 namespace homepi::metadata {
+
+std::vector<int> parse_int_array_field(const std::string& json, const std::string& field) {
+  std::vector<int> values;
+  const auto key_pos = json.find("\"" + field + "\"");
+  if (key_pos == std::string::npos) {
+    return values;
+  }
+  const auto open = json.find('[', key_pos);
+  const auto close = json.find(']', open == std::string::npos ? key_pos : open);
+  if (open == std::string::npos || close == std::string::npos || close <= open) {
+    return values;
+  }
+  std::string slice = json.substr(open + 1, close - open - 1);
+  std::size_t pos = 0;
+  while (pos < slice.size()) {
+    while (pos < slice.size() && (slice[pos] == ' ' || slice[pos] == ',')) {
+      ++pos;
+    }
+    if (pos >= slice.size()) {
+      break;
+    }
+    const std::size_t end = slice.find_first_of(",]", pos);
+    const std::string token =
+        slice.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+    try {
+      const int value = std::stoi(token);
+      if (value > 0) {
+        values.push_back(value);
+      }
+    } catch (...) {
+    }
+    if (end == std::string::npos) {
+      break;
+    }
+    pos = end + 1;
+  }
+  return values;
+}
 
 int parse_int_field(const std::string& json, const std::string& field) {
   const auto pos = find_field(json, field);

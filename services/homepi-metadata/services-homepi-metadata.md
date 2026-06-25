@@ -1,36 +1,41 @@
 # HomePi Metadata
 
-Single C++ daemon that drains all Shairport metadata FIFOs (so pipes never block) and consumes parsed MQTT metadata for the PCM router owner zone.
+Single native C++20 daemon (`homepi-metadata`) that implements the pipe-only metadata design from `docs/homepi-update.md`.
 
 ## Purpose
 
-Shairport Sync writes metadata to per-zone pipes (`/tmp/homepi-metadata-zone-N`) and publishes parsed fields to MQTT (`shairport/zone/N/...`). The metadata service:
+Shairport Sync writes metadata to per-zone FIFOs (`/tmp/homepi-metadata-zone-N`) with MQTT disabled in generated zone configs. The metadata service:
 
-- Subscribes to `homepi-pcm-router` for `ownerZoneId`
-- Drains every zone pipe via one `epoll` loop (non-blocking, no FIFO parsing)
-- Subscribes to Shairport MQTT topics for the active PCM owner zone
-- Emits `core/events` envelopes on `/run/homepi/metadata.sock`
-- Persists now-playing state via `core/storage` (SQLite)
+- Subscribes to `core/events` for PCM owner changes (`owner_changed`, enabled zones)
+- Opens enabled zone pipes in one `epoll` loop (non-blocking)
+- **Parses only the PCM owner pipe** into the global now-playing reducer
+- **Drains and discards** bytes from enabled non-owner pipes (pipes never block Shairport)
+- Coalesces track/client field updates (~250 ms) before emitting to `core/events`
+- Publishes playback progress through `/run/homepi/audio-realtime.sock` (not the event bus)
+- Persists current now-playing and last-20 play history via `core/storage` (SQLite)
+- Caches cover art on disk (content-addressed + `current.jpg`)
 
-## MQTT topics (owner zone)
+There is **no Python** and **no MQTT** on the metadata runtime path.
 
-| Topic suffix | Maps to |
-|--------------|---------|
-| `title`, `artist`, `album`, `client_name` | Now-playing text fields |
-| `playing` | Playback state (`1` / `0`) |
-| `cover` | Album art (binary) |
-| `frame_position_and_time` | Progress position (with `first_frame_position_and_time`) |
-| `ssnc/prgr`, `core/astm` | Progress position + duration (requires `publish_raw = yes` on Shairport) |
-| `active_start`, `ssnc/mdst` | Clear track metadata for new session |
-| `active_end`, `play_end` | Session cleared |
+## Parser coverage
+
+Pipe items are parsed in C++ (`metadata-parser.cpp`) for `core/*` and `ssnc/*` codes defined in `docs/homepi-update.md` §11.1, including:
+
+- Track fields: `minm`, `asar`, `asal`, `astm`, `mper`
+- Client fields: `snam`, `cmod`
+- Progress: `prgr`, `phb0`, `phbt`
+- Cover art: `PICT`
+- Bundle boundaries: `mdst`, `mden`
+- Session lifecycle: `pbeg`, `pend`, `paus`, `prsm`
 
 ## Core modules
 
 | Module | Usage |
 |--------|--------|
 | `core/logging` | Structured service lifecycle logs |
-| `core/events` | NDJSON event envelopes to backend SSE bridge |
-| `core/storage` | SQLite persistence for owner-zone now-playing |
+| `core/events` | NDJSON envelopes to backend SSE bridge |
+| `core/storage` | SQLite `audio_now_playing` + `audio_play_history` |
+| `core/transport` | Latest-value realtime socket publisher |
 
 ## Runtime layout
 
@@ -46,29 +51,31 @@ Shairport Sync writes metadata to per-zone pipes (`/tmp/homepi-metadata-zone-N`)
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOMEPI_EVENT_SOCKET` | `/run/homepi/metadata.sock` | Metadata Unix API socket |
-| `HOMEPI_PCM_ROUTER_SOCKET` | `/run/homepi/pcm-router.sock` | PCM router subscription |
-| `HOMEPI_DATABASE_PATH` | `/opt/homepi/runtime/state/metadata.db` | SQLite state database |
+| `HOMEPI_EVENTS_SOCKET` | `/run/homepi/events.sock` | Core events broker |
+| `HOMEPI_PCM_ROUTER_SOCKET` | `/run/homepi/pcm-router.sock` | PCM router bootstrap subscription |
+| `HOMEPI_AUDIO_REALTIME_SOCKET` | `/run/homepi/audio-realtime.sock` | Progress realtime endpoint |
+| `HOMEPI_DATABASE_PATH` | `/opt/homepi/runtime/state/homepi.sqlite` | Shared SQLite database |
 | `HOMEPI_CACHE_DIR` | `/opt/homepi/runtime/cache` | Cover art cache directory |
 | `HOMEPI_METADATA_PIPE_PREFIX` | `/tmp/homepi-metadata-zone-` | Shairport FIFO prefix |
 | `HOMEPI_ZONE_COUNT` | `16` | Number of zone pipes to monitor |
-| `MQTT_HOST` | `127.0.0.1` | Mosquitto broker hostname |
-| `MQTT_PORT` | `1883` | Mosquitto broker port |
-| `MQTT_TOPIC_PREFIX` | `shairport/zone` | Shairport MQTT topic prefix before zone id |
+| `METADATA_DEBOUNCE_MS` | `250` | Coalesce timer for track/client emits |
 | `LOG_LEVEL` | `INFO` | Log verbosity |
 
 ## Events
 
 | topic | event | When |
 |-------|-------|------|
-| `modules.metadata.snapshot` | `metadata_snapshot` | Subscribe + owner change |
-| `modules.metadata.now_playing` | `metadata_field_updated` | Owner zone title/artist/album/client |
-| `modules.metadata.progress` | `metadata_progress_updated` | Owner zone progress |
-| `modules.metadata.cover_art` | `metadata_cover_updated` | Owner zone cover art |
+| `modules.metadata.snapshot` | `metadata_snapshot` | Subscribe, owner change, coalesced track update |
+| `modules.metadata.now_playing` | `metadata_track_changed` | After bundle/coalesce flush |
+| `modules.metadata.cover_art` | `metadata_cover_updated` | Cover art saved |
+| `modules.metadata.progress` | `playback_state_changed` | Pause/resume/stop (not periodic ticks) |
 | `modules.metadata.now_playing` | `metadata_cleared` | Owner cleared or session end |
+
+Progress position/duration streams on `audio-realtime.sock` as `audio.realtime.snapshot`.
 
 ## systemd
 
-`homepi-metadata.service` — single unit (replaces legacy `homepi-metadata@N` template).
+`homepi-metadata.service` — single unit (legacy `homepi-metadata@N` template is disabled on install).
 
 ## Install
 

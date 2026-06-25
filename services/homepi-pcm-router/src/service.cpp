@@ -31,7 +31,11 @@ void on_signal(int) { g_stop = true; }
 
 void apply_routing(AudioBridge& bridge, RoutingState& routing) {
   bridge.apply_zone_modes(routing.zone_modes());
-  bridge.set_playback_owner(routing.owner_zone_id());
+  const int playback_zone = routing.handoff_owner_zone_id() > 0 ? routing.handoff_owner_zone_id()
+                                                              : routing.owner_zone_id();
+  if (playback_zone > 0) {
+    bridge.set_playback_owner(playback_zone);
+  }
 }
 
 std::string stack_json(const std::vector<int>& stack) {
@@ -45,6 +49,34 @@ std::string stack_json(const std::vector<int>& stack) {
   }
   out << ']';
   return out.str();
+}
+
+void emit_owner_routing_events(homepi::events::EventEmitter& events, const RoutingState& routing,
+                               const std::string& correlation_id, int previous_owner,
+                               int previous_pending) {
+  const int owner = routing.owner_zone_id();
+  const int pending = routing.pending_owner_zone_id();
+  if (pending > 0 && pending != previous_pending) {
+    std::ostringstream payload;
+    payload << "{\"ownerZoneId\":" << owner << ",\"pendingOwnerZoneId\":" << pending
+            << ",\"activeStack\":" << stack_json(routing.active_stack()) << "}";
+    events.emit("modules.pcm.routing", "owner_pending", correlation_id, payload.str());
+  }
+  if (owner != previous_owner) {
+    std::ostringstream payload;
+    payload << "{\"ownerZoneId\":" << owner << ",\"pendingOwnerZoneId\":" << pending
+            << ",\"activeStack\":" << stack_json(routing.active_stack()) << "}";
+    events.emit("modules.pcm.routing", "owner_changed", correlation_id, payload.str());
+  }
+}
+
+void emit_routing_changed(homepi::events::EventEmitter& events, const std::string& snapshot_json,
+                          const std::string& correlation_id, int zone_id,
+                          const std::string& method) {
+  std::ostringstream routing_payload;
+  routing_payload << snapshot_json.substr(0, snapshot_json.size() - 1) << ",\"zoneId\":" << zone_id
+                  << ",\"method\":\"" << method << "\"}";
+  events.emit("modules.pcm", "routing_changed", correlation_id, routing_payload.str());
 }
 
 void emit_zone_capture_closed(homepi::events::EventEmitter& events, int zone_id,
@@ -164,22 +196,28 @@ int Service::run() {
           const std::string& method, int /*zone_id*/, const std::string& correlation_id,
           const std::string& body_json) {
         const int zone_id = parse_int_field(body_json, "zoneId");
+        const int previous_owner = impl_->routing.owner_zone_id();
+        const int previous_pending = impl_->routing.pending_owner_zone_id();
         if (method == "route_start") {
           const auto is_zone_active = [this](int stacked_zone_id) {
-            return impl_->bridge.zone_recently_buffered(stacked_zone_id, 5000) ||
-                   impl_->routing.zone_recently_routed(stacked_zone_id, 5000);
+            return impl_->bridge.zone_recently_buffered(stacked_zone_id, kLivePcmActiveMs);
           };
-          impl_->routing.on_route_start(zone_id, is_zone_active);
+          impl_->routing.on_route_start(zone_id, is_zone_active, impl_->bridge.playback_owner());
+          if (impl_->routing.handoff_owner_zone_id() == 0 &&
+              impl_->routing.pending_owner_zone_id() == zone_id) {
+            impl_->bridge.clear_zone_ring(zone_id);
+          }
         } else if (method == "route_end") {
           impl_->routing.on_route_end(zone_id);
           apply_routing(impl_->bridge, impl_->routing);
           impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
+                                    previous_pending);
           const std::string snapshot = build_snapshot_json();
           emit_snapshot(correlation_id.empty() ? "routing_changed" : correlation_id);
-          std::ostringstream routing_payload;
-          routing_payload << snapshot.substr(0, snapshot.size() - 1) << ",\"zoneId\":" << zone_id
-                          << ",\"method\":\"" << method << "\"}";
-          events.emit("modules.pcm", "routing_changed", correlation_id, routing_payload.str());
+          emit_routing_changed(events, snapshot,
+                               correlation_id.empty() ? "routing_changed" : correlation_id,
+                               zone_id, method);
           return;
         } else if (method == "route_join") {
           impl_->routing.on_route_join(zone_id);
@@ -196,12 +234,13 @@ int Service::run() {
           return;
         }
         apply_routing(impl_->bridge, impl_->routing);
+        emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
+                                  previous_pending);
         const std::string snapshot = build_snapshot_json();
         emit_snapshot(correlation_id.empty() ? "routing_changed" : correlation_id);
-        std::ostringstream routing_payload;
-        routing_payload << snapshot.substr(0, snapshot.size() - 1) << ",\"zoneId\":" << zone_id
-                        << ",\"method\":\"" << method << "\"}";
-        events.emit("modules.pcm", "routing_changed", correlation_id, routing_payload.str());
+        emit_routing_changed(events, snapshot,
+                             correlation_id.empty() ? "routing_changed" : correlation_id, zone_id,
+                             method);
       });
 
   if (!impl_->server->start()) {
@@ -241,20 +280,33 @@ int Service::run() {
           return;
         }
         if (event == "route_start") {
+          const int previous_owner = impl_->routing.owner_zone_id();
+          const int previous_pending = impl_->routing.pending_owner_zone_id();
           const auto is_zone_active = [this](int stacked_zone_id) {
-            return impl_->bridge.zone_recently_buffered(stacked_zone_id, 5000) ||
-                   impl_->routing.zone_recently_routed(stacked_zone_id, 5000);
+            return impl_->bridge.zone_recently_buffered(stacked_zone_id, kLivePcmActiveMs);
           };
-          impl_->routing.on_route_start(zone_id, is_zone_active);
+          impl_->routing.on_route_start(zone_id, is_zone_active, impl_->bridge.playback_owner());
+          if (impl_->routing.handoff_owner_zone_id() == 0 &&
+              impl_->routing.pending_owner_zone_id() == zone_id) {
+            impl_->bridge.clear_zone_ring(zone_id);
+          }
           apply_routing(impl_->bridge, impl_->routing);
+          emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
+                                    previous_pending);
           emit_snapshot(correlation_id);
           return;
         }
         if (event == "route_end") {
+          const int previous_owner = impl_->routing.owner_zone_id();
+          const int previous_pending = impl_->routing.pending_owner_zone_id();
           impl_->routing.on_route_end(zone_id);
           apply_routing(impl_->bridge, impl_->routing);
           impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
+                                    previous_pending);
+          const std::string snapshot = build_snapshot_json();
           emit_snapshot(correlation_id);
+          emit_routing_changed(events, snapshot, correlation_id, zone_id, "route_end");
           return;
         }
         if (event == "route_join") {
@@ -299,10 +351,20 @@ int Service::run() {
   int64_t last_lifecycle_tick_ms = 0;
   while (!g_stop.load()) {
     const auto is_zone_ready = [this](int zone_id) {
-      return impl_->bridge.zone_available_frames(zone_id) >= config_.period_frames;
+      if (impl_->bridge.zone_available_frames(zone_id) < config_.period_frames) {
+        return false;
+      }
+      if (impl_->routing.handoff_owner_zone_id() > 0) {
+        return true;
+      }
+      return impl_->bridge.zone_recently_buffered(zone_id, kHandoffFreshBufferMs);
     };
+    const int previous_owner = impl_->routing.owner_zone_id();
+    const int previous_pending = impl_->routing.pending_owner_zone_id();
     if (impl_->routing.try_promote_pending_owner(is_zone_ready)) {
       apply_routing(impl_->bridge, impl_->routing);
+      emit_owner_routing_events(events, impl_->routing, "owner_promoted", previous_owner,
+                                previous_pending);
       emit_snapshot("owner_promoted");
     }
 
@@ -320,7 +382,10 @@ int Service::run() {
       }
     }
 
-    const int sleep_ms = impl_->routing.pending_owner_zone_id() > 0 ? 10 : 100;
+    const int sleep_ms =
+        impl_->routing.pending_owner_zone_id() > 0 || impl_->routing.handoff_owner_zone_id() > 0
+            ? 1
+            : 100;
     std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
   }
 

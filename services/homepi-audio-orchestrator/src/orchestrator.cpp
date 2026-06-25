@@ -3,6 +3,9 @@
 #include "homepi/audio-orchestrator/airplay-source-loader.hpp"
 #include "homepi/audio-orchestrator/json-utils.hpp"
 
+#include "homepi/events/event-envelope.hpp"
+#include "homepi/events/events-client.hpp"
+
 #include <cmath>
 #include <iostream>
 
@@ -25,9 +28,31 @@ std::string zone_volume_payload(int zone_id, int volume) {
 
 }  // namespace
 
-Orchestrator::Orchestrator(ServiceConfig config, ServiceSocketClient client)
-    : config_(std::move(config)), client_(std::move(client)) {
+Orchestrator::Orchestrator(ServiceConfig config, ServiceSocketClient client,
+                           homepi::events::EventsClient* events_client)
+    : config_(std::move(config)),
+      client_(std::move(client)),
+      events_client_(events_client) {
   refresh_airplay_source();
+}
+
+void Orchestrator::publish_hifi_command(const std::string& event,
+                                        const std::string& payload_json,
+                                        const std::string& correlation_id) const {
+  if (events_client_ == nullptr) {
+    client_.execute_hifi_command_async(event, payload_json);
+    return;
+  }
+
+  homepi::events::EventEnvelope envelope;
+  envelope.source = config_.service;
+  envelope.topic = "modules.hifi.command";
+  envelope.event = event;
+  envelope.correlation_id = correlation_id;
+  envelope.timestamp = homepi::events::iso_timestamp();
+  envelope.id = config_.service + "-" + event + "-" + correlation_id;
+  envelope.payload_json = "{" + payload_json + "}";
+  events_client_->publish(homepi::events::build_event_line(envelope));
 }
 
 void Orchestrator::refresh_airplay_source() {
@@ -108,15 +133,17 @@ void Orchestrator::handle_zone_config_event(const std::string& event,
 
 void Orchestrator::on_active_begin(int zone_id) {
   client_.pcm_route("prewarm_capture", zone_id);
-  client_.execute_hifi_command_async("set_zone_power_source",
-                                     zone_power_source_payload(zone_id, airplay_source()));
+  publish_hifi_command("set_zone_power_source",
+                       zone_power_source_payload(zone_id, airplay_source()),
+                       "active-begin-z" + std::to_string(zone_id));
 }
 
 void Orchestrator::on_play_begin(int zone_id) {
   client_.pcm_route("route_start", zone_id);
   client_.nqptp_play_begin();
-  client_.execute_hifi_command_async("set_zone_power_source",
-                                     zone_power_source_payload(zone_id, airplay_source()));
+  publish_hifi_command("set_zone_power_source",
+                       zone_power_source_payload(zone_id, airplay_source()),
+                       "play-begin-z" + std::to_string(zone_id));
 }
 
 void Orchestrator::on_play_end(int /*zone_id*/) {
@@ -124,19 +151,24 @@ void Orchestrator::on_play_end(int /*zone_id*/) {
 }
 
 void Orchestrator::on_active_end(int zone_id) {
+  const std::string correlation_id = "active-end-z" + std::to_string(zone_id);
+  // Power off immediately so zones turn off even when PCM router is slow or unavailable.
+  publish_hifi_command("set_zone_power", zone_power_payload(zone_id, false), correlation_id);
+
   const std::string response = client_.pcm_route("route_end", zone_id);
   const int fallback_owner = client_.pcm_owner_from_response(response);
   if (fallback_owner > 0 && fallback_owner != zone_id) {
     client_.nqptp_play_begin();
-    client_.execute_hifi_command_async("set_zone_power_source",
-                                       zone_power_source_payload(fallback_owner, airplay_source()));
+    publish_hifi_command("set_zone_power_source",
+                         zone_power_source_payload(fallback_owner, airplay_source()),
+                         correlation_id);
   }
-  client_.execute_hifi_command_async("set_zone_power", zone_power_payload(zone_id, false));
 }
 
 void Orchestrator::on_volume_changed(int zone_id, const std::string& volume_db) {
   const int percent = volume_db_to_percent(volume_db);
-  client_.execute_hifi_command_async("set_zone_volume", zone_volume_payload(zone_id, percent));
+  publish_hifi_command("set_zone_volume", zone_volume_payload(zone_id, percent),
+                       "volume-z" + std::to_string(zone_id));
 }
 
 int Orchestrator::airplay_source() const { return airplay_source_; }

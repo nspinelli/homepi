@@ -71,7 +71,7 @@ export function usePlaybackPosition(playback: PlaybackPositionInput): number {
           ? Math.min(extrapolated, playback.durationMs)
           : extrapolated;
       setDisplayPositionMs(capped);
-    }, 1000);
+    }, 250);
     return () => clearInterval(timer);
   }, [
     playback.playing,
@@ -164,6 +164,10 @@ export function AudioCoverArt({
 }: AudioCoverArtProps): React.JSX.Element {
   const [coverFailed, setCoverFailed] = useState(false);
 
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [coverUrl]);
+
   return (
     <div
       className={cn(
@@ -174,6 +178,7 @@ export function AudioCoverArt({
     >
       {coverUrl && !coverFailed ? (
         <img
+          key={coverUrl}
           src={coverUrl}
           alt=""
           className="h-full w-full object-cover"

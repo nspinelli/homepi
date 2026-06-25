@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -55,5 +56,26 @@ MetadataProgressUpdate parse_astm_duration(const std::vector<std::uint8_t>& payl
  * @returns RTP start sample, or 0 when unavailable.
  */
 long long parse_progress_start_rtp(std::string_view payload);
+
+/**
+ * Parses the first RTP frame token from a progress payload.
+ * @param payload Progress payload text.
+ * @returns First numeric token or 0 when missing.
+ */
+long long parse_progress_current_rtp(std::string_view payload);
+
+/**
+ * Extracts the RTP end sample from a `prgr` payload.
+ * @param payload Progress string.
+ * @returns RTP end sample, or 0 when unavailable.
+ */
+long long parse_progress_end_rtp(std::string_view payload);
+
+/**
+ * Parses Shairport `mper` persistent track id (8-byte big-endian uint64).
+ * @param payload Raw persistent id bytes.
+ * @returns Hex string like `0x997c6c35438f7a71`, or empty when unavailable.
+ */
+std::string parse_mper_persistent_id(const std::vector<std::uint8_t>& payload);
 
 }  // namespace homepi::metadata

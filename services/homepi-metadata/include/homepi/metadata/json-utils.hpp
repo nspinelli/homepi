@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace homepi::metadata {
 
@@ -25,6 +26,14 @@ std::string parse_payload_json(const std::string& line);
  * @returns Parsed integer or 0 when missing.
  */
 int parse_int_field(const std::string& json, const std::string& field);
+
+/**
+ * Parses an integer JSON array field from a loosely structured object string.
+ * @param json JSON object text.
+ * @param field Field name without quotes.
+ * @returns Parsed integers or empty vector when missing.
+ */
+std::vector<int> parse_int_array_field(const std::string& json, const std::string& field);
 
 /**
  * Escapes a string for JSON output.

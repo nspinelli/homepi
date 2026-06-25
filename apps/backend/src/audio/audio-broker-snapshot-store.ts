@@ -40,8 +40,65 @@ export class AudioBrokerSnapshotStore {
     }
 
     if (
+      envelope.topic === "modules.pcm.routing" &&
+      (envelope.event === "owner_changed" || envelope.event === "owner_pending")
+    ) {
+      const partial = payload as Record<string, unknown>;
+      const current = this.pcmSnapshot;
+      const base = current ?? {
+        ownerZoneId: 0,
+        activeStack: [] as number[],
+        dacState: "unknown",
+      };
+      this.pcmSnapshot = {
+        ...base,
+        ownerZoneId:
+          typeof partial.ownerZoneId === "number" ? partial.ownerZoneId : base.ownerZoneId,
+        activeStack: Array.isArray(partial.activeStack)
+          ? (partial.activeStack as number[])
+          : base.activeStack,
+        pendingOwnerZoneId:
+          typeof partial.pendingOwnerZoneId === "number"
+            ? partial.pendingOwnerZoneId
+            : envelope.event === "owner_pending" && typeof partial.ownerZoneId === "number"
+              ? partial.ownerZoneId
+              : base.pendingOwnerZoneId,
+      };
+      return;
+    }
+
+    if (
+      (envelope.topic === "modules.pcm.snapshot" || envelope.topic === "modules.pcm") &&
+      envelope.event === "routing_changed"
+    ) {
+      const partial = payload as Record<string, unknown>;
+      const current = this.pcmSnapshot;
+      const base = current ?? {
+        ownerZoneId: 0,
+        activeStack: [] as number[],
+        dacState: "unknown",
+      };
+      this.pcmSnapshot = {
+        ...base,
+        ownerZoneId:
+          typeof partial.ownerZoneId === "number" ? partial.ownerZoneId : base.ownerZoneId,
+        activeStack: Array.isArray(partial.activeStack)
+          ? (partial.activeStack as number[])
+          : base.activeStack,
+        pendingOwnerZoneId:
+          typeof partial.pendingOwnerZoneId === "number"
+            ? partial.pendingOwnerZoneId
+            : base.pendingOwnerZoneId,
+        dacState: typeof partial.dacState === "string" ? partial.dacState : base.dacState,
+      };
+      return;
+    }
+
+    if (
       envelope.topic === "modules.metadata.snapshot" &&
-      (envelope.event === "metadata_snapshot" || envelope.event === "metadata_track_changed")
+      (envelope.event === "metadata_snapshot" ||
+        envelope.event === "metadata_track_changed" ||
+        envelope.event === "metadata_owner_changed")
     ) {
       this.metadataSnapshot = payload as unknown as Awaited<
         ReturnType<MetadataClient["getSnapshot"]>
@@ -51,7 +108,8 @@ export class AudioBrokerSnapshotStore {
 
     if (
       envelope.topic === "modules.metadata.now_playing" &&
-      envelope.event === "metadata_track_changed"
+      (envelope.event === "metadata_track_changed" ||
+        envelope.event === "metadata_owner_changed")
     ) {
       this.metadataSnapshot = payload as unknown as Awaited<
         ReturnType<MetadataClient["getSnapshot"]>

@@ -106,6 +106,85 @@ export class AudioRoutes {
         return true;
       }
 
+      if (req.method === "GET" && pathname === "/api/audio/history") {
+        const url = new URL(req.url ?? "", "http://localhost");
+        const limitParam = Number(url.searchParams.get("limit") ?? "20");
+        const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 20) : 20;
+        const history = await this.deps.metadataClient.getHistory(correlationId, limit);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: (history ?? { limit: 0, entries: [] }) as unknown as Record<string, unknown>,
+          })
+        );
+        return true;
+      }
+
+      const historyCoverMatch = pathname.match(/^\/api\/audio\/history\/(\d+)\/cover$/);
+      if (req.method === "GET" && historyCoverMatch) {
+        const historyId = Number(historyCoverMatch[1]);
+        const history = await this.deps.metadataClient.getHistory(correlationId, 20);
+        const entry = history?.entries.find((row) => row.id === historyId);
+        const cacheDir = this.deps.config.runtime.paths.cacheDir;
+        const coverCandidates = [
+          entry?.coverArtId
+            ? `${cacheDir}/metadata/artwork/sha256-${entry.coverArtId}.jpg`
+            : "",
+          `${cacheDir}/metadata/artwork/current.jpg`,
+        ].filter(Boolean);
+        const cover = await readFirstCover(coverCandidates);
+        if (!cover || cover.length === 0) {
+          res.writeHead(404, { "Content-Length": "0" });
+          res.end();
+          return true;
+        }
+        sendCoverResponse(res, cover);
+        return true;
+      }
+
+      if (req.method === "GET" && pathname === "/api/audio/now-playing") {
+        const snapshot = await this.deps.metadataClient.getSnapshot(correlationId);
+        sendJson(
+          res,
+          200,
+          createSuccessResponse({
+            correlationId,
+            data: (snapshot ?? {
+              ownerZoneId: 0,
+              zoneId: 0,
+              playing: false,
+              positionMs: 0,
+              durationMs: 0,
+              hasCoverArt: false,
+            }) as unknown as Record<string, unknown>,
+          })
+        );
+        return true;
+      }
+
+      if (req.method === "GET" && pathname === "/api/audio/now-playing/cover") {
+        const url = new URL(req.url ?? "", "http://localhost");
+        const version = url.searchParams.get("v") ?? "";
+        const cacheDir = this.deps.config.runtime.paths.cacheDir;
+        const coverCandidates = [
+          version.startsWith("sha256-")
+            ? `${cacheDir}/metadata/artwork/${version}.jpg`
+            : "",
+          `${cacheDir}/metadata/artwork/current.jpg`,
+          `${cacheDir}/current.jpg`,
+        ].filter(Boolean);
+        const cover = await readFirstCover(coverCandidates);
+        if (!cover || cover.length === 0) {
+          res.writeHead(404, { "Content-Length": "0" });
+          res.end();
+          return true;
+        }
+        sendCoverResponse(res, cover);
+        return true;
+      }
+
       if (req.method === "GET" && pathname === "/api/audio/airplay-source") {
         const result = await this.deps.client.getAirplaySource(correlationId);
         sendJson(res, 200, createSuccessResponse({ correlationId, data: result }));
@@ -280,24 +359,13 @@ export class AudioRoutes {
           return true;
         }
 
-        let cover: Buffer | null = null;
         const cacheDir = this.deps.config.runtime.paths.cacheDir;
         const coverCandidates = [
           `${cacheDir}/metadata/artwork/current.jpg`,
           `${cacheDir}/current.jpg`,
           `${cacheDir}/cover-zone-${zoneId}`,
         ];
-        for (const cachePath of coverCandidates) {
-          try {
-            const cached = await readFile(cachePath);
-            if (cached.length > 0) {
-              cover = cached;
-              break;
-            }
-          } catch {
-            continue;
-          }
-        }
+        let cover = await readFirstCover(coverCandidates);
         if (!cover) {
           cover = await this.deps.shairportRemote.fetchCoverArt(zoneId);
         }
@@ -307,13 +375,7 @@ export class AudioRoutes {
           return true;
         }
 
-        const contentType = detectCoverContentType(cover);
-        res.writeHead(200, {
-          "Content-Type": contentType,
-          "Content-Length": cover.length,
-          "Cache-Control": "no-cache",
-        });
-        res.end(cover);
+        sendCoverResponse(res, cover);
         return true;
       }
 
@@ -550,6 +612,40 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
+}
+
+/**
+ * Reads the first non-empty cover image from candidate paths.
+ * @param paths - Candidate filesystem paths.
+ * @returns Cover bytes or null.
+ */
+async function readFirstCover(paths: string[]): Promise<Buffer | null> {
+  for (const cachePath of paths) {
+    try {
+      const cached = await readFile(cachePath);
+      if (cached.length > 0) {
+        return cached;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Writes a cover image HTTP response.
+ * @param res - HTTP response.
+ * @param cover - Cover bytes.
+ */
+function sendCoverResponse(res: ServerResponse, cover: Buffer): void {
+  const contentType = detectCoverContentType(cover);
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Content-Length": cover.length,
+    "Cache-Control": "no-cache",
+  });
+  res.end(cover);
 }
 
 /**

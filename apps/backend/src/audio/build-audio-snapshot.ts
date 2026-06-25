@@ -21,6 +21,7 @@ export interface AudioSnapshot {
   pcm: {
     ownerZoneId: number;
     activeStack: number[];
+    pendingOwnerZoneId?: number;
     dacState: string;
     profileMode?: string;
     profileStatus?: string;
@@ -42,6 +43,11 @@ export interface AudioSnapshot {
       artist?: string;
       album?: string;
       clientName?: string;
+      clientModel?: string;
+      trackId?: string;
+      coverArtId?: string;
+      coverArtUrl?: string;
+      updatedAt?: string;
     };
     playback: {
       playing: boolean;
@@ -92,10 +98,8 @@ export async function buildAudioSnapshot(
       .catch(() => ({ shairportZoneSettings: [] as unknown[] })),
     useBrokerCache && deps.brokerSnapshotStore?.getPcmSnapshot()
       ? Promise.resolve(deps.brokerSnapshotStore.getPcmSnapshot())
-      : deps.pcmClient.getSnapshot(correlationId).catch(() => null),
-    useBrokerCache && deps.brokerSnapshotStore?.getMetadataSnapshot()
-      ? Promise.resolve(deps.brokerSnapshotStore.getMetadataSnapshot())
-      : deps.metadataClient.getSnapshot(correlationId).catch(() => null),
+      :     deps.pcmClient.getSnapshot(correlationId).catch(() => null),
+    deps.metadataClient.getSnapshot(correlationId).catch(() => null),
     deps.hifiClient.getHealth(correlationId).catch(() => null),
   ]);
 
@@ -119,47 +123,30 @@ export async function buildAudioSnapshot(
     : [];
 
   const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
-  let clientName = metadataSnapshot?.clientName;
-  if (!clientName && ownerZoneId > 0 && !useBrokerCache) {
-    clientName =
-      (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_name")) ??
-      (await deps.shairportRemote.fetchRetainedTopic(ownerZoneId, "client_model")) ??
-      undefined;
-  }
+  let durationMs = metadataSnapshot?.durationMs ?? 0;
 
   let positionMs = metadataSnapshot?.positionMs ?? 0;
-  let durationMs = metadataSnapshot?.durationMs ?? 0;
+  let playing = metadataSnapshot?.playing ?? false;
   let progressSyncedAt: number | undefined;
   const realtimeSocketPath = `${deps.config.runtime.paths.socketDir}/audio-realtime.sock`;
   const realtimeFrame = await readAudioRealtimeSnapshot(realtimeSocketPath).catch(() => null);
-  if (
-    realtimeFrame &&
-    realtimeFrame.ownerZoneId === ownerZoneId &&
-    (realtimeFrame.playing || realtimeFrame.positionMs > 0)
-  ) {
+  if (realtimeFrame && realtimeFrame.ownerZoneId === ownerZoneId) {
     positionMs = realtimeFrame.positionMs;
-    durationMs = realtimeFrame.durationMs > 0 ? realtimeFrame.durationMs : durationMs;
+    playing = realtimeFrame.playing || playing;
+    if (realtimeFrame.durationMs > 0) {
+      durationMs = realtimeFrame.durationMs;
+    }
     progressSyncedAt = realtimeFrame.wallTime
       ? Date.parse(realtimeFrame.wallTime)
       : Date.now();
   }
-  if (
-    ownerZoneId > 0 &&
-    !useBrokerCache &&
-    (metadataSnapshot?.playing ?? false) &&
-    (durationMs <= 0 || positionMs <= 0)
-  ) {
-    const hints = await deps.shairportRemote.fetchProgressHints(
-      ownerZoneId,
-      durationMs <= 0
-    );
-    if (hints.durationMs > 0) {
-      durationMs = hints.durationMs;
-    }
-    if (hints.positionMs > 0 && (positionMs <= 0 || hints.positionMs > positionMs)) {
-      positionMs = hints.positionMs;
-    }
-  }
+
+  const coverArtUrl =
+    metadataSnapshot?.hasCoverArt && metadataSnapshot?.coverArtId
+      ? `/api/audio/now-playing/cover?v=sha256-${metadataSnapshot.coverArtId}`
+      : metadataSnapshot?.hasCoverArt
+        ? "/api/audio/now-playing/cover"
+        : undefined;
 
   return {
     controller,
@@ -170,6 +157,7 @@ export async function buildAudioSnapshot(
     pcm: {
       ownerZoneId: pcmSnapshot?.ownerZoneId ?? 0,
       activeStack: pcmSnapshot?.activeStack ?? [],
+      pendingOwnerZoneId: pcmSnapshot?.pendingOwnerZoneId ?? 0,
       dacState: pcmSnapshot?.dacState ?? "unknown",
       profileMode: pcmSnapshot?.profileMode,
       profileStatus: pcmSnapshot?.profileStatus,
@@ -182,15 +170,20 @@ export async function buildAudioSnapshot(
         title: metadataSnapshot?.title,
         artist: metadataSnapshot?.artist,
         album: metadataSnapshot?.album,
-        clientName,
+        clientName: metadataSnapshot?.clientName,
+        clientModel: metadataSnapshot?.clientModel,
+        trackId: metadataSnapshot?.trackId,
+        coverArtId: metadataSnapshot?.coverArtId,
+        coverArtUrl,
+        updatedAt: metadataSnapshot?.updatedAt,
       },
       playback: {
-        playing: realtimeFrame?.playing ?? metadataSnapshot?.playing ?? false,
+        playing,
         positionMs,
         durationMs,
         progressSyncedAt: progressSyncedAt ?? Date.now(),
       },
-      hasCoverArt: metadataSnapshot?.hasCoverArt,
+      hasCoverArt: metadataSnapshot?.hasCoverArt === true,
     },
     services: {
       hifiSerial: deps.systemStatus.hifiSerial,

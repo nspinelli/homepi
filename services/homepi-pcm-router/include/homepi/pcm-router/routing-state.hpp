@@ -27,7 +27,8 @@ class RoutingState {
  public:
   void set_routing(int owner_zone_id, const std::vector<int>& active_stack);
   void on_route_start(int zone_id);
-  void on_route_start(int zone_id, const ZoneActivityFn& is_zone_active);
+  void on_route_start(int zone_id, const ZoneActivityFn& is_zone_active,
+                      int current_playback_zone = 0);
   void on_route_end(int zone_id);
   void on_route_join(int zone_id);
 
@@ -51,6 +52,7 @@ class RoutingState {
   bool is_zone_enabled(int zone_id) const;
   int owner_zone_id() const;
   int pending_owner_zone_id() const;
+  int handoff_owner_zone_id() const;
   std::vector<int> active_stack() const;
   std::vector<int> enabled_zones() const;
   std::vector<int> disabled_zones() const;
@@ -66,6 +68,7 @@ class RoutingState {
   int owner_zone_id_ = 0;
   int pending_owner_zone_id_ = 0;
   int64_t pending_owner_at_ms_ = 0;
+  int handoff_owner_zone_id_ = 0;
   std::vector<int> active_stack_;
   std::array<int64_t, kMaxZones + 1> last_route_at_ms_{};
   std::array<ZoneCaptureMode, kMaxZones + 1> zone_modes_{};

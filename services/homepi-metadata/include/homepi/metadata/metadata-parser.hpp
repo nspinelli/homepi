@@ -47,6 +47,7 @@ class MetadataParser {
   void reset();
 
  private:
+  void reset_progress_tracking();
   void process_stream_buffer();
   void process_item_xml(const std::string& item_xml);
   void dispatch_item(std::uint32_t type, std::uint32_t code, const std::vector<std::uint8_t>& payload);
@@ -58,6 +59,11 @@ class MetadataParser {
   bool parse_enabled_ = true;
   int sample_rate_hz_ = 44100;
   long long progress_start_rtp_ = 0;
+  long long progress_end_rtp_ = 0;
+  long long last_phbt_rtp_ = 0;
+  int phbt_accumulated_ms_ = 0;
+  bool picture_active_ = false;
+  std::vector<std::uint8_t> pending_picture_;
 };
 
 }  // namespace homepi::metadata

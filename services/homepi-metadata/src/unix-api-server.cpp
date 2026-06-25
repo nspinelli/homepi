@@ -4,6 +4,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cstdlib>
 #include <filesystem>
 #include <thread>
 
@@ -11,8 +12,11 @@ namespace fs = std::filesystem;
 
 namespace homepi::metadata {
 
-UnixApiServer::UnixApiServer(std::string socket_path, SnapshotLineFn snapshot_line_fn)
-    : socket_path_(std::move(socket_path)), snapshot_line_fn_(std::move(snapshot_line_fn)) {}
+UnixApiServer::UnixApiServer(std::string socket_path, SnapshotLineFn snapshot_line_fn,
+                             HistoryLineFn history_line_fn)
+    : socket_path_(std::move(socket_path)),
+      snapshot_line_fn_(std::move(snapshot_line_fn)),
+      history_line_fn_(std::move(history_line_fn)) {}
 
 UnixApiServer::~UnixApiServer() { stop(); }
 
@@ -147,6 +151,36 @@ void UnixApiServer::handle_client(int client_fd) {
           const std::string response = snapshot_line_fn_(correlation_id) + "\n";
           write(client_fd, response.c_str(), response.size());
         }
+        continue;
+      }
+      if (line.find("\"history\"") != std::string::npos && history_line_fn_) {
+        std::string correlation_id = "history";
+        const std::string key = "\"correlationId\"";
+        const auto key_pos = line.find(key);
+        if (key_pos != std::string::npos) {
+          const auto quote_start = line.find('"', key_pos + key.size());
+          if (quote_start != std::string::npos) {
+            const auto quote_end = line.find('"', quote_start + 1);
+            if (quote_end != std::string::npos) {
+              correlation_id = line.substr(quote_start + 1, quote_end - quote_start - 1);
+            }
+          }
+        }
+        int limit = 20;
+        const std::string limit_key = "\"limit\"";
+        const auto limit_pos = line.find(limit_key);
+        if (limit_pos != std::string::npos) {
+          const auto colon = line.find(':', limit_pos + limit_key.size());
+          if (colon != std::string::npos) {
+            limit = std::atoi(line.c_str() + colon + 1);
+          }
+        }
+        if (limit <= 0) {
+          limit = 20;
+        }
+        const std::string response = history_line_fn_(correlation_id, limit) + "\n";
+        write(client_fd, response.c_str(), response.size());
+        break;
       }
     }
   }

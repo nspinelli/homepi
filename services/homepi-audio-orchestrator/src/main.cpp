@@ -32,12 +32,14 @@ int main(int argc, char** argv) {
   };
 
   homepi::audio_orchestrator::ServiceSocketClient socket_client(std::move(socket_paths));
-  homepi::audio_orchestrator::Orchestrator orchestrator(config, std::move(socket_client));
 
   homepi::events::EventsClient events_client(config.events_socket, config.service);
+  homepi::audio_orchestrator::Orchestrator orchestrator(config, std::move(socket_client),
+                                                      &events_client);
+
   events_client.start(
       {"modules.shairport.session", "modules.shairport.volume", "modules.zone.config"},
-      {"modules.audio.state"},
+      {"modules.hifi.command", "modules.audio.state"},
       [&orchestrator](const std::string& line) { orchestrator.handle_event_line(line); });
 
   std::signal(SIGINT, on_signal);

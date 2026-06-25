@@ -109,7 +109,7 @@ export class AudioRealtimeBridge {
         message: "Audio realtime bridge connected",
       });
       socket.write(
-        '{"method":"subscribeRealtime","correlationId":"audio-realtime-bridge","payload":{"stream":"audio.nowPlaying","sendInitialSnapshot":true,"maxHz":2}}\n'
+        '{"method":"subscribeRealtime","correlationId":"audio-realtime-bridge","payload":{"stream":"audio.nowPlaying","sendInitialSnapshot":true,"maxHz":8}}\n'
       );
     });
 

@@ -1,0 +1,37 @@
+{
+  "service": "homepi-audio-paging",
+  "version": "0.1.0",
+  "environment": "production",
+  "enabled": true,
+  "logging": {
+    "level": "INFO",
+    "debugTrace": false
+  },
+  "runtime": {
+    "paths": {
+      "homepiRoot": "/opt/homepi",
+      "runtimeDir": "/opt/homepi/runtime",
+      "stateDir": "/opt/homepi/runtime/state",
+      "socketDir": "/run/homepi"
+    }
+  },
+  "audioPaging": {
+    "eventsSocket": "/run/homepi/events.sock",
+    "socketPath": "/run/homepi/audio-paging.sock",
+    "usbDevicesSocket": "/run/homepi/usb-devices.sock",
+    "hifiSerialSocket": "/run/homepi/hifi-serial.sock",
+    "databasePath": "/opt/homepi/runtime/state/homepi.sqlite",
+    "assetRoot": "/opt/homepi/services/audio-paging/assets",
+    "voicesRoot": "/var/lib/homepi/paging/voices",
+    "chimesRoot": "/var/lib/homepi/paging/chimes",
+    "piperBinary": "/opt/homepi/services/audio-paging/bin/piper-runtime/piper",
+    "piperDefaultVoice": "/var/lib/homepi/paging/voices/en_US-lessac-medium.onnx",
+    "piperDefaultConfig": "/var/lib/homepi/paging/voices/en_US-lessac-medium.onnx.json",
+    "alsaDevice": "plug:AudioPaging",
+    "alwaysWarmDefault": true,
+    "pageOnTimeoutMs": 2000,
+    "pageOffTimeoutMs": 2000,
+    "piperWarmTimeoutMs": 8000,
+    "ttsGenerationTimeoutMs": 10000
+  }
+}

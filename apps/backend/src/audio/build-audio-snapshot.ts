@@ -123,6 +123,9 @@ export async function buildAudioSnapshot(
     : [];
 
   const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
+  const activeStack = pcmSnapshot?.activeStack ?? [];
+  const hasActiveRoute =
+    ownerZoneId > 0 || activeStack.length > 0;
   let durationMs = metadataSnapshot?.durationMs ?? 0;
 
   let positionMs = metadataSnapshot?.positionMs ?? 0;
@@ -166,24 +169,33 @@ export async function buildAudioSnapshot(
       profileRevision: pcmSnapshot?.profileRevision,
       profileSource: pcmSnapshot?.profileSource,
       audioBridgeState: pcmSnapshot?.audioBridgeState,
-      metadata: {
-        title: metadataSnapshot?.title,
-        artist: metadataSnapshot?.artist,
-        album: metadataSnapshot?.album,
-        clientName: metadataSnapshot?.clientName,
-        clientModel: metadataSnapshot?.clientModel,
-        trackId: metadataSnapshot?.trackId,
-        coverArtId: metadataSnapshot?.coverArtId,
-        coverArtUrl,
-        updatedAt: metadataSnapshot?.updatedAt,
-      },
-      playback: {
-        playing,
-        positionMs,
-        durationMs,
-        progressSyncedAt: progressSyncedAt ?? Date.now(),
-      },
-      hasCoverArt: metadataSnapshot?.hasCoverArt === true,
+      metadata: hasActiveRoute
+        ? {
+            title: metadataSnapshot?.title,
+            artist: metadataSnapshot?.artist,
+            album: metadataSnapshot?.album,
+            clientName: metadataSnapshot?.clientName,
+            clientModel: metadataSnapshot?.clientModel,
+            trackId: metadataSnapshot?.trackId,
+            coverArtId: metadataSnapshot?.coverArtId,
+            coverArtUrl,
+            updatedAt: metadataSnapshot?.updatedAt,
+          }
+        : {},
+      playback: hasActiveRoute
+        ? {
+            playing,
+            positionMs,
+            durationMs,
+            progressSyncedAt: progressSyncedAt ?? Date.now(),
+          }
+        : {
+            playing: false,
+            positionMs: 0,
+            durationMs: 0,
+            progressSyncedAt: Date.now(),
+          },
+      hasCoverArt: hasActiveRoute && metadataSnapshot?.hasCoverArt === true,
     },
     services: {
       hifiSerial: deps.systemStatus.hifiSerial,

@@ -13,6 +13,9 @@ import { ShairportRemoteClient } from "./audio/shairport-remote-client.js";
 import { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 import { AudioBrokerSnapshotStore } from "./audio/audio-broker-snapshot-store.js";
+import { PagingClient } from "./audio/paging/paging-client.js";
+import { PagingRoutes } from "./audio/paging/paging-routes.js";
+import { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, "..", "config", "service-config.json");
@@ -68,12 +71,23 @@ const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router
 const metadataSocketPath = `${serviceConfig.runtime.paths.socketDir}/metadata.sock`;
 const audioRealtimeSocketPath = `${serviceConfig.runtime.paths.socketDir}/audio-realtime.sock`;
 const eventsBrokerSocketPath = `${serviceConfig.runtime.paths.socketDir}/events.sock`;
+const pagingSocketPath = `${serviceConfig.runtime.paths.socketDir}/audio-paging.sock`;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
 const metadataClient = new MetadataClient({ socketPath: metadataSocketPath });
 const shairportRemoteClient = new ShairportRemoteClient();
 const brokerSnapshotStore = new AudioBrokerSnapshotStore();
+const pagingClient = new PagingClient({ socketPath: pagingSocketPath });
+const pagingRoutes = new PagingRoutes({
+  client: pagingClient,
+  logger,
+  eventsSocketPath: eventsBrokerSocketPath,
+});
+const pagingApiKeyRoutes = new PagingApiKeyRoutes({
+  client: pagingClient,
+  logger,
+});
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
@@ -106,6 +120,8 @@ const server = createHttpServer({
   usbRoutes,
   hifiRoutes,
   audioRoutes,
+  pagingRoutes,
+  pagingApiKeyRoutes,
   hifiSerialSocketPath: hifiSocketPath,
   pcmRouterSocketPath,
   metadataSocketPath,

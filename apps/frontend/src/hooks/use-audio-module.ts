@@ -106,15 +106,20 @@ function normalizeAudioSnapshot(
         : incomingPlayback.positionMs,
     progressSyncedAt: incomingPlayback.progressSyncedAt ?? Date.now(),
   };
+  const hasActiveRoute = getDacOwnerZoneId(snapshot.pcm) > 0;
   return {
     ...snapshot,
     pcm: {
       ...snapshot.pcm,
-      metadata,
-      playback,
-      hasCoverArt: trackChanged
-        ? Boolean(incomingMetadata.coverArtId?.trim())
-        : snapshot.pcm.hasCoverArt,
+      metadata: hasActiveRoute ? metadata : {},
+      playback: hasActiveRoute
+        ? playback
+        : { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
+      hasCoverArt: hasActiveRoute
+        ? trackChanged
+          ? Boolean(incomingMetadata.coverArtId?.trim())
+          : snapshot.pcm.hasCoverArt
+        : false,
     },
   };
 }
@@ -205,11 +210,15 @@ function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
  * @returns Zone id to highlight, or 0 when none.
  */
 function getStreamIndicatorZoneId(pcm: AudioSnapshot["pcm"]): number {
+  const dacOwner = getDacOwnerZoneId(pcm);
+  if (dacOwner <= 0) {
+    return 0;
+  }
   const pending = pcm.pendingOwnerZoneId ?? 0;
   if (pending > 0) {
     return pending;
   }
-  return getDacOwnerZoneId(pcm);
+  return dacOwner;
 }
 
 function metadataTargetsOwnerZone(
@@ -227,7 +236,7 @@ function metadataTargetsOwnerZone(
   }
   const ownerZoneId = getDacOwnerZoneId(pcm);
   if (ownerZoneId <= 0) {
-    return true;
+    return false;
   }
   if (payloadOwner === ownerZoneId) {
     return true;
@@ -621,16 +630,6 @@ function patchPcmFromEvent(
     if (typeof payload.pendingOwnerZoneId === "number") {
       pendingOwnerZoneId = payload.pendingOwnerZoneId;
     }
-    if (
-      (event === "pcm_router_snapshot" || event === "owner_promoted") &&
-      ownerZoneId === 0 &&
-      activeStack.length === 0 &&
-      getDacOwnerZoneId(normalizedPcm) > 0
-    ) {
-      activeStack = [...normalizedPcm.activeStack];
-      ownerZoneId = normalizedPcm.ownerZoneId;
-      pendingOwnerZoneId = normalizedPcm.pendingOwnerZoneId ?? 0;
-    }
     if (payload.method === "route_end" && typeof payload.zoneId === "number") {
       activeStack = removePcmStack(activeStack, payload.zoneId);
       if (ownerZoneId === payload.zoneId) {
@@ -677,6 +676,7 @@ function patchPcmFromEvent(
     };
     const loopbackProfile = parseTuple(payload.loopbackProfile) ?? pcm.loopbackProfile;
     const dacProfile = parseTuple(payload.dacProfile) ?? pcm.dacProfile;
+    const hasActiveRoute = getDacOwnerZoneId({ ...pcm, ownerZoneId, activeStack }) > 0;
     return {
       ...pcm,
       ownerZoneId,
@@ -690,6 +690,11 @@ function patchPcmFromEvent(
       profileRevision,
       profileSource,
       audioBridgeState,
+      metadata: hasActiveRoute ? pcm.metadata : {},
+      playback: hasActiveRoute
+        ? pcm.playback
+        : { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
+      hasCoverArt: hasActiveRoute ? pcm.hasCoverArt : false,
     };
   }
 
@@ -771,6 +776,7 @@ function patchPcmFromEvent(
     } else if (event === "owner_changed") {
       pendingOwnerZoneId = 0;
     }
+    const ownerCleared = event === "owner_changed" && ownerZoneId === 0;
     const ownerChanged =
       event === "owner_changed" && ownerZoneId > 0 && ownerZoneId !== previousOwner;
     return {
@@ -778,10 +784,13 @@ function patchPcmFromEvent(
       ownerZoneId,
       activeStack,
       pendingOwnerZoneId,
-      metadata: ownerChanged ? {} : pcm.metadata,
-      playback: ownerChanged
-        ? { ...pcm.playback, positionMs: 0 }
-        : pcm.playback,
+      metadata: ownerCleared || ownerChanged ? {} : pcm.metadata,
+      playback: ownerCleared
+        ? { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() }
+        : ownerChanged
+          ? { ...pcm.playback, positionMs: 0 }
+          : pcm.playback,
+      hasCoverArt: ownerCleared ? false : pcm.hasCoverArt,
     };
   }
 
@@ -967,6 +976,7 @@ function useAudioModuleState(): {
       const snapshot = { ...baseSnapshot };
 
       if (envelope.source === "homepi-hifi-serial") {
+        snapshot.hifiConnected = true;
         if (envelope.event === "audio_state_snapshot") {
           const payload = envelope.payload as {
             controller?: HifiController;
@@ -976,6 +986,9 @@ function useAudioModuleState(): {
           };
           if (payload.controller) {
             snapshot.controller = payload.controller;
+            if (payload.controller.serialPath?.trim()) {
+              snapshot.hifiConnected = true;
+            }
           }
           if (payload.zones) {
             snapshot.zones = payload.zones;

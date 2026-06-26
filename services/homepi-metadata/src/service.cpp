@@ -115,7 +115,7 @@ int Service::run() {
 
   const auto merge_persisted_now_playing = [this]() {
     if (const auto row = impl_->repository->load_now_playing()) {
-      if (row->owner_zone_id <= 0) {
+      if (row->owner_zone_id <= 0 || !row->playing) {
         return;
       }
       const auto snapshot = impl_->state.snapshot();
@@ -664,6 +664,13 @@ int Service::run() {
 
   const auto handle_routing_context = [&](const std::string& payload, const std::string& /*event*/) {
     const std::vector<int> active_stack = parse_int_array_field(payload, "activeStack");
+    const int payload_owner = parse_int_field(payload, "ownerZoneId");
+    if (active_stack.empty() && payload_owner <= 0) {
+      if (impl_->state.snapshot().owner_zone_id > 0) {
+        handle_owner_change(0);
+      }
+      return;
+    }
     if (active_stack.empty()) {
       return;
     }

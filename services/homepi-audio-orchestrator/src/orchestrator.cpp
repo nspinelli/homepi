@@ -6,6 +6,7 @@
 #include "homepi/events/event-envelope.hpp"
 #include "homepi/events/events-client.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 
@@ -93,6 +94,10 @@ void Orchestrator::handle_event_line(const std::string& line) {
   }
   if (topic == "modules.zone.config") {
     handle_zone_config_event(event, payload);
+    return;
+  }
+  if (topic == "modules.audio.system") {
+    handle_system_event(event, payload);
   }
 }
 
@@ -131,7 +136,18 @@ void Orchestrator::handle_zone_config_event(const std::string& event,
   }
 }
 
+void Orchestrator::handle_system_event(const std::string& event,
+                                       const std::string& payload_json) {
+  if (event != "page_state_changed") {
+    return;
+  }
+  if (parse_int_field(payload_json, "page") == 0) {
+    resync_airplay_after_page_end();
+  }
+}
+
 void Orchestrator::on_active_begin(int zone_id) {
+  active_airplay_zones_.insert(zone_id);
   client_.pcm_route("prewarm_capture", zone_id);
   publish_hifi_command("set_zone_power_source",
                        zone_power_source_payload(zone_id, airplay_source()),
@@ -151,6 +167,7 @@ void Orchestrator::on_play_end(int /*zone_id*/) {
 }
 
 void Orchestrator::on_active_end(int zone_id) {
+  active_airplay_zones_.erase(zone_id);
   const std::string correlation_id = "active-end-z" + std::to_string(zone_id);
   // Power off immediately so zones turn off even when PCM router is slow or unavailable.
   publish_hifi_command("set_zone_power", zone_power_payload(zone_id, false), correlation_id);
@@ -169,6 +186,28 @@ void Orchestrator::on_volume_changed(int zone_id, const std::string& volume_db) 
   const int percent = volume_db_to_percent(volume_db);
   publish_hifi_command("set_zone_volume", zone_volume_payload(zone_id, percent),
                        "volume-z" + std::to_string(zone_id));
+}
+
+void Orchestrator::resync_airplay_after_page_end() {
+  if (active_airplay_zones_.empty()) {
+    return;
+  }
+
+  std::vector<int> zones(active_airplay_zones_.begin(), active_airplay_zones_.end());
+  std::sort(zones.begin(), zones.end());
+
+  bool first = true;
+  for (const int zone_id : zones) {
+    if (first) {
+      on_play_begin(zone_id);
+      first = false;
+      continue;
+    }
+    client_.pcm_route("route_join", zone_id);
+    publish_hifi_command("set_zone_power_source",
+                         zone_power_source_payload(zone_id, airplay_source()),
+                         "page-resync-z" + std::to_string(zone_id));
+  }
 }
 
 int Orchestrator::airplay_source() const { return airplay_source_; }

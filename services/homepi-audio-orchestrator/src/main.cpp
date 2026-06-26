@@ -38,7 +38,8 @@ int main(int argc, char** argv) {
                                                       &events_client);
 
   events_client.start(
-      {"modules.shairport.session", "modules.shairport.volume", "modules.zone.config"},
+      {"modules.shairport.session", "modules.shairport.volume", "modules.zone.config",
+       "modules.audio.system"},
       {"modules.hifi.command", "modules.audio.state"},
       [&orchestrator](const std::string& line) { orchestrator.handle_event_line(line); });
 

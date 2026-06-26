@@ -145,20 +145,28 @@ export class AudioRoutes {
       }
 
       if (req.method === "GET" && pathname === "/api/audio/now-playing") {
-        const snapshot = await this.deps.metadataClient.getSnapshot(correlationId);
+        const [snapshot, pcmSnapshot] = await Promise.all([
+          this.deps.metadataClient.getSnapshot(correlationId),
+          this.deps.pcmClient.getSnapshot(correlationId).catch(() => null),
+        ]);
+        const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
+        const activeStack = pcmSnapshot?.activeStack ?? [];
+        const hasActiveRoute = ownerZoneId > 0 || activeStack.length > 0;
         sendJson(
           res,
           200,
           createSuccessResponse({
             correlationId,
-            data: (snapshot ?? {
-              ownerZoneId: 0,
-              zoneId: 0,
-              playing: false,
-              positionMs: 0,
-              durationMs: 0,
-              hasCoverArt: false,
-            }) as unknown as Record<string, unknown>,
+            data: (hasActiveRoute
+              ? snapshot
+              : {
+                  ownerZoneId: 0,
+                  zoneId: 0,
+                  playing: false,
+                  positionMs: 0,
+                  durationMs: 0,
+                  hasCoverArt: false,
+                }) as unknown as Record<string, unknown>,
           })
         );
         return true;

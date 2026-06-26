@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <unordered_set>
+#include <vector>
 
 #include "homepi/audio-orchestrator/service-config.hpp"
 #include "homepi/audio-orchestrator/service-socket-client.hpp"
@@ -40,12 +42,14 @@ class Orchestrator {
   void handle_session_event(const std::string& event, const std::string& payload_json);
   void handle_volume_event(const std::string& payload_json);
   void handle_zone_config_event(const std::string& event, const std::string& payload_json);
+  void handle_system_event(const std::string& event, const std::string& payload_json);
 
   void on_active_begin(int zone_id);
   void on_play_begin(int zone_id);
   void on_play_end(int zone_id);
   void on_active_end(int zone_id);
   void on_volume_changed(int zone_id, const std::string& volume_db);
+  void resync_airplay_after_page_end();
 
   int airplay_source() const;
   int volume_db_to_percent(const std::string& volume_db) const;
@@ -57,6 +61,7 @@ class Orchestrator {
   ServiceSocketClient client_;
   homepi::events::EventsClient* events_client_ = nullptr;
   int airplay_source_ = 5;
+  std::unordered_set<int> active_airplay_zones_;
 };
 
 }  // namespace homepi::audio_orchestrator

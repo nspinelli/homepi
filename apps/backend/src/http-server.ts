@@ -26,6 +26,8 @@ import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import type { AudioRoutes } from "./audio/audio-routes.js";
+import type { PagingRoutes } from "./audio/paging/paging-routes.js";
+import type { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
 import type { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { MetadataEventBridge } from "./metadata/metadata-event-bridge.js";
@@ -71,6 +73,10 @@ export interface HttpServerOptions {
   hifiRoutes?: HifiSerialRoutes;
   /** Optional audio configuration REST routes. */
   audioRoutes?: AudioRoutes;
+  /** Optional paging REST routes. */
+  pagingRoutes?: PagingRoutes;
+  /** Optional paging API key settings routes. */
+  pagingApiKeyRoutes?: PagingApiKeyRoutes;
   /** Unix socket path for HiFi event bridge; omit to disable. */
   hifiSerialSocketPath?: string;
   /** Unix socket path for PCM router event bridge; omit to disable. */
@@ -111,6 +117,8 @@ export function createHttpServer(options: HttpServerOptions): Server {
     usbRoutes,
     hifiRoutes,
     audioRoutes,
+    pagingRoutes,
+    pagingApiKeyRoutes,
     hifiSerialSocketPath,
     pcmRouterSocketPath,
     metadataSocketPath,
@@ -354,6 +362,16 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
     if (hifiRoutes?.matches(url.pathname)) {
       void hifiRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
+
+    if (pagingRoutes?.matches(url.pathname)) {
+      void pagingRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
+
+    if (pagingApiKeyRoutes?.matches(url.pathname)) {
+      void pagingApiKeyRoutes.handle(req, res, url.pathname, correlationId);
       return;
     }
 

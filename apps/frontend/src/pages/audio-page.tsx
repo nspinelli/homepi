@@ -7,6 +7,12 @@ import { zoneCardVolume } from "@/lib/zone-card-volume.js";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
 import { AudioControllerCard } from "@/components/audio/audio-controller-card.js";
+import { PagingApiKeyCard } from "@/components/audio/paging-api-key-card.js";
+import { PagingChimeManager } from "@/components/audio/paging-chime-manager.js";
+import { PagingConfigCard } from "@/components/audio/paging-config-card.js";
+import { PagingIdlePolicyCard } from "@/components/audio/paging-idle-policy-card.js";
+import { PagingTestCard } from "@/components/audio/paging-test-card.js";
+import { PagingVoiceBrowser } from "@/components/audio/paging-voice-browser.js";
 import {
   AudioListSectionSkeleton,
   AudioZonesGridSkeleton,
@@ -25,6 +31,7 @@ import {
   getZoneActivityPriority,
 } from "@/hooks/use-audio-module.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
+import { usePagingModule } from "@/hooks/use-paging-module.js";
 import type { HifiSource, HifiZone } from "@/types/audio-types.js";
 
 /** Hi-Fi controller artwork used across Home Audio UI. */
@@ -67,6 +74,7 @@ export function AudioPage(): React.JSX.Element {
     isZoneStreamedTo,
     isZoneSendingAudio,
   } = useAudioModule();
+  const paging = usePagingModule();
   const [activeTab, setActiveTab] = useState("zones");
   const [showDisabled, setShowDisabled] = useState(false);
   const [showDisabledSources, setShowDisabledSources] = useState(false);
@@ -141,9 +149,9 @@ export function AudioPage(): React.JSX.Element {
           ? "Loading sources…"
           : `${sortedSources.length} of ${sources.length} sources shown`;
       case "paging":
-        return isInitialLoad
+        return paging.state.loadingStatus
           ? "Loading paging…"
-          : `Controller page active: ${snapshot?.controller.pageActive === 1 ? "Yes" : "No"}`;
+          : `Resource: ${paging.state.status?.resourceState ?? "unknown"} • Ready: ${paging.state.status?.ready ? "Yes" : "No"}`;
       case "settings":
         return isInitialLoad ? "Loading settings…" : "Audio configuration and controller";
       default:
@@ -156,7 +164,9 @@ export function AudioPage(): React.JSX.Element {
     zones.length,
     sortedSources.length,
     sources.length,
-    snapshot?.controller.pageActive,
+    paging.state.loadingStatus,
+    paging.state.status?.resourceState,
+    paging.state.status?.ready,
   ]);
 
   const headerActions =
@@ -265,10 +275,26 @@ export function AudioPage(): React.JSX.Element {
           {isInitialLoad ? (
             <AudioListSectionSkeleton titleWidth="w-24" rows={2} />
           ) : (
-          <div className="rounded-lg border border-border bg-card p-6">
-            <p className="text-sm text-muted-foreground">
-              Assign the paging USB DAC under Settings → Audio Configuration.
-            </p>
+          <div className="grid gap-4">
+            <PagingConfigCard
+              paging={paging}
+              onOpenSettings={() => {
+                setActiveTab("settings");
+              }}
+            />
+            <PagingTestCard paging={paging} />
+            <PagingVoiceBrowser paging={paging} />
+            <PagingChimeManager paging={paging} />
+            <PagingIdlePolicyCard paging={paging} />
+            <div className="rounded-lg border border-border bg-card p-6">
+              <h2 className="font-medium text-card-foreground">Last Job Status</h2>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Current status: {paging.state.status?.state ?? "unknown"}{" "}
+                {paging.state.status?.currentJobId
+                  ? `• active job ${paging.state.status.currentJobId}`
+                  : "• no active job"}
+              </p>
+            </div>
           </div>
           )}
         </TabsContent>
@@ -282,6 +308,7 @@ export function AudioPage(): React.JSX.Element {
           ) : (
           <div className="grid gap-4">
             <AudioConfigurationCard />
+            <PagingApiKeyCard paging={paging} />
             <AudioControllerCard />
           </div>
           )}

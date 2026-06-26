@@ -102,9 +102,13 @@ void EventsOwnerSubscriber::handle_event_line(const std::string& line) {
     if (on_routing_context_change_) {
       on_routing_context_change_(payload, event);
     }
+    const int owner = parse_int_field(payload, "ownerZoneId");
+    if (owner <= 0 && active_stack.empty()) {
+      apply_owner_zone(0, true);
+      return;
+    }
     if (owner_zone_id_.load() <= 0) {
-      const int owner = parse_int_field(payload, "ownerZoneId");
-      const int bootstrap_owner = owner > 0 ? owner : (active_stack.empty() ? 0 : active_stack.front());
+      const int bootstrap_owner = owner > 0 ? owner : active_stack.front();
       if (bootstrap_owner > 0) {
         apply_owner_zone(bootstrap_owner, false);
       }

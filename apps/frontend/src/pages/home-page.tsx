@@ -1,7 +1,7 @@
 import { AudioCard } from "@/components/audio/audio-card.js";
 import { AudioCardSkeleton } from "@/components/audio/audio-card-skeleton.js";
 import { useAudioModule } from "@/hooks/audio-module-provider.js";
-import { deriveAudioConnectionLevel } from "@/lib/derive-audio-connection-level.js";
+import { deriveAudioConnectionLevelFromSnapshot } from "@/lib/derive-audio-connection-level.js";
 
 /**
  * Home dashboard with module cards.
@@ -9,10 +9,7 @@ import { deriveAudioConnectionLevel } from "@/lib/derive-audio-connection-level.
 export function HomePage(): React.JSX.Element {
   const { state } = useAudioModule();
   const snapshot = state.snapshot;
-  const connectionLevel = deriveAudioConnectionLevel(
-    snapshot?.hifiConnected ?? false,
-    snapshot?.services
-  );
+  const connectionLevel = deriveAudioConnectionLevelFromSnapshot(snapshot);
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">

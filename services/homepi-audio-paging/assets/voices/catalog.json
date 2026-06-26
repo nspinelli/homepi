@@ -1,0 +1,26 @@
+{
+  "voices": [
+    {
+      "voiceId": "en_US-lessac-medium",
+      "displayName": "Lessac",
+      "languageCode": "en-US",
+      "quality": "medium",
+      "installed": true,
+      "bundled": true,
+      "modelPath": "/var/lib/homepi/paging/voices/en_US-lessac-medium.onnx",
+      "configPath": "/var/lib/homepi/paging/voices/en_US-lessac-medium.onnx.json",
+      "sampleUrl": null
+    },
+    {
+      "voiceId": "en_US-lessac-low",
+      "displayName": "Lessac",
+      "languageCode": "en-US",
+      "quality": "low",
+      "installed": false,
+      "bundled": false,
+      "modelPath": null,
+      "configPath": null,
+      "sampleUrl": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/low/en_US-lessac-low.onnx"
+    }
+  ]
+}

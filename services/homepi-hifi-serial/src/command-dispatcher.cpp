@@ -167,6 +167,10 @@ int CommandDispatcher::dispatch(const std::string& event, const std::string& pay
     if (!name.empty()) {
       commands.push_back(cmd_netname_set(name));
     }
+  } else if (event == "page_start") {
+    commands.push_back(cmd_page_on());
+  } else if (event == "page_end") {
+    commands.push_back(cmd_page_off());
   }
 
   enqueue_commands(commands, event, correlation_id);

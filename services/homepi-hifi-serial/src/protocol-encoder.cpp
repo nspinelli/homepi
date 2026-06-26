@@ -104,6 +104,10 @@ std::string cmd_netname_set(const std::string& name) {
 
 std::string cmd_page_query() { return build_command("PAGE?"); }
 
+std::string cmd_page_on() { return build_command("PAGE1"); }
+
+std::string cmd_page_off() { return build_command("PAGE0"); }
+
 std::string cmd_language_string_query(int index) {
   return build_command("LS" + std::to_string(index) + "STR?");
 }

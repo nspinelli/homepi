@@ -13,6 +13,7 @@ int main() {
   assert(cmd_zone_power_set(3, 1) == "*Z3POWER1\r");
   assert(cmd_zone_volume_set(4, 50) == "*Z4VOLUME50\r");
   assert(cmd_zone_src_set(2, 7) == "*Z2SRC7\r");
+  assert(cmd_zone_src_set(0, 8) == "*Z0SRC8\r");
 
   const auto updates = parse_response_line("#Z4VOLUME50");
   assert(!updates.empty());
@@ -198,6 +199,8 @@ int main() {
   assert(cmd_source_enable_set(2, 1) == "*S2ENABLE1\r");
   assert(cmd_source_ingain_set(4, 12) == "*S4INGAIN12\r");
   assert(cmd_source_displine_set(5, "Now Playing") == "*S5DISPLINE\"Now Playing\"\r");
+  assert(cmd_page_on() == "*PAGE1\r");
+  assert(cmd_page_off() == "*PAGE0\r");
 
   std::cout << "protocol tests passed\n";
   return 0;

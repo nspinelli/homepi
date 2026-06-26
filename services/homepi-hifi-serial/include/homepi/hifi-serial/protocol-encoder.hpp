@@ -87,6 +87,12 @@ std::string cmd_netname_set(const std::string& name);
 /** Builds page state query. */
 std::string cmd_page_query();
 
+/** Builds page start command. */
+std::string cmd_page_on();
+
+/** Builds page end command. */
+std::string cmd_page_off();
+
 /** Builds language string query. */
 std::string cmd_language_string_query(int index);
 

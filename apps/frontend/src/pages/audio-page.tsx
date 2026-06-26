@@ -7,6 +7,7 @@ import { zoneCardVolume } from "@/lib/zone-card-volume.js";
 
 import { AudioConfigurationCard } from "@/components/audio-configuration-card.js";
 import { AudioControllerCard } from "@/components/audio/audio-controller-card.js";
+import { PagingApiDocs } from "@/components/audio/paging-api-docs.js";
 import { PagingApiKeyCard } from "@/components/audio/paging-api-key-card.js";
 import { PagingChimeManager } from "@/components/audio/paging-chime-manager.js";
 import { PagingConfigCard } from "@/components/audio/paging-config-card.js";
@@ -286,6 +287,7 @@ export function AudioPage(): React.JSX.Element {
             <PagingVoiceBrowser paging={paging} />
             <PagingChimeManager paging={paging} />
             <PagingIdlePolicyCard paging={paging} />
+            <PagingApiDocs />
             <div className="rounded-lg border border-border bg-card p-6">
               <h2 className="font-medium text-card-foreground">Last Job Status</h2>
               <p className="mt-2 text-xs text-muted-foreground">

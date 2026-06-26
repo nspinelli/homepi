@@ -16,7 +16,7 @@ import type {
   PagingVoicePreviewRequest,
 } from "./paging-types.js";
 import { installCatalogVoice } from "./voice-installer.js";
-import { isEnglishVoice, readPagingVoiceCatalog } from "./voice-catalog.js";
+import { isEnglishVoice, readPagingVoiceCatalog, resolvePagingVoiceSampleUrl } from "./voice-catalog.js";
 import { saveChimeUpload } from "./paging-chime-upload.js";
 
 /**
@@ -109,8 +109,8 @@ export class PagingRoutes {
               quality: voice.quality,
               isBundled: voice.isBundled,
               sampleAvailable: voice.sampleAvailable,
-              sampleUrl: voice.sampleUrl ?? null,
-              installed: installed?.installed ?? voice.isBundled,
+              sampleUrl: resolvePagingVoiceSampleUrl(voice),
+              installed: installed?.installed === true,
               isDefault: config.defaultVoiceId === voice.voiceId,
             };
           });

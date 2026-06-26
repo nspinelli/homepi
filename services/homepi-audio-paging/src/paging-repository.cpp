@@ -1,6 +1,7 @@
 #include "homepi/audio-paging/paging-repository.hpp"
 
 #include <chrono>
+#include <cstdio>
 #include <ctime>
 #include <sqlite3.h>
 
@@ -325,14 +326,56 @@ bool PagingRepository::upsert_voice(const PagingVoice& voice) {
 
 bool PagingRepository::remove_voice(const std::string& voice_id) {
   std::lock_guard<std::mutex> lock(mutex_);
+
+  sqlite3_stmt* config_stmt = nullptr;
+  std::string active_voice_id;
+  if (sqlite3_prepare_v2(db_, "SELECT ACTIVE_VOICE_ID FROM AUDIO_PAGING_CONFIG WHERE ID = 1", -1,
+                         &config_stmt, nullptr) == SQLITE_OK) {
+    if (sqlite3_step(config_stmt) == SQLITE_ROW) {
+      if (const char* value = reinterpret_cast<const char*>(sqlite3_column_text(config_stmt, 0))) {
+        active_voice_id = value;
+      }
+    }
+    sqlite3_finalize(config_stmt);
+  }
+  if (!active_voice_id.empty() && voice_id == active_voice_id) {
+    return false;
+  }
+
+  std::string model_path;
+  std::string config_path;
+  sqlite3_stmt* lookup_stmt = nullptr;
+  if (sqlite3_prepare_v2(db_,
+                         "SELECT MODEL_PATH, CONFIG_PATH FROM AUDIO_PAGING_VOICES WHERE VOICE_ID = ?",
+                         -1, &lookup_stmt, nullptr) == SQLITE_OK) {
+    sqlite3_bind_text(lookup_stmt, 1, voice_id.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(lookup_stmt) == SQLITE_ROW) {
+      if (const char* value = reinterpret_cast<const char*>(sqlite3_column_text(lookup_stmt, 0))) {
+        model_path = value;
+      }
+      if (const char* value = reinterpret_cast<const char*>(sqlite3_column_text(lookup_stmt, 1))) {
+        config_path = value;
+      }
+    }
+    sqlite3_finalize(lookup_stmt);
+  }
+
   sqlite3_stmt* stmt = nullptr;
-  sqlite3_prepare_v2(
-      db_, "DELETE FROM AUDIO_PAGING_VOICES WHERE VOICE_ID = ? AND IFNULL(IS_BUNDLED, 0) = 0", -1,
-      &stmt, nullptr);
+  sqlite3_prepare_v2(db_, "DELETE FROM AUDIO_PAGING_VOICES WHERE VOICE_ID = ?", -1, &stmt, nullptr);
   sqlite3_bind_text(stmt, 1, voice_id.c_str(), -1, SQLITE_TRANSIENT);
-  const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+  const bool ok = sqlite3_step(stmt) == SQLITE_DONE && sqlite3_changes(db_) > 0;
   sqlite3_finalize(stmt);
-  return ok;
+  if (!ok) {
+    return false;
+  }
+
+  if (!model_path.empty()) {
+    std::remove(model_path.c_str());
+  }
+  if (!config_path.empty()) {
+    std::remove(config_path.c_str());
+  }
+  return true;
 }
 
 bool PagingRepository::upsert_chime(const PagingChime& chime) {

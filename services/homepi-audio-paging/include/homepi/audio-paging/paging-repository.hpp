@@ -52,7 +52,7 @@ class PagingRepository {
   /** Inserts or updates a voice row. */
   bool upsert_voice(const PagingVoice& voice);
 
-  /** Removes non-bundled voice row by id. */
+  /** Removes an installed voice row when it is not the active default. */
   bool remove_voice(const std::string& voice_id);
 
   /** Inserts or updates a chime row. */

@@ -19,6 +19,9 @@ export const PAGING_VOICE_STORAGE_DIR = "/var/lib/homepi/paging/voices";
 const PIPER_VOICES_BASE_URL =
   "https://huggingface.co/rhasspy/piper-voices/resolve/main";
 
+/** Default Hugging Face sample file for single-speaker Piper voices. */
+const PIPER_VOICE_SAMPLE_FILE = "samples/speaker_0.mp3";
+
 /**
  * Catalog voice metadata used by the paging voice browser.
  */
@@ -116,6 +119,33 @@ export function resolvePagingVoiceFilePaths(voiceId: string): PagingVoiceFilePat
     modelUrl: `${remoteBase}/${voiceId}.onnx`,
     configUrl: `${remoteBase}/${voiceId}.onnx.json`,
   };
+}
+
+/**
+ * Builds a browser-playable sample URL for a Piper catalog voice.
+ * @param voiceId - Piper voice identifier.
+ * @returns Remote sample URL or null when the voice id is unsupported.
+ */
+export function buildPiperVoiceSampleUrl(voiceId: string): string | null {
+  const parsed = parsePiperVoiceId(voiceId);
+  if (!parsed) {
+    return null;
+  }
+
+  const locale = `${parsed.lang}_${parsed.region}`;
+  return `${PIPER_VOICES_BASE_URL}/${parsed.lang}/${locale}/${parsed.speaker}/${parsed.quality}/${PIPER_VOICE_SAMPLE_FILE}`;
+}
+
+/**
+ * Resolves the sample URL shown in the voice catalog UI.
+ * @param voice - Catalog voice row.
+ * @returns Sample URL when available, otherwise null.
+ */
+export function resolvePagingVoiceSampleUrl(voice: PagingVoiceCatalogEntry): string | null {
+  if (!voice.sampleAvailable) {
+    return null;
+  }
+  return buildPiperVoiceSampleUrl(voice.voiceId) ?? voice.sampleUrl ?? null;
 }
 
 /**

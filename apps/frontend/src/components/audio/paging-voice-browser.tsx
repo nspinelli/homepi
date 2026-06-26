@@ -279,7 +279,8 @@ export function PagingVoiceBrowser({ paging }: PagingVoiceBrowserProps): React.J
                       type="button"
                       variant="destructive"
                       size="sm"
-                      disabled={actionBusy || voice.isBundled}
+                      disabled={actionBusy || voice.isDefault}
+                      title={voice.isDefault ? "Set another voice as default before removing this one." : undefined}
                       onClick={() => {
                         void (async () => {
                           setActionError(null);

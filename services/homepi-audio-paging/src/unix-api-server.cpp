@@ -338,6 +338,11 @@ std::string UnixApiServer::handle_request(const std::string& line) {
       return error_response(correlation_id, "PAGING_VALIDATION_ERROR", "voiceId is required");
     }
     if (!context_.repository->remove_voice(voice_id)) {
+      const PagingConfig config = context_.repository->get_config();
+      if (voice_id == config.active_voice_id) {
+        return error_response(correlation_id, "PAGING_VOICE_REMOVE_FAILED",
+                              "Cannot remove the active default voice");
+      }
       return error_response(correlation_id, "PAGING_VOICE_REMOVE_FAILED", "Failed to remove voice");
     }
     return ok_response(correlation_id, "{\"voiceId\":\"" + json_escape(voice_id) + "\"}");

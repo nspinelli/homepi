@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isEnglishVoice, parsePiperVoiceId, resolvePagingVoiceFilePaths } from "./voice-catalog.js";
+import {
+  buildPiperVoiceSampleUrl,
+  isEnglishVoice,
+  parsePiperVoiceId,
+  resolvePagingVoiceFilePaths,
+} from "./voice-catalog.js";
 
 describe("voice-catalog", () => {
   it("parses Piper voice ids", () => {
@@ -23,6 +28,16 @@ describe("voice-catalog", () => {
     expect(paths.modelUrl).toContain("en/en_US/amy/low/en_US-amy-low.onnx");
     expect(paths.configUrl).toContain("en_US-amy-low.onnx.json");
     expect(paths.modelPath).toContain("/var/lib/homepi/paging/voices/en_US-amy-low.onnx");
+  });
+
+  it("builds Hugging Face sample URLs", () => {
+    expect(buildPiperVoiceSampleUrl("en_US-lessac-medium")).toBe(
+      "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/samples/speaker_0.mp3"
+    );
+    expect(buildPiperVoiceSampleUrl("en_GB-alan-medium")).toContain(
+      "/en/en_GB/alan/medium/samples/speaker_0.mp3"
+    );
+    expect(buildPiperVoiceSampleUrl("invalid-voice")).toBeNull();
   });
 
   it("filters English catalog voices", () => {

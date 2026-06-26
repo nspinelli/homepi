@@ -6,7 +6,7 @@ Service status flows from native daemons into the backend, then outward to UI cl
 
 ```text
 Native daemon
-  -> Unix socket event stream (or journald lifecycle logs)
+  -> Unix socket event stream, core/events broker, or journald lifecycle logs
   -> Backend event bridge
   -> SystemStatusStore
   -> SSE / WebSocket
@@ -20,9 +20,10 @@ Native daemon
 3. Create HTTP/SSE/WebSocket server
 4. Start native event bridges with exponential backoff reconnect
 5. Start journald log bridge (UI logs + lifecycle status for nqptp/metadata/shairport)
-6. Load one-time startup snapshots (`getHealth` / `systemctl`) via `Promise.allSettled`
-7. Start slow fallback reconciliation (120s interval)
-8. Broadcast `system_status_delta` only when status fields change
+6. Start events broker bridge (`/run/homepi/events.sock`)
+7. Load one-time startup snapshots (`getHealth` / `systemctl`) via `Promise.allSettled`
+8. Start slow fallback reconciliation (120s interval)
+9. Broadcast `system_status_delta` only when status fields change
 
 ## Client delivery
 

@@ -33,6 +33,12 @@ Listens on `http://127.0.0.1:3000` by default. Configuration is loaded from `con
 | `GET /api/hifi-serial/sources` | Source list |
 | `GET /api/hifi-serial/groups` | Group list |
 | `POST /api/hifi-serial/commands` | Queue raw `*...` protocol command |
+| `GET/PUT /api/audio/paging/config` | Paging configuration (proxied to native service) |
+| `GET /api/audio/paging/status` | Paging service status |
+| `POST /api/audio/paging/speak` | Publish speak command via broker |
+| `POST /api/audio/paging/chime` | Publish chime command via broker |
+
+Additional paging routes under `/api/audio/paging/*` (voices, chimes, preview). See `src/audio/paging/paging-routes.ts`.
 
 Aliases: `/api/events`, `/api/ws`.
 
@@ -61,6 +67,6 @@ pnpm --filter @homepi/app-backend test
 
 Validates response envelope shape, runtime status schema alignment, and SSE envelope examples.
 
-## Not Included Yet
+## Native integration
 
-Module command handling, persistent state, authentication enforcement, and native service integration.
+The backend connects to native Unix sockets (`usb-devices`, `hifi-serial`, `pcm-router`, `metadata`, `audio-realtime`, `events`, `audio-paging`) and bridges events to SSE/WebSocket clients. See [docs/architecture/event-flow.md](../../docs/architecture/event-flow.md).

@@ -15,6 +15,9 @@ export HOMEPI_SKIP_PREREQS=1
 echo "==> Running install preflight (backups, SSH checks)"
 sudo bash "${REPO_ROOT}/scripts/install-preflight.sh"
 
+echo "==> Installing SSH boot hardening"
+sudo bash "${REPO_ROOT}/scripts/install-ensure-ssh.sh"
+
 echo "==> Installing prerequisites"
 sudo bash "${REPO_ROOT}/scripts/install-prerequisites.sh"
 

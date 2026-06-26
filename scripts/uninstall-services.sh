@@ -6,6 +6,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Reverse of install-services.sh order.
 SERVICE_DIRS=(
+  "homepi-audio-paging"
+  "homepi-audio-orchestrator"
   "homepi-shairport-sync"
   "homepi-hifi-serial"
   "homepi-metadata"

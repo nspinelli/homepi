@@ -1,5 +1,7 @@
 # HomePi System Status Vertical Slice
 
+> **Note (2026):** This document describes the original platform vertical slice. Production HomePi now integrates native services (USB, HiFi serial, PCM router, metadata, Shairport, orchestrator, paging) and event-driven status. See [architecture/service-status.md](./architecture/service-status.md) and [architecture/event-flow.md](./architecture/event-flow.md) for current behavior.
+
 ## Purpose
 
 This vertical slice proves the HomePi core platform works end-to-end before real feature modules are added. It connects:

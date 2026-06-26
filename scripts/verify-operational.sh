@@ -37,7 +37,7 @@ check_http() {
 }
 
 echo "=== HomePi operational status ==="
-for svc in nginx homepi-backend homepi-events avahi-daemon avahi-homepi-alias mosquitto \
+for svc in nginx homepi-backend homepi-events homepi-ensure-ssh avahi-daemon avahi-homepi-alias mosquitto \
   homepi-usb-devices homepi-nqptp homepi-pcm-router homepi-metadata \
   homepi-hifi-serial homepi-shairport-supervisor homepi-audio-orchestrator homepi-audio-paging; do
   status_line "${svc}"
@@ -56,6 +56,15 @@ if [[ -n "${ssh_unit}" ]]; then
   if ! systemctl is-enabled "${ssh_unit}" >/dev/null 2>&1; then
     echo "  FAIL ${ssh_unit} is not enabled"
     FAIL=1
+  fi
+  if systemctl list-unit-files ssh.socket >/dev/null 2>&1; then
+    socket_state="$(systemctl is-enabled ssh.socket 2>&1 || true)"
+    if [[ "${socket_state}" == "masked" ]]; then
+      echo "  OK  ssh.socket masked"
+    else
+      echo "  FAIL ssh.socket is ${socket_state:-unknown} (expected masked)"
+      FAIL=1
+    fi
   fi
 else
   warn_line "ssh/sshd unit not found"

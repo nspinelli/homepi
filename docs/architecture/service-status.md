@@ -23,6 +23,8 @@ Native services emit `EventEnvelope` messages (`core/events/schema/event-envelop
 
 Payload shape: `core/events/schema/service-health-payload.schema.json`.
 
+Additional broker topics (e.g. `modules.metadata.*`, `audio.paging.*`) feed domain-specific UI state; service health for the dashboard primarily uses `system.service` and startup snapshots.
+
 ## Status mapping rules
 
 ### USB devices (`homepi-usb-devices`)
@@ -63,23 +65,34 @@ No HomePi Unix socket API. Status from:
 1. Journald `core.runtime` lifecycle logs
 2. Slow fallback `systemctl is-active homepi-nqptp` (120s)
 
-### Metadata (`homepi-metadata@N`)
+### Metadata (`homepi-metadata`)
 
-No socket API. Status from:
+Single daemon (legacy `homepi-metadata@N` template disabled on install). Status from:
 
-1. Journald lifecycle logs
-2. Fallback: supervisor active + `homepi-metadata@1` systemd state
+1. Unix socket `metadata.sock` + journald lifecycle logs
+2. Fallback: `systemctl is-active homepi-metadata` (120s)
+
+Progress telemetry is **not** on the event bus; it flows via `audio-realtime.sock`.
 
 ### Shairport supervisor
 
-Same fallback pattern as metadata sibling services (journald + 120s systemd reconciliation).
+Same fallback pattern as nqptp (journald + 120s systemd reconciliation).
+
+### Audio orchestrator (`homepi-audio-orchestrator`)
+
+Status from `core/events` lifecycle and orchestration topics; no dedicated dashboard socket.
+
+### Audio paging (`homepi-audio-paging`)
+
+Status from `audio-paging.sock` `getHealth` and broker `audio.paging.*` events when the service is installed.
 
 ## Startup snapshots
 
 On backend start, each service is queried **once**:
 
-- Socket `getHealth` for USB and HiFi
+- Socket `getHealth` for USB, HiFi, paging (when installed)
 - PCM subscribe snapshot
+- Metadata socket bootstrap where available
 - `systemctl is-active` for nqptp, metadata, shairport
 
 Failures mark the service `offline` and log `startup_snapshot_failed` without aborting the backend.

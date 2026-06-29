@@ -40,11 +40,11 @@ struct AudioBridgeStats {
 struct ServiceConfig {
   std::string service = "homepi-pcm-router";
   std::string log_level = "INFO";
-  std::string socket_path = "/run/homepi/pcm-router.sock";
+  std::string socket_path = "/run/homepi/audio/pcm-router.sock";
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
   std::string artifact_path = "/opt/homepi/runtime/generated/audio/operating-profile.json";
-  std::string usb_devices_socket = "/run/homepi/usb-devices.sock";
-  std::string events_socket = "/run/homepi/events.sock";
+  std::string usb_devices_socket = "/run/homepi/usb/usb.sock";
+  std::string events_socket = "/run/homepi/broker/broker.sock";
   std::string loopback_card_a = "HomePiZonesA";
   std::string loopback_card_b = "HomePiZonesB";
   int zone_count = 16;

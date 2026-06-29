@@ -2,24 +2,27 @@ import { connect, type Socket } from "node:net";
 
 import { validateEventEnvelope } from "@homepi/core-events";
 import type { EventEnvelope } from "@homepi/core-events";
+import { createRequest } from "@homepi/core-messaging";
 import type { Logger } from "@homepi/core-logging";
+import { encodeNdjsonLine } from "@homepi/core-transport";
 
 import type { EventBroadcaster } from "../event-broadcaster.js";
-import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
-import { mapEnvelopeToStatusPatch } from "../status/service-event-handlers.js";
-import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
+import type { AudioBrokerSnapshotStore } from "../audio/audio-broker-snapshot-store.js";
 import {
   adaptBrokerEnvelopeForUi,
   BROKER_AUDIO_TOPICS,
   shouldDropBrokerEnvelope,
 } from "../audio/audio-ui-bridge.js";
-import type { AudioBrokerSnapshotStore } from "../audio/audio-broker-snapshot-store.js";
+import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
+import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
+
+import { parseBrokerWireLine } from "./broker-event-adapter.js";
 
 /**
- * Options for the central core/events SSE bridge.
+ * Options for the central homepi-broker SSE bridge.
  */
 export interface EventsBrokerBridgeOptions {
-  /** Unix socket path for /run/homepi/events.sock. */
+  /** Unix socket path for /run/homepi/broker/broker.sock. */
   socketPath: string;
   /** Backend source name registered with the broker. */
   source?: string;
@@ -40,7 +43,7 @@ export interface EventsBrokerBridgeOptions {
 const DEFAULT_TOPICS = [...BROKER_AUDIO_TOPICS];
 
 /**
- * Subscribes to the HomePi core/events broker and forwards envelopes to SSE clients.
+ * Subscribes to homepi-broker and forwards envelopes to SSE clients.
  */
 export class EventsBrokerBridge {
   private socket: Socket | null = null;
@@ -107,22 +110,17 @@ export class EventsBrokerBridge {
         module: "app.backend.events",
         event: "event_bridge_connected",
         correlationId: "events-broker-bridge",
-        message: "Core events broker bridge connected",
+        message: "homepi-broker bridge connected",
+        data: { socketPath: this.options.socketPath },
       });
-      socket.write(
-        `${JSON.stringify({
-          method: "register",
-          source,
-          subscribes: topics,
-          publishes: ["modules.zone.command"],
-        })}\n`
-      );
-      socket.write(
-        `${JSON.stringify({
-          method: "subscribe",
-          topics,
-        })}\n`
-      );
+      const request = createRequest({
+        source,
+        target: "homepi-broker",
+        command: "subscribe",
+        correlationId: "events-broker-bridge",
+        payload: { topics },
+      });
+      socket.write(encodeNdjsonLine(request));
     });
 
     socket.on("data", (chunk) => {
@@ -168,6 +166,12 @@ export class EventsBrokerBridge {
   }
 
   private handleLine(line: string): void {
+    const brokerEnvelope = parseBrokerWireLine(line);
+    if (brokerEnvelope) {
+      this.processEnvelope(brokerEnvelope);
+      return;
+    }
+
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -184,12 +188,16 @@ export class EventsBrokerBridge {
       return;
     }
 
-    const envelope = this.adaptEnvelope(parsed as EventEnvelope);
+    this.processEnvelope(parsed as EventEnvelope);
+  }
+
+  private processEnvelope(rawEnvelope: EventEnvelope): void {
+    const envelope = this.adaptEnvelope(rawEnvelope);
     if (shouldDropBrokerEnvelope(envelope)) {
       return;
     }
 
-    this.options.snapshotStore?.ingest(parsed as EventEnvelope);
+    this.options.snapshotStore?.ingest(rawEnvelope);
 
     const result = validateEventEnvelope(envelope);
     if (!result.valid) {
@@ -198,20 +206,17 @@ export class EventsBrokerBridge {
 
     this.options.broadcaster.broadcast(envelope);
 
-    const patch = mapEnvelopeToStatusPatch(envelope);
-    if (patch) {
+    if (envelope.timestamp) {
       this.options.coordinator.patchAndBroadcast(
-        patch,
+        {},
         "events-broker-bridge",
         envelope.timestamp
       );
-    } else if (envelope.timestamp) {
-      this.options.coordinator.patchAndBroadcast({}, "events-broker-bridge", envelope.timestamp);
     }
   }
 
   /**
-   * Maps new broker event names to legacy SSE names the frontend already handles.
+   * Maps broker event names to legacy SSE names the frontend already handles.
    * @param envelope - Raw broker envelope.
    * @returns Adapted envelope for UI consumers.
    */

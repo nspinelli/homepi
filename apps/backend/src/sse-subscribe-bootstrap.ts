@@ -68,6 +68,7 @@ export function buildAudioRealtimeEnvelope(
       receivedAtMs,
       progressSyncedAt: receivedAtMs,
       progressSource: frame.progressSource,
+      uiVisible: false,
     },
   });
 }

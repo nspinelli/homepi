@@ -107,15 +107,23 @@ function normalizeAudioSnapshot(
     progressSyncedAt: incomingPlayback.progressSyncedAt ?? Date.now(),
   };
   const hasActiveRoute = getDacOwnerZoneId(snapshot.pcm) > 0;
+  const keepNowPlaying =
+    hasActiveRoute ||
+    hasPersistedNowPlaying({
+      ...snapshot.pcm,
+      metadata,
+      playback,
+      hasCoverArt: snapshot.pcm.hasCoverArt,
+    });
   return {
     ...snapshot,
     pcm: {
       ...snapshot.pcm,
-      metadata: hasActiveRoute ? metadata : {},
-      playback: hasActiveRoute
+      metadata: keepNowPlaying ? metadata : {},
+      playback: keepNowPlaying
         ? playback
         : { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
-      hasCoverArt: hasActiveRoute
+      hasCoverArt: keepNowPlaying
         ? trackChanged
           ? Boolean(incomingMetadata.coverArtId?.trim())
           : snapshot.pcm.hasCoverArt
@@ -189,11 +197,6 @@ function clearZoneFromPcmRouting(
   };
 }
 
-/**
- * Returns the zone currently feeding the DAC.
- * @param pcm - PCM routing state.
- * @returns Owner zone id or 0.
- */
 function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
   if (pcm.ownerZoneId > 0) {
     return pcm.ownerZoneId;
@@ -202,6 +205,37 @@ function getDacOwnerZoneId(pcm: AudioSnapshot["pcm"]): number {
     return pcm.activeStack[0] ?? 0;
   }
   return 0;
+}
+
+/**
+ * Returns true when PCM state still has displayable now-playing content.
+ * @param pcm - PCM routing and metadata state.
+ * @returns Whether now-playing UI should stay visible.
+ */
+function hasPersistedNowPlaying(pcm: AudioSnapshot["pcm"]): boolean {
+  if (pcm.playback?.playing) {
+    return true;
+  }
+  return hasNowPlayingDisplayContent({
+    ...pcm.metadata,
+    playing: pcm.playback?.playing ?? false,
+    durationMs: pcm.playback?.durationMs ?? 0,
+    hasCoverArt: pcm.hasCoverArt ?? false,
+  });
+}
+
+/**
+ * Resolves the zone shown in now-playing UI when PCM owner briefly reads idle.
+ * @param pcm - PCM routing state.
+ * @returns Zone id for now-playing, or 0 when none.
+ */
+function resolveNowPlayingZoneId(pcm: AudioSnapshot["pcm"]): number {
+  const owner = getDacOwnerZoneId(pcm);
+  if (owner > 0) {
+    return owner;
+  }
+  const pending = pcm.pendingOwnerZoneId ?? 0;
+  return pending > 0 ? pending : 0;
 }
 
 /**
@@ -258,6 +292,7 @@ function applyMetadataFieldToPcm(
   pcm: AudioSnapshot["pcm"],
   payload: Record<string, unknown>
 ): AudioSnapshot["pcm"] {
+  pcm = syncPcmRoutingFromMetadata(pcm, payload);
   if (!metadataTargetsOwnerZone(pcm, payload)) {
     return pcm;
   }
@@ -423,10 +458,40 @@ function metadataContentChanged(
 }
 
 
+function syncPcmRoutingFromMetadata(
+  pcm: AudioSnapshot["pcm"],
+  payload: Record<string, unknown>
+): AudioSnapshot["pcm"] {
+  if (getDacOwnerZoneId(pcm) > 0) {
+    return pcm;
+  }
+
+  const payloadOwner =
+    typeof payload.ownerZoneId === "number"
+      ? payload.ownerZoneId
+      : typeof payload.zoneId === "number"
+        ? payload.zoneId
+        : 0;
+  if (payloadOwner <= 0) {
+    return pcm;
+  }
+
+  const activeStack = pcm.activeStack.includes(payloadOwner)
+    ? pcm.activeStack
+    : [...pcm.activeStack, payloadOwner];
+
+  return {
+    ...pcm,
+    ownerZoneId: payloadOwner,
+    activeStack,
+  };
+}
+
 function applyMetadataSnapshotToPcm(
   pcm: AudioSnapshot["pcm"],
   payload: Record<string, unknown>
 ): AudioSnapshot["pcm"] {
+  pcm = syncPcmRoutingFromMetadata(pcm, payload);
   if (!metadataTargetsOwnerZone(pcm, payload)) {
     return pcm;
   }
@@ -677,6 +742,9 @@ function patchPcmFromEvent(
     const loopbackProfile = parseTuple(payload.loopbackProfile) ?? pcm.loopbackProfile;
     const dacProfile = parseTuple(payload.dacProfile) ?? pcm.dacProfile;
     const hasActiveRoute = getDacOwnerZoneId({ ...pcm, ownerZoneId, activeStack }) > 0;
+    const keepNowPlaying =
+      hasActiveRoute ||
+      hasPersistedNowPlaying({ ...pcm, ownerZoneId, activeStack });
     return {
       ...pcm,
       ownerZoneId,
@@ -690,11 +758,11 @@ function patchPcmFromEvent(
       profileRevision,
       profileSource,
       audioBridgeState,
-      metadata: hasActiveRoute ? pcm.metadata : {},
-      playback: hasActiveRoute
+      metadata: keepNowPlaying ? pcm.metadata : {},
+      playback: keepNowPlaying
         ? pcm.playback
         : { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() },
-      hasCoverArt: hasActiveRoute ? pcm.hasCoverArt : false,
+      hasCoverArt: keepNowPlaying ? pcm.hasCoverArt : false,
     };
   }
 
@@ -784,7 +852,7 @@ function patchPcmFromEvent(
       ownerZoneId,
       activeStack,
       pendingOwnerZoneId,
-      metadata: ownerCleared || ownerChanged ? {} : pcm.metadata,
+      metadata: ownerCleared ? {} : pcm.metadata,
       playback: ownerCleared
         ? { playing: false, positionMs: 0, durationMs: 0, progressSyncedAt: Date.now() }
         : ownerChanged
@@ -1188,7 +1256,6 @@ function useAudioModuleState(): {
 
     source.onopen = () => {
       setState((current) => ({ ...current, sseConnected: true }));
-      void refresh();
     };
 
     source.onerror = () => {
@@ -1559,11 +1626,7 @@ function useAudioModuleState(): {
 
   const nowPlaying = (() => {
     const snapshot = state.snapshot;
-    if (!snapshot) {
-      return null;
-    }
-    const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
-    if (ownerZoneId <= 0) {
+    if (!snapshot || !hasPersistedNowPlaying(snapshot.pcm)) {
       return null;
     }
     const { title, artist, album, clientName, clientModel } = snapshot.pcm.metadata;
@@ -1593,7 +1656,10 @@ function useAudioModuleState(): {
     if (!snapshot) {
       return null;
     }
-    const ownerZoneId = getDacOwnerZoneId(snapshot.pcm);
+    if (!hasPersistedNowPlaying(snapshot.pcm)) {
+      return null;
+    }
+    const ownerZoneId = resolveNowPlayingZoneId(snapshot.pcm);
     if (ownerZoneId <= 0) {
       return null;
     }

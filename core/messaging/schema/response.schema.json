@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/messaging/response.schema.json",
+  "title": "HomePi Socket Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "ok"],
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "ok": { "type": "boolean" },
+    "result": { "type": "object", "additionalProperties": true },
+    "error": { "$ref": "error.schema.json" }
+  }
+}

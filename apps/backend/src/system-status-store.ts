@@ -1,6 +1,6 @@
 import { createSnapshot } from "@homepi/core-state";
 import type { StateSnapshot } from "@homepi/core-state";
-import type { SystemStatusSnapshot } from "./types/system-status-types.js";
+import type { HostMetricsSnapshot } from "./types/system-status-types.js";
 
 const STATE_OWNER = "homepi-backend";
 const STATE_TOPIC = "system.status";
@@ -17,7 +17,7 @@ export class SystemStatusStore {
    * @param initial - Initial system status values.
    * @param startedAt - Optional process start time for computed uptime.
    */
-  constructor(initial: SystemStatusSnapshot, startedAt?: Date) {
+  constructor(initial: HostMetricsSnapshot, startedAt?: Date) {
     this.startedAt = startedAt ?? null;
     this.snapshot = createSnapshot({
       owner: STATE_OWNER,
@@ -31,8 +31,8 @@ export class SystemStatusStore {
    * Uptime is computed at read time when startedAt was provided.
    * @returns System status snapshot.
    */
-  getStatus(): SystemStatusSnapshot {
-    const status = structuredClone(this.snapshot.state) as unknown as SystemStatusSnapshot;
+  getStatus(): HostMetricsSnapshot {
+    const status = structuredClone(this.snapshot.state) as unknown as HostMetricsSnapshot;
     if (this.startedAt) {
       status.uptimeMs = Math.max(0, Date.now() - this.startedAt.getTime());
     }
@@ -51,7 +51,7 @@ export class SystemStatusStore {
    * Replaces the full system status snapshot.
    * @param next - Updated status values.
    */
-  setStatus(next: SystemStatusSnapshot): void {
+  setStatus(next: HostMetricsSnapshot): void {
     this.snapshot = createSnapshot({
       owner: STATE_OWNER,
       topic: STATE_TOPIC,
@@ -63,7 +63,7 @@ export class SystemStatusStore {
    * Applies a partial update to the system status snapshot.
    * @param patch - Partial status fields to merge.
    */
-  patchStatus(patch: Partial<SystemStatusSnapshot>): void {
+  patchStatus(patch: Partial<HostMetricsSnapshot>): void {
     const current = this.getStatus();
     this.setStatus({ ...current, ...patch });
   }

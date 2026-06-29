@@ -1,0 +1,25 @@
+{
+  "name": "@homepi/core-messaging",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "HomePi NDJSON socket messaging contracts and helpers",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@homepi/core-transport": "workspace:*"
+  },
+  "devDependencies": {
+    "@homepi/tooling-schema-validation": "workspace:*",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}

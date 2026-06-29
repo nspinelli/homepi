@@ -217,6 +217,7 @@ export class AudioRealtimeBridge {
           durationMs: realtimeFrame.durationMs,
           receivedAtMs,
           progressSyncedAt: receivedAtMs,
+          uiVisible: false,
         },
       })
     );

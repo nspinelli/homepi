@@ -20,7 +20,7 @@
   "metadata": {
     "pipePrefix": "/tmp/homepi-metadata-zone-",
     "zoneCount": 16,
-    "pcmRouterSocket": "/run/homepi/pcm-router.sock",
+    "pcmRouterSocket": "/run/homepi/audio/pcm-router.sock",
     "databasePath": "/opt/homepi/runtime/state/metadata.db"
   }
 }

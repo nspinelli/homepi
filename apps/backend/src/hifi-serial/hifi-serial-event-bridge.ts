@@ -6,7 +6,6 @@ import type { Logger } from "@homepi/core-logging";
 
 import type { EventBroadcaster } from "../event-broadcaster.js";
 import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
-import { mapEnvelopeToStatusPatch } from "../status/service-event-handlers.js";
 import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
 
 /**
@@ -122,7 +121,6 @@ export class HifiSerialEventBridge {
       this.socket = null;
       this.setConnected(false);
       if (!this.stopped) {
-        this.options.coordinator.markServiceOffline("hifiSerial", "hifi-event-bridge");
         this.reconnect.scheduleReconnect();
       }
     });
@@ -161,14 +159,7 @@ export class HifiSerialEventBridge {
     const envelope = parsed as EventEnvelope;
     this.options.broadcaster.broadcast(envelope);
 
-    const patch = mapEnvelopeToStatusPatch(envelope);
-    if (patch) {
-      this.options.coordinator.patchAndBroadcast(
-        patch,
-        "hifi-event-bridge",
-        envelope.timestamp
-      );
-    } else if (envelope.timestamp) {
+    if (envelope.timestamp) {
       this.options.coordinator.patchAndBroadcast(
         {},
         "hifi-event-bridge",

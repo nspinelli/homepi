@@ -16,7 +16,7 @@ EnvironmentFile=-/opt/homepi/services/usb-devices/env/.env
 Restart=on-failure
 RestartSec=10
 StartLimitAction=none
-RuntimeDirectory=homepi
+RuntimeDirectory=homepi/usb
 RuntimeDirectoryPreserve=yes
 
 [Install]

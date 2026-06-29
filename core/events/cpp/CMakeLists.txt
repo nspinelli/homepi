@@ -8,6 +8,7 @@ set(HOMEPI_TRANSPORT_CPP "${CMAKE_CURRENT_SOURCE_DIR}/../../transport/cpp")
 add_subdirectory(${HOMEPI_TRANSPORT_CPP} ${CMAKE_BINARY_DIR}/homepi_core_transport)
 
 add_library(homepi_core_events STATIC
+  src/broker-protocol.cpp
   src/event-envelope.cpp
   src/event-emitter.cpp
   src/broker.cpp

@@ -3,11 +3,13 @@ import type { ServiceConfig } from "@homepi/core-config";
 import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
 import type { MetadataClient } from "../metadata/metadata-client.js";
 import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
-import type { SystemStatusSnapshot } from "../types/system-status-types.js";
+import type { HealthClient } from "../health/health-client.js";
+import { deriveAudioServiceStatus } from "./derive-audio-service-status.js";
 import type { ShairportRemoteClient } from "./shairport-remote-client.js";
 import { readAudioRealtimeSnapshot } from "./read-audio-realtime-snapshot.js";
 import { isBrokerAudioSnapshotEnabled } from "./audio-ui-bridge.js";
 import type { AudioBrokerSnapshotStore } from "./audio-broker-snapshot-store.js";
+import { resolveRuntimeSocketPaths } from "../runtime-socket-paths.js";
 
 /**
  * Aggregated audio module snapshot for initial page load.
@@ -80,7 +82,7 @@ export async function buildAudioSnapshot(
     pcmClient: PcmRouterClient;
     metadataClient: MetadataClient;
     shairportRemote: ShairportRemoteClient;
-    systemStatus: SystemStatusSnapshot;
+    healthClient: HealthClient;
     brokerSnapshotStore?: AudioBrokerSnapshotStore;
   },
   correlationId: string
@@ -88,7 +90,7 @@ export async function buildAudioSnapshot(
   const useBrokerCache =
     isBrokerAudioSnapshotEnabled() && deps.brokerSnapshotStore?.hasAnySnapshot() === true;
 
-  const [hifiSnapshot, shairportSettings, pcmSnapshot, metadataSnapshot, hifiHealth] =
+  const [hifiSnapshot, shairportSettings, pcmSnapshot, metadataSnapshot, hifiHealth, healthSnapshot] =
     await Promise.all([
     useBrokerCache && deps.brokerSnapshotStore?.getHifiSnapshot()
       ? Promise.resolve(deps.brokerSnapshotStore.getHifiSnapshot())
@@ -101,6 +103,7 @@ export async function buildAudioSnapshot(
       :     deps.pcmClient.getSnapshot(correlationId).catch(() => null),
     deps.metadataClient.getSnapshot(correlationId).catch(() => null),
     deps.hifiClient.getHealth(correlationId).catch(() => null),
+    deps.healthClient.getSnapshot(correlationId).catch(() => null),
   ]);
 
   const controller =
@@ -124,16 +127,34 @@ export async function buildAudioSnapshot(
 
   const ownerZoneId = pcmSnapshot?.ownerZoneId ?? 0;
   const activeStack = pcmSnapshot?.activeStack ?? [];
-  const hasActiveRoute =
-    ownerZoneId > 0 || activeStack.length > 0;
+  const metadataOwnerZoneId =
+    metadataSnapshot?.ownerZoneId ?? metadataSnapshot?.zoneId ?? 0;
+  const resolvedOwnerZoneId = ownerZoneId > 0 ? ownerZoneId : metadataOwnerZoneId;
+  const resolvedActiveStack =
+    activeStack.length > 0
+      ? activeStack
+      : metadataOwnerZoneId > 0
+        ? [metadataOwnerZoneId]
+        : [];
+  const hasActiveRoute = resolvedOwnerZoneId > 0 || resolvedActiveStack.length > 0;
+  const hasNowPlayingMetadata =
+    Boolean(
+      metadataSnapshot?.title?.trim() ||
+        metadataSnapshot?.artist?.trim() ||
+        metadataSnapshot?.clientName?.trim() ||
+        metadataSnapshot?.playing
+    ) || metadataOwnerZoneId > 0;
+  const showNowPlaying = hasActiveRoute || hasNowPlayingMetadata;
   let durationMs = metadataSnapshot?.durationMs ?? 0;
 
   let positionMs = metadataSnapshot?.positionMs ?? 0;
   let playing = metadataSnapshot?.playing ?? false;
   let progressSyncedAt: number | undefined;
-  const realtimeSocketPath = `${deps.config.runtime.paths.socketDir}/audio-realtime.sock`;
+  const realtimeSocketPath = resolveRuntimeSocketPaths(
+    deps.config.runtime.paths.socketDir
+  ).audioRealtime;
   const realtimeFrame = await readAudioRealtimeSnapshot(realtimeSocketPath).catch(() => null);
-  if (realtimeFrame && realtimeFrame.ownerZoneId === ownerZoneId) {
+  if (realtimeFrame && realtimeFrame.ownerZoneId === resolvedOwnerZoneId) {
     positionMs = realtimeFrame.positionMs;
     playing = realtimeFrame.playing || playing;
     if (realtimeFrame.durationMs > 0) {
@@ -158,8 +179,8 @@ export async function buildAudioSnapshot(
     groups,
     shairportZoneSettings: shairportSettings.shairportZoneSettings,
     pcm: {
-      ownerZoneId: pcmSnapshot?.ownerZoneId ?? 0,
-      activeStack: pcmSnapshot?.activeStack ?? [],
+      ownerZoneId: resolvedOwnerZoneId,
+      activeStack: resolvedActiveStack,
       pendingOwnerZoneId: pcmSnapshot?.pendingOwnerZoneId ?? 0,
       dacState: pcmSnapshot?.dacState ?? "unknown",
       profileMode: pcmSnapshot?.profileMode,
@@ -169,7 +190,7 @@ export async function buildAudioSnapshot(
       profileRevision: pcmSnapshot?.profileRevision,
       profileSource: pcmSnapshot?.profileSource,
       audioBridgeState: pcmSnapshot?.audioBridgeState,
-      metadata: hasActiveRoute
+      metadata: showNowPlaying
         ? {
             title: metadataSnapshot?.title,
             artist: metadataSnapshot?.artist,
@@ -182,7 +203,7 @@ export async function buildAudioSnapshot(
             updatedAt: metadataSnapshot?.updatedAt,
           }
         : {},
-      playback: hasActiveRoute
+      playback: showNowPlaying
         ? {
             playing,
             positionMs,
@@ -195,15 +216,9 @@ export async function buildAudioSnapshot(
             durationMs: 0,
             progressSyncedAt: Date.now(),
           },
-      hasCoverArt: hasActiveRoute && metadataSnapshot?.hasCoverArt === true,
+      hasCoverArt: showNowPlaying && metadataSnapshot?.hasCoverArt === true,
     },
-    services: {
-      hifiSerial: deps.systemStatus.hifiSerial,
-      shairport: deps.systemStatus.shairport,
-      pcmRouter: deps.systemStatus.pcmRouter,
-      nqptp: deps.systemStatus.nqptp,
-      metadata: deps.systemStatus.metadata,
-    },
+    services: deriveAudioServiceStatus(healthSnapshot),
     hifiConnected: hifiHealth?.connected === true,
   };
 }

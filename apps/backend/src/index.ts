@@ -16,6 +16,8 @@ import { AudioBrokerSnapshotStore } from "./audio/audio-broker-snapshot-store.js
 import { PagingClient } from "./audio/paging/paging-client.js";
 import { PagingRoutes } from "./audio/paging/paging-routes.js";
 import { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
+import { resolveRuntimeSocketPaths } from "./runtime-socket-paths.js";
+import { HealthClient } from "./health/health-client.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, "..", "config", "service-config.json");
@@ -41,20 +43,6 @@ const logger = createLogger({
 
 const statusStore = new SystemStatusStore(
   {
-    backend: "healthy",
-    config: configLoaded ? "loaded" : "invalid",
-    logging: "active",
-    runtime: "running",
-    transport: "ready",
-    events: "ready",
-    state: "ready",
-    api: "ready",
-    usbDevices: "offline",
-    hifiSerial: "offline",
-    nqptp: "offline",
-    metadata: "offline",
-    pcmRouter: "offline",
-    shairport: "offline",
     uptimeMs: 0,
     cpuTempC: null,
     lastEventAt: null,
@@ -62,16 +50,17 @@ const statusStore = new SystemStatusStore(
   startedAt
 );
 
-const usbSocketPath = `${serviceConfig.runtime.paths.socketDir}/usb-devices.sock`;
+const socketPaths = resolveRuntimeSocketPaths(serviceConfig.runtime.paths.socketDir);
+const usbSocketPath = socketPaths.usbDevices;
 const usbDevicesClient = new UsbDevicesClient({ socketPath: usbSocketPath });
 const usbRoutes = new UsbDevicesRoutes({ client: usbDevicesClient, logger });
 
-const hifiSocketPath = `${serviceConfig.runtime.paths.socketDir}/hifi-serial.sock`;
-const pcmRouterSocketPath = `${serviceConfig.runtime.paths.socketDir}/pcm-router.sock`;
-const metadataSocketPath = `${serviceConfig.runtime.paths.socketDir}/metadata.sock`;
-const audioRealtimeSocketPath = `${serviceConfig.runtime.paths.socketDir}/audio-realtime.sock`;
-const eventsBrokerSocketPath = `${serviceConfig.runtime.paths.socketDir}/events.sock`;
-const pagingSocketPath = `${serviceConfig.runtime.paths.socketDir}/audio-paging.sock`;
+const hifiSocketPath = socketPaths.hifiSerial;
+const pcmRouterSocketPath = socketPaths.pcmRouter;
+const metadataSocketPath = socketPaths.metadata;
+const audioRealtimeSocketPath = socketPaths.audioRealtime;
+const eventsBrokerSocketPath = socketPaths.broker;
+const pagingSocketPath = socketPaths.paging;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
 const pcmRouterClient = new PcmRouterClient({ socketPath: pcmRouterSocketPath });
@@ -88,12 +77,13 @@ const pagingApiKeyRoutes = new PagingApiKeyRoutes({
   client: pagingClient,
   logger,
 });
+const healthClient = new HealthClient(socketPaths.health);
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
   metadataClient,
   shairportRemote: shairportRemoteClient,
-  statusStore,
+  healthClient,
   config: serviceConfig,
   logger,
   brokerSnapshotStore,
@@ -126,11 +116,10 @@ const server = createHttpServer({
   pcmRouterSocketPath,
   metadataSocketPath,
   audioRealtimeSocketPath,
-  eventsBrokerSocketPath,
+  eventsBrokerSocketPath: socketPaths.broker,
+  brokerSocketPath: socketPaths.broker,
+  healthSocketPath: socketPaths.health,
   usbDevicesSocketPath: usbSocketPath,
-  usbDevicesClient,
-  hifiSerialClient,
-  pcmRouterClient,
   metadataClient,
   brokerSnapshotStore,
 });

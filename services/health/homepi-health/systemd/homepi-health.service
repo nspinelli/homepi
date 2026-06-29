@@ -1,0 +1,18 @@
+[Unit]
+Description=HomePi Health Observer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+RuntimeDirectory=homepi/health
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/node /opt/homepi/services/health/homepi-health/dist/main.js
+Restart=on-failure
+RestartSec=2
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

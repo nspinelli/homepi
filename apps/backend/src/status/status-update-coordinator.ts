@@ -1,15 +1,9 @@
 import type { EventBroadcaster } from "../event-broadcaster.js";
 import type { SystemStatusStore } from "../system-status-store.js";
-import type { SystemStatusSnapshot } from "../types/system-status-types.js";
+import type { HostMetricsSnapshot } from "../types/system-status-types.js";
 import type { WsHandler } from "../ws-handler.js";
 
-const SERVICE_STATUS_FIELDS: (keyof SystemStatusSnapshot)[] = [
-  "usbDevices",
-  "hifiSerial",
-  "nqptp",
-  "metadata",
-  "pcmRouter",
-  "shairport",
+const HOST_METRICS_FIELDS: (keyof HostMetricsSnapshot)[] = [
   "cpuTempC",
   "lastEventAt",
 ];
@@ -18,7 +12,7 @@ const SERVICE_STATUS_FIELDS: (keyof SystemStatusSnapshot)[] = [
  * Options for the status update coordinator.
  */
 export interface StatusUpdateCoordinatorOptions {
-  /** Authoritative status store. */
+  /** Authoritative host metrics store. */
   statusStore: SystemStatusStore;
   /** SSE event broadcaster. */
   broadcaster: EventBroadcaster;
@@ -27,7 +21,7 @@ export interface StatusUpdateCoordinatorOptions {
 }
 
 /**
- * Single write path for system status patches with change detection and SSE broadcast.
+ * Single write path for host metric patches with change detection and live broadcast.
  */
 export class StatusUpdateCoordinator {
   /**
@@ -36,53 +30,46 @@ export class StatusUpdateCoordinator {
   constructor(private readonly options: StatusUpdateCoordinatorOptions) {}
 
   /**
-   * Patches the status store and broadcasts a delta when service fields change.
-   * @param patch - Partial status update.
+   * Patches host metrics and broadcasts a delta when tracked fields change.
+   * @param patch - Partial host metrics update.
    * @param source - Update source label for correlation ids.
    * @param eventTimestamp - Optional ISO timestamp for lastEventAt.
    */
   patchAndBroadcast(
-    patch: Partial<SystemStatusSnapshot>,
+    patch: Partial<HostMetricsSnapshot>,
     source: string,
     eventTimestamp?: string
   ): void {
     const before = this.options.statusStore.getStatus();
-    const merged: Partial<SystemStatusSnapshot> = {
+    const merged: Partial<HostMetricsSnapshot> = {
       ...patch,
       ...(eventTimestamp ? { lastEventAt: eventTimestamp } : {}),
     };
 
-    if (!this.hasServiceFieldChange(before, merged)) {
+    if (!this.hasHostFieldChange(before, merged)) {
       if (eventTimestamp && before.lastEventAt !== eventTimestamp) {
         this.options.statusStore.patchStatus({ lastEventAt: eventTimestamp });
+        this.broadcastDelta(source, eventTimestamp);
       }
       return;
     }
 
     this.options.statusStore.patchStatus(merged);
+    this.broadcastDelta(source, eventTimestamp);
+  }
+
+  private broadcastDelta(source: string, eventTimestamp?: string): void {
     const correlationId = `${source}-${Date.now()}`;
     const emittedAt = eventTimestamp ?? new Date().toISOString();
     this.options.broadcaster.broadcastStatusDelta(correlationId, emittedAt);
     this.options.wsHandler?.broadcastStatusDelta(correlationId);
   }
 
-  /**
-   * Marks a service offline when its event bridge disconnects.
-   * @param field - Status store service field.
-   * @param source - Bridge source label.
-   */
-  markServiceOffline(
-    field: "usbDevices" | "hifiSerial" | "pcmRouter" | "metadata",
-    source: string
-  ): void {
-    this.patchAndBroadcast({ [field]: "offline" }, source);
-  }
-
-  private hasServiceFieldChange(
-    before: SystemStatusSnapshot,
-    patch: Partial<SystemStatusSnapshot>
+  private hasHostFieldChange(
+    before: HostMetricsSnapshot,
+    patch: Partial<HostMetricsSnapshot>
   ): boolean {
-    for (const key of SERVICE_STATUS_FIELDS) {
+    for (const key of HOST_METRICS_FIELDS) {
       if (key in patch && patch[key] !== before[key]) {
         return true;
       }

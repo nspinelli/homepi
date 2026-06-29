@@ -4,10 +4,12 @@ import type {
   ApiResponse,
   ConnectionState,
   CoreStatusPayload,
+  DashboardLoadState,
   EventEnvelope,
   HealthReport,
-  SystemStatusSnapshot,
+  HostMetricsSnapshot,
 } from "../types/dashboard-types.js";
+import { isUiVisibleEvent } from "../lib/activity-log-filter.js";
 
 /**
  * Dashboard data and live connection state for the system status slice.
@@ -15,13 +17,16 @@ import type {
 export interface SystemDashboardState {
   health: HealthReport | null;
   coreStatus: CoreStatusPayload | null;
-  systemStatus: SystemStatusSnapshot | null;
+  hostMetrics: HostMetricsSnapshot | null;
   lastEvent: EventEnvelope | null;
   recentEvents: EventEnvelope[];
   sseState: ConnectionState;
   wsState: ConnectionState;
   error: string | null;
+  transportError: string | null;
+  loadState: DashboardLoadState;
   loading: boolean;
+  lastFetchedAt: string | null;
 }
 
 const MAX_RECENT_EVENTS = 200;
@@ -30,23 +35,65 @@ const WS_RECONNECT_MS = 3_000;
 const initialState: SystemDashboardState = {
   health: null,
   coreStatus: null,
-  systemStatus: null,
+  hostMetrics: null,
   lastEvent: null,
   recentEvents: [],
   sseState: "disconnected",
   wsState: "disconnected",
   error: null,
+  transportError: null,
+  loadState: "loading",
   loading: true,
+  lastFetchedAt: null,
 };
 
 /**
- * Prepends an event to the rolling recent-events buffer.
+ * Extracts host metrics from SSE/WS status payloads.
+ * @param payload - Status snapshot or delta payload.
+ * @returns Host metrics when present.
+ */
+function extractHostMetrics(payload: Record<string, unknown> | undefined): HostMetricsSnapshot | null {
+  if (!payload) {
+    return null;
+  }
+
+  const snapshot = (payload.snapshot ?? payload.status) as HostMetricsSnapshot | undefined;
+  if (
+    snapshot &&
+    typeof snapshot.uptimeMs === "number" &&
+    "cpuTempC" in snapshot &&
+    "lastEventAt" in snapshot
+  ) {
+    return snapshot;
+  }
+
+  return null;
+}
+
+/**
+ * Prepends an event to the rolling recent-events buffer when UI-visible.
  * @param events - Current recent events.
  * @param envelope - New event envelope.
  * @returns Updated recent events list.
  */
 function prependRecentEvent(events: EventEnvelope[], envelope: EventEnvelope): EventEnvelope[] {
+  if (!isUiVisibleEvent(envelope)) {
+    return events;
+  }
   return [envelope, ...events.filter((item) => item.id !== envelope.id)].slice(0, MAX_RECENT_EVENTS);
+}
+
+/**
+ * Extracts a human-readable error from an API response.
+ * @param response - Fetch response.
+ * @param json - Parsed API envelope.
+ * @returns Error message.
+ */
+function extractApiError(response: Response, json: ApiResponse<unknown>): string {
+  if (json.error?.message) {
+    return json.error.message;
+  }
+  return `Request failed (${response.status} ${response.statusText})`;
 }
 
 /**
@@ -63,26 +110,25 @@ export function useSystemDashboardState(): {
   const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const wsGenerationRef = useRef(0);
   const wsReconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restSucceededRef = useRef(false);
 
   const applyEvent = useCallback((envelope: EventEnvelope) => {
-    const snapshot =
-      envelope.event === "system_status_snapshot"
-        ? (envelope.payload.snapshot as SystemStatusSnapshot | undefined)
-        : envelope.event === "system_status_delta"
-          ? (envelope.payload.status as SystemStatusSnapshot | undefined)
-          : undefined;
+    const hostMetrics =
+      envelope.event === "system_status_snapshot" || envelope.event === "system_status_delta"
+        ? extractHostMetrics(envelope.payload)
+        : null;
 
     setState((current) => ({
       ...current,
       lastEvent: envelope,
       recentEvents: prependRecentEvent(current.recentEvents, envelope),
-      systemStatus: snapshot ?? current.systemStatus,
+      hostMetrics: hostMetrics ?? current.hostMetrics,
     }));
   }, []);
 
   const fetchRest = useCallback(async () => {
     const config = getAppConfig();
-    setState((current) => ({ ...current, loading: true, error: null }));
+    setState((current) => ({ ...current, loading: true, error: null, loadState: "loading" }));
 
     try {
       const [healthRes, coreRes] = await Promise.all([
@@ -93,22 +139,40 @@ export function useSystemDashboardState(): {
       const healthJson = (await healthRes.json()) as ApiResponse<HealthReport>;
       const coreJson = (await coreRes.json()) as ApiResponse<CoreStatusPayload>;
 
-      if (!healthJson.ok || !coreJson.ok) {
-        throw new Error("One or more status endpoints returned an error envelope");
+      if (!healthRes.ok) {
+        throw new Error(extractApiError(healthRes, healthJson));
       }
+      if (!coreRes.ok) {
+        throw new Error(extractApiError(coreRes, coreJson));
+      }
+      if (!healthJson.ok || !coreJson.ok) {
+        throw new Error(
+          healthJson.error?.message ??
+            coreJson.error?.message ??
+            "One or more status endpoints returned an error envelope"
+        );
+      }
+
+      restSucceededRef.current = true;
 
       setState((current) => ({
         ...current,
         health: healthJson.data ?? null,
         coreStatus: coreJson.data ?? null,
-        systemStatus: coreJson.data?.system ?? current.systemStatus,
+        hostMetrics: coreJson.data?.host ?? current.hostMetrics,
         loading: false,
+        loadState: coreJson.data?.healthServiceReachable === false ? "stale" : "ready",
+        error: coreJson.data?.healthServiceReachable === false
+          ? "Health monitoring is unavailable. Showing last known data where possible."
+          : null,
+        lastFetchedAt: new Date().toISOString(),
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load status";
       setState((current) => ({
         ...current,
         loading: false,
+        loadState: "error",
         error: message,
       }));
     }
@@ -122,11 +186,20 @@ export function useSystemDashboardState(): {
     eventSourceRef.current = source;
 
     source.onopen = () => {
-      setState((current) => ({ ...current, sseState: "connected", error: null }));
+      setState((current) => ({
+        ...current,
+        sseState: "connected",
+        transportError:
+          current.transportError?.includes("SSE") === true ? null : current.transportError,
+      }));
     };
 
     source.onerror = () => {
-      setState((current) => ({ ...current, sseState: "error" }));
+      setState((current) => ({
+        ...current,
+        sseState: "error",
+        transportError: "Live event stream (SSE) is disconnected.",
+      }));
     };
 
     const handleEnvelope = (event: MessageEvent<string>) => {
@@ -137,6 +210,7 @@ export function useSystemDashboardState(): {
         setState((current) => ({
           ...current,
           error: "Failed to parse SSE event envelope",
+          loadState: restSucceededRef.current ? "stale" : "error",
         }));
       }
     };
@@ -156,7 +230,12 @@ export function useSystemDashboardState(): {
       if (generation !== wsGenerationRef.current) {
         return;
       }
-      setState((current) => ({ ...current, wsState: "connected", error: null }));
+      setState((current) => ({
+        ...current,
+        wsState: "connected",
+        transportError:
+          current.transportError?.includes("WebSocket") === true ? null : current.transportError,
+      }));
 
       if (pingTimerRef.current) {
         clearInterval(pingTimerRef.current);
@@ -172,7 +251,11 @@ export function useSystemDashboardState(): {
       if (generation !== wsGenerationRef.current) {
         return;
       }
-      setState((current) => ({ ...current, wsState: "error" }));
+      setState((current) => ({
+        ...current,
+        wsState: "error",
+        transportError: "Live status WebSocket is disconnected.",
+      }));
     };
 
     socket.onclose = () => {
@@ -183,7 +266,11 @@ export function useSystemDashboardState(): {
         clearInterval(pingTimerRef.current);
         pingTimerRef.current = null;
       }
-      setState((current) => ({ ...current, wsState: "disconnected" }));
+      setState((current) => ({
+        ...current,
+        wsState: "disconnected",
+        transportError: "Live status WebSocket is disconnected.",
+      }));
       if (wsReconnectTimerRef.current) {
         clearTimeout(wsReconnectTimerRef.current);
       }
@@ -198,19 +285,21 @@ export function useSystemDashboardState(): {
       try {
         const envelope = JSON.parse(String(message.data)) as {
           type?: string;
-          payload?: { snapshot?: SystemStatusSnapshot; action?: string };
+          payload?: Record<string, unknown>;
         };
 
-        if (envelope.type === "snapshot" && envelope.payload?.snapshot) {
+        const hostMetrics = extractHostMetrics(envelope.payload);
+        if (hostMetrics) {
           setState((current) => ({
             ...current,
-            systemStatus: envelope.payload?.snapshot ?? current.systemStatus,
+            hostMetrics,
           }));
         }
       } catch {
         setState((current) => ({
           ...current,
           error: "Failed to parse WebSocket message",
+          loadState: restSucceededRef.current ? "stale" : "error",
         }));
       }
     };

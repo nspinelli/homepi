@@ -40,20 +40,10 @@ Orchestrator::Orchestrator(ServiceConfig config, ServiceSocketClient client,
 void Orchestrator::publish_hifi_command(const std::string& event,
                                         const std::string& payload_json,
                                         const std::string& correlation_id) const {
-  if (events_client_ == nullptr) {
-    client_.execute_hifi_command_async(event, payload_json);
-    return;
-  }
-
-  homepi::events::EventEnvelope envelope;
-  envelope.source = config_.service;
-  envelope.topic = "modules.hifi.command";
-  envelope.event = event;
-  envelope.correlation_id = correlation_id;
-  envelope.timestamp = homepi::events::iso_timestamp();
-  envelope.id = config_.service + "-" + event + "-" + correlation_id;
-  envelope.payload_json = "{" + payload_json + "}";
-  events_client_->publish(homepi::events::build_event_line(envelope));
+  (void)correlation_id;
+  // Use the Hi-Fi command socket directly. Publishing back through the broker from
+  // inside the broker subscribe callback is unreliable on the shared connection.
+  client_.execute_hifi_command_async(event, payload_json);
 }
 
 void Orchestrator::refresh_airplay_source() {

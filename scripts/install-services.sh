@@ -3,8 +3,10 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=scripts/lib/install-common.sh
+source "${REPO_ROOT}/scripts/lib/install-common.sh"
 
-# Explicit install order (v1). Add new services here when introduced.
+# Explicit install order
 SERVICE_DIRS=(
   "homepi-usb-devices"
   "homepi-nqptp"

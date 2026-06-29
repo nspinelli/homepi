@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/service-registry/registry.schema.json",
+  "title": "HomePi Service Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "modules", "services"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/moduleEntry" }
+    },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/serviceEntry" }
+    }
+  },
+  "$defs": {
+    "moduleEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "facadeService",
+        "commandSocket",
+        "icon",
+        "capabilities"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "displayName": { "type": "string", "minLength": 1 },
+        "facadeService": {
+          "type": "string",
+          "pattern": "^homepi-[a-z0-9-]+$"
+        },
+        "commandSocket": { "type": "string", "minLength": 1 },
+        "icon": { "type": "string", "pattern": "^/" },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "planned": { "type": "boolean" }
+      }
+    },
+    "serviceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module",
+        "unit",
+        "role",
+        "critical",
+        "capabilitiesAffected",
+        "userFacingFailureCategory"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^homepi-[a-z0-9@.-]+$"
+        },
+        "module": { "type": "string", "minLength": 1 },
+        "unit": { "type": "string", "minLength": 1 },
+        "role": {
+          "type": "string",
+          "enum": [
+            "module-facade",
+            "hardware-controller",
+            "data-plane",
+            "platform",
+            "event-fanout",
+            "health-observer",
+            "api-gateway"
+          ]
+        },
+        "commandSocket": { "type": "string" },
+        "critical": { "type": "boolean" },
+        "capabilitiesAffected": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "userFacingFailureCategory": { "type": "string", "minLength": 1 },
+        "planned": { "type": "boolean" },
+        "legacySocket": { "type": "string" }
+      }
+    }
+  }
+}

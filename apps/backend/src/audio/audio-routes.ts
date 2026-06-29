@@ -8,7 +8,7 @@ import { createErrorResponse, createSuccessResponse } from "@homepi/core-api";
 import type { HifiSerialClient } from "../hifi-serial/hifi-serial-client.js";
 import type { MetadataClient } from "../metadata/metadata-client.js";
 import type { PcmRouterClient } from "../pcm-router/pcm-router-client.js";
-import type { SystemStatusStore } from "../system-status-store.js";
+import type { HealthClient } from "../health/health-client.js";
 import { buildAudioSnapshot } from "./build-audio-snapshot.js";
 import {
   requiresShairportRestart,
@@ -34,8 +34,8 @@ export interface AudioRouteDeps {
   metadataClient: MetadataClient;
   /** Shairport MQTT remote-control client. */
   shairportRemote: ShairportRemoteClient;
-  /** System status store. */
-  statusStore: SystemStatusStore;
+  /** Health observer client for service rollups. */
+  healthClient: HealthClient;
   /** Loaded service configuration. */
   config: ServiceConfig;
   /** Structured logger. */
@@ -90,7 +90,7 @@ export class AudioRoutes {
             pcmClient: this.deps.pcmClient,
             metadataClient: this.deps.metadataClient,
             shairportRemote: this.deps.shairportRemote,
-            systemStatus: this.deps.statusStore.getStatus(),
+            healthClient: this.deps.healthClient,
             brokerSnapshotStore: this.deps.brokerSnapshotStore,
           },
           correlationId

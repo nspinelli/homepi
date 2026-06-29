@@ -14,11 +14,11 @@ struct ServiceConfig {
   std::string generated_dir = "/opt/homepi/runtime/generated";
   std::string socket_dir = "/run/homepi";
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
-  std::string socket_path = "/run/homepi/hifi-serial.sock";
+  std::string socket_path = "/run/homepi/audio/hifi-serial.sock";
   std::string virtual_port = "/dev/vHifi";
   int baud_rate = 9600;
   int command_interval_ms = 50;
-  std::string events_socket = "/run/homepi/events.sock";
+  std::string events_socket = "/run/homepi/broker/broker.sock";
 };
 
 /** Daemon health for API consumers. */

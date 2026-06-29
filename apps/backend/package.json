@@ -16,6 +16,8 @@
     "@homepi/core-events": "workspace:*",
     "@homepi/core-health": "workspace:*",
     "@homepi/core-logging": "workspace:*",
+    "@homepi/core-messaging": "workspace:*",
+    "@homepi/core-service-registry": "workspace:*",
     "@homepi/core-state": "workspace:*",
     "@homepi/core-transport": "workspace:*",
     "mqtt": "^5.13.0",

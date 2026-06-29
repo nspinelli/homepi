@@ -52,7 +52,7 @@ struct ServiceConfig {
   std::string state_dir = "/opt/homepi/runtime/state";
   std::string socket_dir = "/run/homepi";
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
-  std::string socket_path = "/run/homepi/usb-devices.sock";
+  std::string socket_path = "/run/homepi/usb/usb.sock";
   std::string serial_symlink = "vHifi";
   std::string udev_rules_relative = "udev/99-homepi-usb-devices.rules";
   /** Stable ALSA card ID for primary audio (pcm-router). */

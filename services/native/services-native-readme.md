@@ -1,23 +1,23 @@
 # HomePi Native Services
 
-C++ daemons and native services under `services/`. Use `core/logging` (C++) and `core/transport` (C++) headers. Control-plane messaging uses `core/events` (`/run/homepi/events.sock`) where noted.
+C++ daemons and native services under `services/`. Use `core/logging` (C++) and `core/transport` (C++) headers. Event fan-out uses `homepi-broker` on `/run/homepi/broker/broker.sock`.
 
 ## Production install order
 
 Installed by `scripts/install-services.sh` (via `install-operational.sh`):
 
-| Service | systemd unit | Socket / notes |
-|---------|--------------|----------------|
-| USB devices | `homepi-usb-devices` | `/run/homepi/usb-devices.sock` |
+| Service | systemd unit | Canonical socket / notes |
+|---------|--------------|--------------------------|
+| USB devices | `homepi-usb-devices` | `/run/homepi/usb/usb.sock` |
 | NQPTP | `homepi-nqptp` | journald only |
-| PCM router | `homepi-pcm-router` | `/run/homepi/pcm-router.sock` |
-| Metadata | `homepi-metadata` | `/run/homepi/metadata.sock`, `/run/homepi/audio-realtime.sock` |
-| HiFi serial | `homepi-hifi-serial` | `/run/homepi/hifi-serial.sock` |
+| PCM router | `homepi-pcm-router` | `/run/homepi/audio/pcm-router.sock` |
+| Metadata | `homepi-metadata` | `/run/homepi/audio/metadata.sock`, `/run/homepi/audio/audio-realtime.sock` |
+| HiFi serial | `homepi-hifi-serial` | `/run/homepi/audio/hifi-serial.sock` |
 | Shairport sync | `homepi-shairport-supervisor`, `homepi-shairport@N` | Mosquitto remote |
-| Audio orchestrator | `homepi-audio-orchestrator` | broker only |
-| Audio paging | `homepi-audio-paging` | `/run/homepi/audio-paging.sock` |
+| Audio orchestrator | `homepi-audio-orchestrator` | broker subscribe only |
+| Audio paging | `homepi-audio-paging` | `/run/homepi/audio/paging.sock` |
 
-**Core broker (not under `services/`):** `homepi-events` — `core/events/scripts/install.sh`
+**Platform services (Node):** `homepi-broker`, `homepi-health`, `homepi-audio`, `homepi-sensors` — installed by `scripts/install-node-services.sh`
 
 **SSH hardening:** `homepi-ensure-ssh` — `scripts/install-ensure-ssh.sh` (via `install-operational.sh`)
 

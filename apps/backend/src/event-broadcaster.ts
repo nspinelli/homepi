@@ -130,7 +130,7 @@ export class EventBroadcaster {
         topic: STATUS_TOPIC,
         event: "heartbeat",
         correlationId: `heartbeat-${Date.now()}`,
-        payload: { kind: "heartbeat" },
+        payload: { kind: "heartbeat", uiVisible: false },
       });
       this.broadcast(envelope);
     }, 30_000);

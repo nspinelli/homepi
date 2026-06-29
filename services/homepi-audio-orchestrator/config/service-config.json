@@ -11,9 +11,9 @@
     }
   },
   "sockets": {
-    "eventsSocket": "/run/homepi/events.sock",
-    "pcmRouterSocket": "/run/homepi/pcm-router.sock",
-    "hifiSerialSocket": "/run/homepi/hifi-serial.sock"
+    "eventsSocket": "/run/homepi/broker/broker.sock",
+    "pcmRouterSocket": "/run/homepi/audio/pcm-router.sock",
+    "hifiSerialSocket": "/run/homepi/audio/hifi-serial.sock"
   },
   "defaults": {
     "airplaySource": 5

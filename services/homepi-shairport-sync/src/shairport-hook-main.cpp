@@ -1,3 +1,4 @@
+#include "homepi/events/broker-protocol.hpp"
 #include "homepi/events/event-envelope.hpp"
 
 #include "homepi/transport/unix-socket.hpp"
@@ -15,7 +16,7 @@
 
 namespace {
 
-constexpr const char* kDefaultEventsSocket = "/run/homepi/events.sock";
+constexpr const char* kDefaultEventsSocket = "/run/homepi/broker/broker.sock";
 constexpr const char* kDefaultAirplaySource = "5";
 constexpr const char* kHookSource = "homepi-shairport-hook";
 
@@ -67,6 +68,13 @@ bool publish_event(const std::string& socket_path, const std::string& line) {
   const int fd = homepi::transport::connect_unix_stream_socket(socket_path);
   if (fd < 0) {
     return false;
+  }
+
+  if (homepi::events::is_v2_broker_socket(socket_path)) {
+    const std::string command = homepi::events::build_broker_publish_line(kHookSource, line);
+    const bool ok = write_all(fd, command + "\n");
+    close(fd);
+    return ok;
   }
 
   std::ostringstream register_line;

@@ -11,7 +11,6 @@ import {
   createErrorResponse,
   getRequestCorrelationId,
 } from "@homepi/core-api";
-import { createHealthReport } from "@homepi/core-health";
 import { resolveCorrelationId } from "@homepi/core-logging";
 import { EventBroadcaster } from "./event-broadcaster.js";
 import {
@@ -20,7 +19,8 @@ import {
 } from "./sse-subscribe-bootstrap.js";
 import { SseHandler } from "./sse-handler.js";
 import { WsHandler } from "./ws-handler.js";
-import { buildCoreStatusPayload } from "./core-status-builder.js";
+import { buildCoreStatusPayload, buildHealthReportFromSnapshot } from "./core-status-builder.js";
+import { HealthClient } from "./health/health-client.js";
 import { buildRuntimeStatusPayload } from "./runtime-status-builder.js";
 import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
@@ -29,24 +29,14 @@ import type { AudioRoutes } from "./audio/audio-routes.js";
 import type { PagingRoutes } from "./audio/paging/paging-routes.js";
 import type { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
-import type { HifiSerialClient } from "./hifi-serial/hifi-serial-client.js";
 import { MetadataEventBridge } from "./metadata/metadata-event-bridge.js";
 import { AudioRealtimeBridge } from "./audio/audio-realtime-bridge.js";
 import type { MetadataClient } from "./metadata/metadata-client.js";
 import { PcmRouterEventBridge } from "./pcm-router/pcm-router-event-bridge.js";
-import type { PcmRouterClient } from "./pcm-router/pcm-router-client.js";
 import { JournalLogBridge } from "./logging/journal-log-bridge.js";
-import { FallbackReconciliation } from "./status/fallback-reconciliation.js";
-import { resolveFallbackReconciliation } from "./status/resolve-fallback-reconciliation.js";
-import { JournalServiceStatusBridge } from "./status/journal-service-status-bridge.js";
-import {
-  createStartupSnapshotLoaders,
-  loadStartupSnapshots,
-} from "./status/startup-snapshots.js";
 import { StatusUpdateCoordinator } from "./status/status-update-coordinator.js";
 import { readCpuTemperatureC } from "./system/read-cpu-temperature.js";
 import { UsbDevicesEventBridge } from "./usb-devices/usb-devices-event-bridge.js";
-import type { UsbDevicesClient } from "./usb-devices/usb-devices-client.js";
 import { EventsBrokerBridge } from "./events/events-broker-bridge.js";
 import { isBrokerOnlyAudioSseEnabled } from "./audio/audio-ui-bridge.js";
 import { AudioBrokerSnapshotStore } from "./audio/audio-broker-snapshot-store.js";
@@ -87,15 +77,13 @@ export interface HttpServerOptions {
   audioRealtimeSocketPath?: string;
   /** Unix socket path for USB devices event bridge; omit to disable. */
   usbDevicesSocketPath?: string;
-  /** Unix socket path for core/events broker; omit to disable. */
+  /** Unix socket path for homepi-health; omit to use default. */
+  healthSocketPath?: string;
+  /** Unix socket path for homepi-broker; preferred over legacy events broker. */
+  brokerSocketPath?: string;
+  /** @deprecated Legacy events.sock path — use brokerSocketPath. */
   eventsBrokerSocketPath?: string;
-  /** USB devices socket client for startup snapshots. */
-  usbDevicesClient: UsbDevicesClient;
-  /** HiFi serial socket client for startup snapshots. */
-  hifiSerialClient: HifiSerialClient;
-  /** PCM router socket client for startup snapshots. */
-  pcmRouterClient: PcmRouterClient;
-  /** Metadata socket client for startup snapshots. */
+  /** Metadata socket client for SSE subscribe bootstrap. */
   metadataClient: MetadataClient;
   /** Shared broker snapshot cache for audio REST hydration. */
   brokerSnapshotStore?: AudioBrokerSnapshotStore;
@@ -125,14 +113,20 @@ export function createHttpServer(options: HttpServerOptions): Server {
     audioRealtimeSocketPath,
     usbDevicesSocketPath,
     eventsBrokerSocketPath,
-    usbDevicesClient,
-    hifiSerialClient,
-    pcmRouterClient,
+    healthSocketPath,
+    brokerSocketPath,
     metadataClient,
     brokerSnapshotStore,
   } = options;
 
   const brokerOnlyAudioSse = isBrokerOnlyAudioSseEnabled();
+  const healthClient = new HealthClient(
+    healthSocketPath ?? "/run/homepi/health/health.sock"
+  );
+  const brokerSocket =
+    brokerSocketPath ??
+    eventsBrokerSocketPath ??
+    `${config.runtime.paths.socketDir}/broker/broker.sock`;
 
   const getStatus = () => statusStore.getStatus();
   let audioRealtimeBridge: AudioRealtimeBridge | undefined;
@@ -158,40 +152,22 @@ export function createHttpServer(options: HttpServerOptions): Server {
     wsHandler,
   });
 
-  const bridgeState = {
-    usbDevices: false,
-    hifiSerial: false,
-    pcmRouter: false,
-    metadata: false,
-    eventsBroker: false,
-  };
-
-  const journalServiceStatusBridge = new JournalServiceStatusBridge({
-    logger,
-    coordinator,
-  });
-
   const usbEventBridge = usbDevicesSocketPath
     ? new UsbDevicesEventBridge({
         socketPath: usbDevicesSocketPath,
         logger,
         broadcaster,
         coordinator,
-        onConnectionChange: (connected) => {
-          bridgeState.usbDevices = connected;
-        },
       })
     : undefined;
 
-  const hifiEventBridge = hifiSerialSocketPath
-    ? new HifiSerialEventBridge({
+  const hifiEventBridge =
+    hifiSerialSocketPath
+      ? new HifiSerialEventBridge({
         socketPath: hifiSerialSocketPath,
         logger,
         broadcaster,
         coordinator,
-        onConnectionChange: (connected) => {
-          bridgeState.hifiSerial = connected;
-        },
       })
     : undefined;
 
@@ -202,22 +178,16 @@ export function createHttpServer(options: HttpServerOptions): Server {
         logger,
         broadcaster,
         coordinator,
-        onConnectionChange: (connected) => {
-          bridgeState.pcmRouter = connected;
-        },
       })
     : undefined;
 
   const metadataEventBridge =
-    metadataSocketPath
+    metadataSocketPath && !brokerOnlyAudioSse
       ? new MetadataEventBridge({
         socketPath: metadataSocketPath,
         logger,
         broadcaster,
         coordinator,
-        onConnectionChange: (connected) => {
-          bridgeState.metadata = connected;
-        },
       })
     : undefined;
 
@@ -232,16 +202,13 @@ export function createHttpServer(options: HttpServerOptions): Server {
     : undefined;
   audioRealtimeBridge = audioRealtimeBridgeInstance;
 
-  const eventsBrokerBridge = eventsBrokerSocketPath
+  const eventsBrokerBridge = brokerSocket
     ? new EventsBrokerBridge({
-        socketPath: eventsBrokerSocketPath,
+        socketPath: brokerSocket,
         logger,
         broadcaster,
         coordinator,
         snapshotStore: brokerSnapshotStore,
-        onConnectionChange: (connected) => {
-          bridgeState.eventsBroker = connected;
-        },
       })
     : undefined;
 
@@ -257,29 +224,8 @@ export function createHttpServer(options: HttpServerOptions): Server {
   const journalLogBridge = new JournalLogBridge({
     logger,
     broadcaster,
-    serviceStatusBridge: journalServiceStatusBridge,
   });
   journalLogBridge.start();
-
-  const fallbackSettings = resolveFallbackReconciliation(config);
-  const fallbackReconciliation = new FallbackReconciliation({
-    logger,
-    coordinator,
-    statusStore,
-    usbDevicesClient,
-    hifiSerialClient,
-    getBridgeState: () => ({
-      usbDevices: usbEventBridge?.isConnected() ?? false,
-      hifiSerial: hifiEventBridge?.isConnected() ?? false,
-      pcmRouter: brokerOnlyAudioSse
-        ? (eventsBrokerBridge?.isConnected() ?? false)
-        : (pcmEventBridge?.isConnected() ?? false),
-      metadata: brokerOnlyAudioSse
-        ? (eventsBrokerBridge?.isConnected() ?? false)
-        : (metadataEventBridge?.isConnected() ?? false),
-    }),
-    intervalMs: fallbackSettings.intervalMs,
-  });
 
   const server = createServer((req, res) => {
     handleRequest(req, res);
@@ -308,18 +254,6 @@ export function createHttpServer(options: HttpServerOptions): Server {
       data: { host, port, environment: config.environment },
     });
 
-    const loaders = createStartupSnapshotLoaders({
-      coordinator,
-      usbDevicesClient,
-      hifiSerialClient,
-      pcmRouterClient,
-    });
-    void loadStartupSnapshots(loaders, logger).then(() => {
-      if (fallbackSettings.enabled) {
-        fallbackReconciliation.start();
-      }
-    });
-
     void pollCpuTemperature();
     setInterval(() => {
       void pollCpuTemperature();
@@ -335,7 +269,6 @@ export function createHttpServer(options: HttpServerOptions): Server {
   }
 
   server.on("close", () => {
-    fallbackReconciliation.stop();
     journalLogBridge.stop();
     usbEventBridge?.stop();
     hifiEventBridge?.stop();
@@ -381,7 +314,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     }
 
     if (req.method === "GET" && url.pathname === "/api/health") {
-      handleHealth(res, correlationId);
+      void handleHealth(res, correlationId);
       return;
     }
 
@@ -391,7 +324,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     }
 
     if (req.method === "GET" && url.pathname === "/api/core/status") {
-      handleCoreStatus(res, correlationId);
+      void handleCoreStatus(res, correlationId);
       return;
     }
 
@@ -429,44 +362,21 @@ export function createHttpServer(options: HttpServerOptions): Server {
   }
 
   /**
-   * Returns backend health using core/health and core/api envelopes.
+   * Returns system health proxied from homepi-health.
    */
-  function handleHealth(res: ServerResponse, correlationId: string): void {
-    const system = statusStore.getStatus();
-    const checks = [
-      {
-        name: "http",
-        status: "pass" as const,
-        message: "Backend listening",
-      },
-      {
-        name: "config",
-        status: system.config === "loaded" ? ("pass" as const) : ("fail" as const),
-        message: `Config ${system.config}`,
-      },
-      {
-        name: "core-platform",
-        status:
-          system.backend === "healthy"
-            ? ("pass" as const)
-            : system.backend === "degraded"
-              ? ("warn" as const)
-              : ("fail" as const),
-        message: `Platform ${system.backend}`,
-      },
-    ];
-
-    const report = createHealthReport({
-      service: config.service,
-      checks,
-    });
+  async function handleHealth(res: ServerResponse, correlationId: string): Promise<void> {
+    const snapshot = await healthClient.getSnapshot(correlationId);
+    const report = buildHealthReportFromSnapshot(config, snapshot);
 
     sendJson(
       res,
-      200,
+      snapshot.healthServiceReachable ? 200 : 503,
       createSuccessResponse({
         correlationId,
-        data: report as unknown as Record<string, unknown>,
+        data: {
+          ...report,
+          healthServiceReachable: snapshot.healthServiceReachable,
+        } as unknown as Record<string, unknown>,
       })
     );
   }
@@ -487,13 +397,20 @@ export function createHttpServer(options: HttpServerOptions): Server {
   }
 
   /**
-   * Returns aggregated core service status.
+   * Returns hierarchical module health proxied from homepi-health.
    */
-  function handleCoreStatus(res: ServerResponse, correlationId: string): void {
-    const payload = buildCoreStatusPayload(config, statusStore.getStatus());
+  async function handleCoreStatus(res: ServerResponse, correlationId: string): Promise<void> {
+    const snapshot = await healthClient.getSnapshot(correlationId);
+    const host = statusStore.getStatus();
+    const payload = buildCoreStatusPayload(config, snapshot, {
+      uptimeMs: host.uptimeMs,
+      cpuTempC: host.cpuTempC,
+      lastEventAt: host.lastEventAt,
+    });
+
     sendJson(
       res,
-      200,
+      snapshot.healthServiceReachable ? 200 : 503,
       createSuccessResponse({
         correlationId,
         data: payload as unknown as Record<string, unknown>,

@@ -2,3 +2,4 @@ packages:
   - "tooling/*"
   - "core/*/ts"
   - "apps/*"
+  - "services/*/homepi-*"

@@ -83,23 +83,10 @@ describe("system status vertical slice", () => {
     expect(runtimeDataResult.valid).toBe(true);
   });
 
-  it("creates schema-valid SSE system status envelopes", () => {
+  it("creates schema-valid SSE host metric envelopes", () => {
     const store = new SystemStatusStore({
-      backend: "healthy",
-      config: "loaded",
-      logging: "active",
-      runtime: "running",
-      transport: "ready",
-      events: "ready",
-      state: "ready",
-      api: "ready",
-      usbDevices: "offline",
-      hifiSerial: "offline",
-      nqptp: "offline",
-      metadata: "offline",
-      pcmRouter: "offline",
-      shairport: "offline",
       uptimeMs: 0,
+      cpuTempC: null,
       lastEventAt: null,
     });
 
@@ -122,20 +109,6 @@ describe("system status vertical slice", () => {
     const startedAt = new Date(Date.now() - 5_000);
     const store = new SystemStatusStore(
       {
-        backend: "healthy",
-        config: "loaded",
-        logging: "active",
-        runtime: "running",
-        transport: "ready",
-        events: "ready",
-        state: "ready",
-        api: "ready",
-        usbDevices: "offline",
-        hifiSerial: "offline",
-        nqptp: "offline",
-        metadata: "offline",
-        pcmRouter: "offline",
-        shairport: "offline",
         uptimeMs: 0,
         cpuTempC: null,
         lastEventAt: null,
@@ -148,28 +121,23 @@ describe("system status vertical slice", () => {
     expect(status.uptimeMs).toBeLessThanOrEqual(6_000);
   });
 
-  it("aggregates core status from the state store", () => {
-    const store = new SystemStatusStore({
-      backend: "healthy",
-      config: "loaded",
-      logging: "active",
-      runtime: "running",
-      transport: "ready",
-      events: "ready",
-      state: "ready",
-      api: "ready",
-      usbDevices: "healthy",
-      hifiSerial: "healthy",
-      nqptp: "healthy",
-      metadata: "healthy",
-      pcmRouter: "healthy",
-      shairport: "healthy",
-      uptimeMs: 42,
-      lastEventAt: "2026-05-27T16:00:00.000Z",
-    });
-
-    const payload = buildCoreStatusPayload(testConfig, store.getStatus());
-    expect(payload.services).toHaveLength(13);
-    expect(payload.system.uptimeMs).toBe(42);
+  it("aggregates core status from health snapshot and host metrics", () => {
+    const payload = buildCoreStatusPayload(
+      testConfig,
+      {
+        checkedAt: new Date().toISOString(),
+        healthServiceReachable: true,
+        modules: [],
+        platform: [],
+        services: [],
+      },
+      {
+        uptimeMs: 42,
+        cpuTempC: null,
+        lastEventAt: "2026-05-27T16:00:00.000Z",
+      }
+    );
+    expect(payload.host.uptimeMs).toBe(42);
+    expect(payload).not.toHaveProperty("system");
   });
 });

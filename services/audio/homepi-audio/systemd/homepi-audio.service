@@ -1,0 +1,18 @@
+[Unit]
+Description=HomePi Home Audio Module Facade
+After=network-online.target
+Wants=network-online.target homepi-hifi-serial.service homepi-pcm-router.service
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+RuntimeDirectory=homepi/audio
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/node /opt/homepi/services/audio/homepi-audio/dist/main.js
+Restart=on-failure
+RestartSec=2
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

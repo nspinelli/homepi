@@ -5,37 +5,16 @@
   "data": {
     "service": "homepi-backend",
     "checkedAt": "2026-05-27T16:00:00.000Z",
+    "healthServiceReachable": true,
+    "modules": [],
+    "platform": [],
     "services": [
-      { "name": "config", "status": "loaded", "message": "Service configuration" },
-      { "name": "logging", "status": "active", "message": "Structured logging" },
-      { "name": "runtime", "status": "running", "message": "Process lifecycle" },
-      { "name": "transport", "status": "ready", "message": "SSE and WebSocket" },
-      { "name": "events", "status": "ready", "message": "Event envelopes" },
-      { "name": "state", "status": "ready", "message": "In-memory status store" },
-      { "name": "api", "status": "ready", "message": "HTTP API envelopes" },
-      { "name": "usb-devices", "status": "healthy", "message": "USB device assignments and hotplug" },
-      { "name": "hifi-serial", "status": "offline", "message": "Hi-Fi2 serial controller" },
-      { "name": "nqptp", "status": "healthy", "message": "AirPlay 2 PTP timing (nqptp)" },
-      { "name": "metadata", "status": "healthy", "message": "Shairport Sync metadata reader" },
-      { "name": "pcm-router", "status": "offline", "message": "16-zone PCM routing to primary DAC" },
-      { "name": "shairport", "status": "healthy", "message": "Shairport Sync supervisor and AirPlay zones" }
+      { "name": "homepi-hifi-serial", "status": "healthy", "message": "Hi-Fi2 serial controller" },
+      { "name": "homepi-pcm-router", "status": "offline", "message": "16-zone PCM routing to primary DAC" }
     ],
-    "system": {
-      "backend": "healthy",
-      "config": "loaded",
-      "logging": "active",
-      "runtime": "running",
-      "transport": "ready",
-      "events": "ready",
-      "state": "ready",
-      "api": "ready",
-      "usbDevices": "healthy",
-      "hifiSerial": "offline",
-      "nqptp": "healthy",
-      "metadata": "healthy",
-      "pcmRouter": "offline",
-      "shairport": "healthy",
+    "host": {
       "uptimeMs": 120000,
+      "cpuTempC": 48.2,
       "lastEventAt": "2026-05-27T16:00:00.000Z"
     }
   }

@@ -3,13 +3,24 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
 
 import { ModulePageHeader } from "@/components/module-page-header.js";
+import {
+  ModuleHealthSection,
+  PlatformHealthSection,
+} from "@/components/status/module-health-section.js";
+import {
+  LazySection,
+  ModuleSectionSkeleton,
+  PlatformSectionSkeleton,
+  StatusSectionsLoadingPlaceholder,
+} from "@/components/status/lazy-section.js";
+import { cn } from "@/lib/utils.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Input } from "@/components/ui/input.js";
 import { ScrollArea } from "@/components/ui/scroll-area.js";
 import {
   buildLogEntries,
-  buildServiceCards,
+  buildTransportCards,
   formatLogTime,
   formatTimestamp,
   formatUptime,
@@ -38,9 +49,13 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
  */
 export function StatusPage(): React.JSX.Element {
   const { state, refresh } = useSystemDashboard();
-  const [selectedLevel, setSelectedLevel] = useState<LogLevel | "all">("all");
+  const [selectedLevel, setSelectedLevel] = useState<LogLevel | "all">("info");
   const [selectedServices, setSelectedServices] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
+
+  const host = state.coreStatus?.host;
+  const modules = state.coreStatus?.modules ?? [];
+  const platform = state.coreStatus?.platform ?? [];
 
   const toggleServiceFilter = useCallback((serviceName: string) => {
     setSelectedServices((current) => {
@@ -54,19 +69,16 @@ export function StatusPage(): React.JSX.Element {
     });
   }, []);
 
-  const services = useMemo(
-    () =>
-      buildServiceCards(state.systemStatus, {
-        sse: state.sseState,
-        ws: state.wsState,
-      }),
-    [state.systemStatus, state.sseState, state.wsState]
+  const transportCards = useMemo(
+    () => buildTransportCards({ sse: state.sseState, ws: state.wsState }),
+    [state.sseState, state.wsState]
   );
 
   const logs = useMemo(() => buildLogEntries(state.recentEvents), [state.recentEvents]);
 
   const filteredLogs = logs.filter((log) => {
-    const matchesLevel = selectedLevel === "all" || log.level === selectedLevel;
+    const matchesLevel =
+      selectedLevel === "all" || log.level === selectedLevel || (selectedLevel === "info" && log.level !== "debug");
     const matchesService =
       selectedServices.size === 0 || selectedServices.has(log.service);
     const matchesSearch =
@@ -76,9 +88,10 @@ export function StatusPage(): React.JSX.Element {
     return matchesLevel && matchesService && matchesSearch;
   });
 
+  const isInitialModuleLoad = state.loading && modules.length === 0;
   const statusSubtitle = state.loading
     ? "Loading platform status…"
-    : `${services.length} services monitored · ${filteredLogs.length} events shown`;
+    : `${modules.length} modules · ${platform.length} platform services · ${filteredLogs.length} events shown`;
 
   return (
     <main className="mx-auto max-w-4xl overflow-x-hidden px-4 py-6">
@@ -113,86 +126,100 @@ export function StatusPage(): React.JSX.Element {
         </p>
       ) : null}
 
+      {state.transportError ? (
+        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {state.transportError}
+        </p>
+      ) : null}
+
+      {state.coreStatus?.healthServiceReachable === false ? (
+        <p className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Health observer is unreachable
+          {state.lastFetchedAt ? ` — last refresh ${formatTimestamp(state.lastFetchedAt)}` : ""}.
+        </p>
+      ) : null}
+
       <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Platform uptime</p>
           <p className="mt-1 font-mono text-lg text-foreground">
-            {formatUptime(state.systemStatus?.uptimeMs)}
+            {formatUptime(host?.uptimeMs ?? state.hostMetrics?.uptimeMs)}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">CPU temperature</p>
           <div className="mt-1 flex items-center gap-2">
             <div
-              className={`size-2 rounded-full ${STATUS_COLORS[mapCpuTempStatus(state.systemStatus?.cpuTempC)]}`}
+              className={`size-2 rounded-full ${STATUS_COLORS[mapCpuTempStatus(host?.cpuTempC ?? state.hostMetrics?.cpuTempC)]}`}
             />
             <p className="font-mono text-lg text-foreground">
-              {formatCpuTemp(state.systemStatus?.cpuTempC)}
+              {formatCpuTemp(host?.cpuTempC ?? state.hostMetrics?.cpuTempC)}
             </p>
           </div>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Last event</p>
           <p className="mt-1 font-mono text-sm text-foreground">
-            {state.systemStatus?.lastEventAt
-              ? formatTimestamp(state.systemStatus.lastEventAt)
+            {host?.lastEventAt ?? state.hostMetrics?.lastEventAt
+              ? formatTimestamp(String(host?.lastEventAt ?? state.hostMetrics?.lastEventAt))
               : "—"}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Backend health</p>
-          <p className="mt-1 font-mono text-lg capitalize text-foreground">
-            {state.health?.status ?? "unknown"}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4 sm:col-span-2 lg:col-span-1">
-          <p className="text-sm text-muted-foreground">API correlation</p>
-          <p className="mt-1 truncate font-mono text-sm text-foreground">
-            {state.lastEvent?.correlationId ?? "—"}
           </p>
         </div>
       </div>
 
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {services.map((service) => {
-          const isFilterActive = selectedServices.has(service.name);
-          return (
-            <button
-              key={service.key}
-              type="button"
-              aria-pressed={isFilterActive}
-              onClick={() => toggleServiceFilter(service.name)}
-              className={`rounded-lg border bg-card p-4 text-left transition-colors ${isFilterActive
-                  ? "border-primary ring-2 ring-primary/40"
-                  : "border-border hover:border-muted-foreground/40"
-                }`}
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="font-medium text-card-foreground">{service.name}</span>
-                <div className="flex items-center gap-2">
-                  <div className={`size-2 rounded-full ${STATUS_COLORS[service.status]}`} />
-                  <span className="text-xs capitalize text-muted-foreground">{service.status}</span>
-                </div>
+      <div
+        className={cn(
+          "mb-8 space-y-4 transition-opacity duration-300",
+          state.loading && !isInitialModuleLoad && "opacity-60"
+        )}
+        aria-busy={state.loading}
+      >
+        {isInitialModuleLoad ? (
+          <StatusSectionsLoadingPlaceholder />
+        ) : (
+          <>
+            {modules.map((module) => (
+              <LazySection key={module.module} skeleton={<ModuleSectionSkeleton />}>
+                <ModuleHealthSection module={module} />
+              </LazySection>
+            ))}
+            {platform.length > 0 ? (
+              <LazySection skeleton={<PlatformSectionSkeleton />}>
+                <PlatformHealthSection entries={platform} />
+              </LazySection>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {transportCards.map((service) => (
+          <button
+            key={service.name}
+            type="button"
+            aria-pressed={selectedServices.has(service.name)}
+            onClick={() => toggleServiceFilter(service.name)}
+            className={`rounded-lg border bg-card p-4 text-left transition-colors ${
+              selectedServices.has(service.name)
+                ? "border-primary ring-2 ring-primary/40"
+                : "border-border hover:border-muted-foreground/40"
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-card-foreground">{service.name}</span>
+              <div className="flex items-center gap-2">
+                <div className={`size-2 rounded-full ${STATUS_COLORS[service.status]}`} />
+                <span className="text-xs capitalize text-muted-foreground">{service.status}</span>
               </div>
-              <div className="flex items-center gap-6 text-sm">
-                <div>
-                  <span className="text-muted-foreground">State</span>
-                  <p className="font-mono text-foreground">{service.state}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">{service.metricLabel}</span>
-                  <p className="font-mono text-foreground">{service.metricValue}</p>
-                </div>
-              </div>
-            </button>
-          );
-        })}
+            </div>
+          </button>
+        ))}
       </div>
 
       <div className="rounded-lg border border-border bg-card">
         <div className="border-b border-border p-4">
           <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <h2 className="font-medium text-card-foreground">Live events</h2>
+            <h2 className="font-medium text-card-foreground">Activity log</h2>
             <div className="relative w-full sm:w-auto">
               <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -210,10 +237,11 @@ export function StatusPage(): React.JSX.Element {
                 key={level}
                 type="button"
                 onClick={() => setSelectedLevel(level)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${selectedLevel === level
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  selectedLevel === level
                     ? "bg-foreground text-background"
                     : "bg-secondary text-muted-foreground hover:text-foreground"
-                  }`}
+                }`}
               >
                 {level === "all" ? "All" : level.charAt(0).toUpperCase() + level.slice(1)}
               </button>
@@ -226,7 +254,7 @@ export function StatusPage(): React.JSX.Element {
             {filteredLogs.length === 0 ? (
               <p className="py-8 text-center text-muted-foreground">
                 {state.recentEvents.length === 0
-                  ? "Waiting for live events…"
+                  ? "Waiting for meaningful activity…"
                   : "No events match the current filters"}
               </p>
             ) : (

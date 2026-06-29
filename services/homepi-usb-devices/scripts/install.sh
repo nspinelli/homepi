@@ -109,15 +109,15 @@ verify_install() {
   sleep 2
   systemctl is-active "${SERVICE_NAME}.service"
 
-  if [[ ! -S /run/homepi/usb-devices.sock ]]; then
-    echo "Socket missing: /run/homepi/usb-devices.sock" >&2
+  if [[ ! -S /run/homepi/usb/usb.sock ]]; then
+    echo "Socket missing: /run/homepi/usb/usb.sock" >&2
     journalctl -u "${SERVICE_NAME}.service" -n 30 --no-pager >&2 || true
     exit 1
   fi
 
   local health
   health=$(printf '%s\n' '{"method":"getHealth","correlationId":"install-verify"}' \
-    | timeout 3 nc -U /run/homepi/usb-devices.sock 2>/dev/null | head -1 || true)
+    | timeout 3 nc -U /run/homepi/usb/usb.sock 2>/dev/null | head -1 || true)
   if [[ "${health}" != *'"ok":true'* ]]; then
     echo "Health check failed via Unix socket" >&2
     echo "${health}" >&2

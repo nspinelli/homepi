@@ -21,9 +21,9 @@ struct ServiceConfig {
   std::string state_dir = "/opt/homepi/runtime/state";
   std::string socket_dir = "/run/homepi";
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
-  std::string hifi_socket_path = "/run/homepi/hifi-serial.sock";
-  std::string pcm_router_socket_path = "/run/homepi/pcm-router.sock";
-  std::string usb_devices_socket_path = "/run/homepi/usb-devices.sock";
+  std::string hifi_socket_path = "/run/homepi/audio/hifi-serial.sock";
+  std::string pcm_router_socket_path = "/run/homepi/audio/pcm-router.sock";
+  std::string usb_devices_socket_path = "/run/homepi/usb/usb.sock";
   std::string artifact_path = "/opt/homepi/runtime/generated/audio/operating-profile.json";
   std::string supervisor_socket_path = "/run/homepi/shairport-supervisor.sock";
   std::string zones_config_dir = "/opt/homepi/services/shairport/config/zones";

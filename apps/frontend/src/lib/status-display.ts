@@ -1,261 +1,58 @@
-import type { ConnectionState, EventEnvelope, SystemStatusSnapshot } from "../types/dashboard-types.js";
+import type { CapabilityHealth, ModuleHealth, PlatformHealthEntry } from "../types/dashboard-types.js";
+import type { ConnectionState, EventEnvelope, HealthReport } from "../types/dashboard-types.js";
+import { isUiVisibleEvent } from "./activity-log-filter.js";
 
-/** Visual health indicator for a service card. */
+/** Visual status for service cards and dots. */
 export type ServiceVisualStatus = "online" | "warning" | "offline";
 
-/** Log severity used by the status page filters. */
+/** Log level for the activity log. */
 export type LogLevel = "info" | "warning" | "error" | "debug";
 
-/** Core service row shown on the status page. */
-export interface ServiceCardModel {
-  /** Stable service key. */
-  key: string;
-  /** Display name. */
+/**
+ * Service card data for the status page.
+ */
+export interface ServiceCard {
   name: string;
-  /** Mapped visual status. */
   status: ServiceVisualStatus;
-  /** Raw status string from the snapshot. */
-  state: string;
-  /** Secondary metric label. */
-  metricLabel: string;
-  /** Secondary metric value. */
-  metricValue: string;
+  detail?: string;
 }
 
-/** Event row shown in the live log panel. */
-export interface StatusLogEntry {
-  /** Unique row id. */
+/**
+ * Parsed log entry for the activity log panel.
+ */
+export interface LogEntry {
   id: string;
-  /** ISO timestamp. */
   timestamp: string;
-  /** Mapped log level. */
-  level: LogLevel;
-  /** Service or source label. */
   service: string;
-  /** Human-readable message. */
+  level: LogLevel;
   message: string;
 }
 
-const CORE_SERVICES: Array<{ key: keyof SystemStatusSnapshot; name: string }> = [
-  { key: "backend", name: "Backend" },
-  { key: "config", name: "Config" },
-  { key: "logging", name: "Logging" },
-  { key: "runtime", name: "Runtime" },
-  { key: "transport", name: "Transport" },
-  { key: "events", name: "Events" },
-  { key: "state", name: "State" },
-  { key: "api", name: "API" },
-  { key: "usbDevices", name: "USB Devices" },
-  { key: "hifiSerial", name: "HiFi Serial" },
-  { key: "nqptp", name: "NQPTP" },
-  { key: "shairport", name: "Shairport Sync" },
-  { key: "metadata", name: "Metadata" },
-  { key: "pcmRouter", name: "PCM Router" },
-];
-
-const EVENT_SOURCE_LABELS: Record<string, string> = {
-  "homepi-hifi-serial": "HiFi Serial",
-  "homepi-backend": "Backend",
-  "homepi-usb-devices": "USB Devices",
-  "homepi-nqptp": "NQPTP",
-  "homepi-shairport-supervisor": "Shairport Sync",
-  "homepi-shairport": "Shairport Sync",
-  "homepi-metadata": "Metadata",
-  "homepi-pcm-router": "PCM Router",
-};
-
-const ONLINE_STATES = new Set([
-  "healthy",
-  "loaded",
-  "active",
-  "running",
-  "ready",
-  "connected",
-  "present",
-]);
-
-const OFFLINE_STATES = new Set(["offline", "stopped", "failed"]);
-
-const WARNING_STATES = new Set([
-  "degraded",
-  "starting",
-  "stopping",
-  "connecting",
-  "pending",
-  "disconnected",
-]);
-
 /**
- * Maps a raw platform status string to a visual indicator.
- * @param value - Raw status value.
- * @returns Visual status for cards.
+ * Maps a health status string to a visual dot status.
+ * @param status - Health status string.
+ * @returns Visual status for UI dots.
  */
-export function mapToVisualStatus(value: string | undefined): ServiceVisualStatus {
-  if (!value) {
+export function mapHealthToVisual(status: string | undefined): ServiceVisualStatus {
+  if (!status) {
     return "offline";
   }
-  if (ONLINE_STATES.has(value)) {
+  if (status === "healthy" || status === "online" || status === "ready" || status === "pass") {
     return "online";
   }
-  if (WARNING_STATES.has(value) || value === "degraded") {
+  if (status === "unknown") {
     return "warning";
   }
-  if (OFFLINE_STATES.has(value)) {
-    return "offline";
+  if (
+    status === "degraded" ||
+    status === "warning" ||
+    status === "starting" ||
+    status === "stopping" ||
+    status === "warn"
+  ) {
+    return "warning";
   }
   return "offline";
-}
-
-/**
- * Summarizes overall platform health for compact header display.
- * @param snapshot - Live system status snapshot.
- * @param healthStatus - Backend health status string.
- * @returns Label and visual status bucket.
- */
-export function summarizeSystemOverall(
-  snapshot: SystemStatusSnapshot | null,
-  healthStatus: string | undefined
-): { label: string; status: ServiceVisualStatus } {
-  const raw = snapshot?.state ?? healthStatus ?? "unknown";
-  const label = String(raw);
-  return {
-    label: label.charAt(0).toUpperCase() + label.slice(1),
-    status: mapToVisualStatus(label),
-  };
-}
-
-const STATUS_DOT_COLORS: Record<ServiceVisualStatus, string> = {
-  online: "bg-emerald-500",
-  warning: "bg-amber-500",
-  offline: "bg-red-500",
-};
-
-const STATUS_ICON_COLORS: Record<ServiceVisualStatus, string> = {
-  online: "text-success",
-  warning: "text-warning",
-  offline: "text-destructive",
-};
-
-/**
- * Returns the worst visual status from a list (offline beats warning beats online).
- * @param statuses - Status values to compare.
- * @returns Most severe status bucket.
- */
-export function worstVisualStatus(statuses: ServiceVisualStatus[]): ServiceVisualStatus {
-  if (statuses.some((status) => status === "offline")) {
-    return "offline";
-  }
-  if (statuses.some((status) => status === "warning")) {
-    return "warning";
-  }
-  return "online";
-}
-
-/**
- * Summarizes platform health for the header status icon color.
- * @param snapshot - Live system status snapshot.
- * @param healthStatus - Backend health status string.
- * @param cpuTempC - CPU temperature in Celsius.
- * @returns Worst visual status across services, health, and temperature.
- */
-export function summarizeHeaderIconStatus(
-  snapshot: SystemStatusSnapshot | null,
-  healthStatus: string | undefined,
-  cpuTempC: number | null | undefined
-): ServiceVisualStatus {
-  const statuses: ServiceVisualStatus[] = [
-    mapCpuTempStatus(cpuTempC),
-    summarizeSystemOverall(snapshot, healthStatus).status,
-  ];
-
-  if (snapshot) {
-    for (const { key } of CORE_SERVICES) {
-      const value = snapshot[key];
-      statuses.push(mapToVisualStatus(value === undefined ? undefined : String(value)));
-    }
-  } else if (healthStatus) {
-    statuses.push(mapToVisualStatus(healthStatus));
-  }
-
-  return worstVisualStatus(statuses);
-}
-
-/**
- * Tailwind class for a status indicator dot.
- * @param status - Visual status bucket.
- * @returns Background color class.
- */
-export function statusDotClass(status: ServiceVisualStatus): string {
-  return STATUS_DOT_COLORS[status];
-}
-
-/**
- * Tailwind class for a status icon in the header.
- * @param status - Visual status bucket.
- * @returns Text color class.
- */
-export function statusIconClass(status: ServiceVisualStatus): string {
-  return STATUS_ICON_COLORS[status];
-}
-
-/**
- * Builds service cards from the authoritative system status snapshot.
- * @param snapshot - Live system status snapshot.
- * @param connections - Live transport connection states.
- * @returns Service card models for the status grid.
- */
-export function buildServiceCards(
-  snapshot: SystemStatusSnapshot | null,
-  connections: { sse: ConnectionState; ws: ConnectionState }
-): ServiceCardModel[] {
-  const coreCards = CORE_SERVICES.map(({ key, name }) => {
-    const state = snapshot?.[key];
-    const stateLabel = state === undefined ? "unknown" : String(state);
-
-    return {
-      key,
-      name,
-      status: mapToVisualStatus(stateLabel),
-      state: stateLabel,
-      metricLabel: "State",
-      metricValue: stateLabel,
-    };
-  });
-
-  return [
-    ...coreCards,
-    {
-      key: "sse",
-      name: "SSE /events",
-      status: mapToVisualStatus(connections.sse),
-      state: connections.sse,
-      metricLabel: "Transport",
-      metricValue: "Server-sent events",
-    },
-    {
-      key: "ws",
-      name: "WebSocket /ws",
-      status: mapToVisualStatus(connections.ws),
-      state: connections.ws,
-      metricLabel: "Transport",
-      metricValue: "WebSocket",
-    },
-  ];
-}
-
-/**
- * Converts SSE envelopes into log rows for the status page.
- * @param events - Recent event envelopes.
- * @returns Log entries newest-first.
- */
-export function buildLogEntries(events: EventEnvelope[]): StatusLogEntry[] {
-  return events.map((event) => ({
-    id: event.id,
-    timestamp: event.timestamp,
-    level: mapEventToLogLevel(event),
-    service: EVENT_SOURCE_LABELS[event.source] ?? event.source ?? event.topic,
-    message: formatEventMessage(event),
-  }));
 }
 
 /**
@@ -263,51 +60,48 @@ export function buildLogEntries(events: EventEnvelope[]): StatusLogEntry[] {
  * @param uptimeMs - Uptime in milliseconds.
  * @returns Human-readable uptime string.
  */
-export function formatUptime(uptimeMs: number | undefined): string {
-  if (uptimeMs === undefined) {
+export function formatUptime(uptimeMs: number | null | undefined): string {
+  if (uptimeMs == null) {
     return "—";
   }
   const totalSeconds = Math.floor(uptimeMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${hours}h ${minutes}m ${seconds}s`;
-}
-
-/**
- * Converts Celsius to Fahrenheit.
- * @param celsius - Temperature in degrees Celsius.
- * @returns Temperature in degrees Fahrenheit.
- */
-function celsiusToFahrenheit(celsius: number): number {
-  return (celsius * 9) / 5 + 32;
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
 }
 
 /**
  * Formats CPU temperature for display.
- * @param cpuTempC - Temperature in degrees Celsius.
- * @returns Human-readable temperature string in Fahrenheit.
+ * @param tempC - Temperature in Celsius.
+ * @returns Formatted temperature string.
  */
-export function formatCpuTemp(cpuTempC: number | null | undefined): string {
-  if (cpuTempC === null || cpuTempC === undefined) {
+export function formatCpuTemp(tempC: number | null | undefined): string {
+  if (tempC == null) {
     return "—";
   }
-  return `${celsiusToFahrenheit(cpuTempC).toFixed(1)}°F`;
+  return `${tempC.toFixed(1)}°C`;
 }
 
 /**
- * Maps CPU temperature to a visual status for styling.
- * @param cpuTempC - Temperature in degrees Celsius.
- * @returns Visual status bucket.
+ * Maps CPU temperature to a visual status.
+ * @param tempC - Temperature in Celsius.
+ * @returns Visual status.
  */
-export function mapCpuTempStatus(cpuTempC: number | null | undefined): ServiceVisualStatus {
-  if (cpuTempC === null || cpuTempC === undefined) {
+export function mapCpuTempStatus(tempC: number | null | undefined): ServiceVisualStatus {
+  if (tempC == null) {
     return "offline";
   }
-  if (cpuTempC >= 75) {
+  if (tempC >= 75) {
     return "offline";
   }
-  if (cpuTempC >= 60) {
+  if (tempC >= 65) {
     return "warning";
   }
   return "online";
@@ -315,17 +109,17 @@ export function mapCpuTempStatus(cpuTempC: number | null | undefined): ServiceVi
 
 /**
  * Formats an ISO timestamp for display.
- * @param value - ISO8601 timestamp.
- * @returns Locale formatted timestamp.
+ * @param iso - ISO8601 timestamp.
+ * @returns Localized date/time string.
  */
-export function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString();
+export function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString();
 }
 
 /**
- * Formats a time-only value for log rows.
- * @param iso - ISO timestamp.
- * @returns Locale time string.
+ * Formats log timestamp for the activity log.
+ * @param iso - ISO8601 timestamp.
+ * @returns Time-only string.
  */
 export function formatLogTime(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-US", {
@@ -335,11 +129,60 @@ export function formatLogTime(iso: string): string {
   });
 }
 
+/**
+ * Builds transport connection cards for SSE and WebSocket.
+ * @param connections - Connection states.
+ * @returns Service cards for live transports.
+ */
+export function buildTransportCards(connections: {
+  sse: ConnectionState;
+  ws: ConnectionState;
+}): ServiceCard[] {
+  const mapConnection = (state: ConnectionState): ServiceVisualStatus => {
+    if (state === "connected") {
+      return "online";
+    }
+    if (state === "connecting") {
+      return "warning";
+    }
+    return "offline";
+  };
+
+  return [
+    { name: "SSE /events", status: mapConnection(connections.sse) },
+    { name: "WebSocket /ws", status: mapConnection(connections.ws) },
+  ];
+}
+
+/**
+ * Builds log entries from recent events, excluding transport noise.
+ * @param events - Recent event envelopes.
+ * @returns Parsed log entries.
+ */
+function isDebugNoiseEvent(event: EventEnvelope): boolean {
+  if (event.event === "log_record") {
+    const level = String((event.payload as { level?: string }).level ?? "INFO").toUpperCase();
+    return level === "DEBUG" || level === "TRACE";
+  }
+  return false;
+}
+
+export function buildLogEntries(events: EventEnvelope[]): LogEntry[] {
+  return events
+    .filter((event) => isUiVisibleEvent(event))
+    .filter((event) => !isDebugNoiseEvent(event))
+    .map((event) => ({
+      id: event.id,
+      timestamp: event.timestamp,
+      service: event.source,
+      level: mapEventToLogLevel(event),
+      message: formatEventMessage(event),
+    }));
+}
+
 function mapEventToLogLevel(event: EventEnvelope): LogLevel {
   if (event.event === "log_record") {
-    const level = String(
-      (event.payload as { level?: string }).level ?? "INFO"
-    ).toLowerCase();
+    const level = String((event.payload as { level?: string }).level ?? "INFO").toLowerCase();
     if (level === "error") {
       return "error";
     }
@@ -359,7 +202,7 @@ function mapEventToLogLevel(event: EventEnvelope): LogLevel {
   if (haystack.includes("warn") || haystack.includes("degraded")) {
     return "warning";
   }
-  if (haystack.includes("debug") || haystack.includes("heartbeat")) {
+  if (haystack.includes("debug")) {
     return "debug";
   }
   return "info";
@@ -367,21 +210,16 @@ function mapEventToLogLevel(event: EventEnvelope): LogLevel {
 
 function formatEventMessage(event: EventEnvelope): string {
   if (event.event === "log_record") {
-    const payload = event.payload as {
-      message?: string;
-      event?: string;
-      module?: string;
-    };
+    const payload = event.payload as { message?: string; event?: string; module?: string };
     const summary = payload.message ?? payload.event ?? "log";
     return payload.module ? `${payload.module}: ${summary}` : summary;
   }
-  if (event.event === "system_status_snapshot" || event.event === "system_status_delta") {
-    return `${event.event} received`;
+
+  if (typeof event.payload.userMessage === "string") {
+    return event.payload.userMessage;
   }
-  if (event.event === "heartbeat") {
-    return "Heartbeat";
-  }
-  if (event.topic.startsWith("modules.audio.")) {
+
+  if (event.topic.startsWith("homepi.audio.") || event.topic.startsWith("modules.audio.")) {
     const payload = event.payload as Record<string, unknown>;
     if (event.event === "zone_volume_changed" && typeof payload.zone === "number") {
       return `Zone ${payload.zone} volume → ${String(payload.volume ?? "?")}`;
@@ -389,36 +227,201 @@ function formatEventMessage(event: EventEnvelope): string {
     if (event.event === "zone_power_changed" && typeof payload.zone === "number") {
       return `Zone ${payload.zone} power → ${String(payload.power ?? "?")}`;
     }
-    if (event.event === "zone_name_changed" && typeof payload.zone === "number") {
-      return `Zone ${payload.zone} renamed → ${String(payload.name ?? "")}`;
-    }
-    if (event.event === "zone_source_changed" && typeof payload.zone === "number") {
-      return `Zone ${payload.zone} source → ${String(payload.source ?? "?")}`;
-    }
-    if (event.event === "source_name_changed" && typeof payload.source === "number") {
-      return `Source ${payload.source} renamed → ${String(payload.name ?? "")}`;
-    }
-    if (event.event === "audio_state_snapshot") {
-      return "Audio state snapshot";
-    }
-    if (event.event === "language_strings_synced") {
-      return "Language strings synced";
-    }
   }
-  if (event.topic.startsWith("modules.pcm")) {
-    const payload = event.payload as Record<string, unknown>;
-    if (event.event === "owner_changed") {
-      return `PCM owner → zone ${String(payload.ownerZoneId ?? "?")}`;
-    }
-    if (event.event === "owner_cleared") {
-      return "PCM owner cleared";
-    }
-    if (event.event === "dac_state") {
-      return `DAC ${String(payload.state ?? "?")}`;
-    }
-    if (event.event === "pcm_router_snapshot") {
-      return "PCM router snapshot";
-    }
+
+  if (event.topic.startsWith("homepi.sensors.")) {
+    return `${event.topic}: ${event.event}`;
   }
-  return `${event.event} on ${event.topic}`;
+
+  if (event.topic.startsWith("homepi.health.")) {
+    return String(event.payload.userMessage ?? `Health update: ${event.event}`);
+  }
+
+  return `${event.topic} · ${event.event}`;
 }
+
+/**
+ * Summarizes overall dashboard health for the header.
+ * @param health - Health report.
+ * @param coreStatus - Core status payload.
+ * @returns Summary label.
+ */
+export function summarizeOverallHealth(
+  health: HealthReport | null,
+  coreStatus: { modules?: ModuleHealth[]; healthServiceReachable?: boolean } | null
+): string {
+  if (coreStatus?.healthServiceReachable === false) {
+    return "degraded";
+  }
+  if (coreStatus?.modules?.some((module) => module.status === "offline" || module.status === "failed")) {
+    return "degraded";
+  }
+  return health?.status ?? "unknown";
+}
+
+/**
+ * Returns whether any module or transport is in a warning/error state.
+ * @param state - Partial dashboard state.
+ * @returns True when the header should show a warning indicator.
+ */
+export function hasDashboardWarnings(state: {
+  error: string | null;
+  transportError: string | null;
+  sseState: ConnectionState;
+  wsState: ConnectionState;
+  coreStatus: { modules?: ModuleHealth[]; healthServiceReachable?: boolean } | null;
+}): boolean {
+  if (state.error || state.transportError) {
+    return true;
+  }
+  if (state.sseState === "error" || state.wsState === "error") {
+    return true;
+  }
+  if (state.coreStatus?.healthServiceReachable === false) {
+    return true;
+  }
+  return (
+    state.coreStatus?.modules?.some(
+      (module) => module.status !== "healthy" && module.status !== "unknown"
+    ) ?? false
+  );
+}
+
+/**
+ * CSS class for a status dot color.
+ * @param status - Visual status.
+ * @returns Tailwind background class.
+ */
+export function statusDotClass(status: ServiceVisualStatus): string {
+  if (status === "online") {
+    return "bg-emerald-500";
+  }
+  if (status === "warning") {
+    return "bg-amber-500";
+  }
+  return "bg-red-500";
+}
+
+/**
+ * CSS class for a header icon color.
+ * @param status - Visual status.
+ * @returns Tailwind text color class.
+ */
+export function statusIconClass(status: ServiceVisualStatus): string {
+  if (status === "online") {
+    return "text-emerald-500";
+  }
+  if (status === "warning") {
+    return "text-amber-500";
+  }
+  return "text-red-500";
+}
+
+/**
+ * Input fields used to render health detail under a service name.
+ */
+export interface ServiceHealthDetailInput {
+  /** Raw health status string. */
+  status: string;
+  /** User-facing evidence or error message. */
+  userMessage?: string;
+  /** Process layer status. */
+  process?: string;
+  /** Readiness layer status. */
+  readiness?: string;
+  /** Domain layer status. */
+  domain?: string;
+  /** ISO timestamp of the last health check. */
+  lastUpdated?: string;
+}
+
+/**
+ * Formats a relative "checked at" suffix for health detail lines.
+ * @param iso - ISO8601 timestamp.
+ * @returns Relative time label.
+ */
+export function formatHealthCheckedAt(iso: string): string {
+  const deltaMs = Date.now() - new Date(iso).getTime();
+  if (deltaMs < 60_000) {
+    return "just now";
+  }
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  return new Date(iso).toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Formats layered health evidence when no user message is available.
+ * @param process - Process layer status.
+ * @param readiness - Readiness layer status.
+ * @param domain - Domain layer status.
+ * @returns Evidence string or null.
+ */
+function formatHealthLayerEvidence(
+  process?: string,
+  readiness?: string,
+  domain?: string
+): string | null {
+  const parts: string[] = [];
+  if (process === "active") {
+    parts.push("Process active");
+  }
+  if (readiness === "ready") {
+    parts.push("Command socket ready");
+  }
+  if (domain === "ready") {
+    parts.push("Domain checks passing");
+  } else if (readiness === "ready" && domain === "unknown") {
+    parts.push("Responding on command socket");
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/**
+ * Formats the subtitle shown under a service or capability name.
+ * @param entry - Health detail input.
+ * @returns Detail line or null when nothing should be shown.
+ */
+export function formatServiceHealthDetail(entry: ServiceHealthDetailInput): string | null {
+  const checkedSuffix = entry.lastUpdated
+    ? ` · Checked ${formatHealthCheckedAt(entry.lastUpdated)}`
+    : "";
+
+  if (entry.userMessage) {
+    return `${entry.userMessage}${checkedSuffix}`;
+  }
+
+  const layerEvidence = formatHealthLayerEvidence(entry.process, entry.readiness, entry.domain);
+  if (layerEvidence) {
+    return `${layerEvidence}${checkedSuffix}`;
+  }
+
+  if (mapHealthToVisual(entry.status) === "online") {
+    return `Operating normally${checkedSuffix}`;
+  }
+
+  return null;
+}
+
+/**
+ * Summarizes header icon status from health and transport state.
+ * @param healthStatus - Overall health string.
+ * @param hasWarnings - Whether warnings are present.
+ * @returns Visual status for the header icon.
+ */
+export function summarizeHeaderIconStatus(
+  healthStatus: string | undefined,
+  hasWarnings: boolean
+): ServiceVisualStatus {
+  if (hasWarnings) {
+    return "warning";
+  }
+  return mapHealthToVisual(healthStatus);
+}
+
+export type { CapabilityHealth, ModuleHealth, PlatformHealthEntry };

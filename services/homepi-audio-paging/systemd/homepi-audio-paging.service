@@ -1,7 +1,7 @@
 [Unit]
 Description=HomePi Audio Paging Service
-After=homepi-events.service homepi-usb-devices.service homepi-hifi-serial.service
-Wants=homepi-events.service homepi-usb-devices.service homepi-hifi-serial.service
+After=homepi-broker.service homepi-usb-devices.service homepi-hifi-serial.service
+Wants=homepi-broker.service homepi-usb-devices.service homepi-hifi-serial.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -17,7 +17,7 @@ RestartSec=10
 StartLimitAction=none
 EnvironmentFile=-/opt/homepi/services/audio-paging/env/.env
 Environment=LD_LIBRARY_PATH=/opt/homepi/services/audio-paging/bin/piper-runtime
-RuntimeDirectory=homepi
+RuntimeDirectory=homepi/audio
 RuntimeDirectoryPreserve=yes
 
 [Install]

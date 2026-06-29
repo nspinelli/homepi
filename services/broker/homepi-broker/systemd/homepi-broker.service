@@ -1,0 +1,18 @@
+[Unit]
+Description=HomePi Event Broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+RuntimeDirectory=homepi/broker
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/node /opt/homepi/services/broker/homepi-broker/dist/main.js
+Restart=on-failure
+RestartSec=2
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

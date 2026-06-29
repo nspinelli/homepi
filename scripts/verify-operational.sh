@@ -37,11 +37,48 @@ check_http() {
 }
 
 echo "=== HomePi operational status ==="
-for svc in nginx homepi-backend homepi-events homepi-ensure-ssh avahi-daemon avahi-homepi-alias mosquitto \
+for svc in nginx homepi-backend homepi-broker homepi-health homepi-audio homepi-sensors \
+  homepi-ensure-ssh avahi-daemon avahi-homepi-alias mosquitto \
   homepi-usb-devices homepi-nqptp homepi-pcm-router homepi-metadata \
-  homepi-hifi-serial homepi-shairport-supervisor homepi-audio-orchestrator homepi-audio-paging; do
+  homepi-hifi-serial homepi-shairport-supervisor homepi-audio-paging; do
   status_line "${svc}"
 done
+
+echo ""
+echo "=== Canonical sockets ==="
+for sock in \
+  /run/homepi/health/health.sock \
+  /run/homepi/broker/broker.sock \
+  /run/homepi/audio/audio.sock \
+  /run/homepi/sensors/sensors.sock \
+  /run/homepi/audio/hifi-serial.sock \
+  /run/homepi/audio/pcm-router.sock \
+  /run/homepi/audio/metadata.sock \
+  /run/homepi/audio/audio-realtime.sock \
+  /run/homepi/audio/paging.sock \
+  /run/homepi/usb/usb.sock; do
+  if [[ -S "${sock}" ]]; then
+    echo "  OK  ${sock}"
+  else
+    echo "  FAIL missing socket ${sock}"
+    FAIL=1
+  fi
+done
+
+echo ""
+echo "=== Legacy decommission checks ==="
+if [[ -S /run/homepi/events.sock ]]; then
+  echo "  FAIL legacy socket still present: /run/homepi/events.sock"
+  FAIL=1
+else
+  echo "  OK  /run/homepi/events.sock removed"
+fi
+if systemctl is-enabled homepi-events.service >/dev/null 2>&1; then
+  echo "  FAIL homepi-events.service still enabled"
+  FAIL=1
+else
+  echo "  OK  homepi-events.service not enabled"
+fi
 
 echo ""
 echo "=== SSH ==="
@@ -144,6 +181,7 @@ echo ""
 echo "=== HTTP checks ==="
 check_http "frontend homepi.local" "http://homepi.local/"
 check_http "api health" "http://homepi.local/api/health"
+check_http "api core status" "http://homepi.local/api/core/status"
 curl -sf http://homepi.local/api/health | head -c 120
 echo ""
 

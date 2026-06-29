@@ -5,27 +5,13 @@ import { SystemStatusStore } from "../system-status-store.js";
 import { StatusUpdateCoordinator } from "./status-update-coordinator.js";
 
 describe("StatusUpdateCoordinator", () => {
-  it("broadcasts only when service fields change", () => {
+  it("broadcasts only when host metric fields change", () => {
     const logger = {
       info: vi.fn(),
       warn: vi.fn(),
       debug: vi.fn(),
     };
     const store = new SystemStatusStore({
-      backend: "healthy",
-      config: "loaded",
-      logging: "active",
-      runtime: "running",
-      transport: "ready",
-      events: "ready",
-      state: "ready",
-      api: "ready",
-      usbDevices: "offline",
-      hifiSerial: "offline",
-      nqptp: "offline",
-      metadata: "offline",
-      pcmRouter: "offline",
-      shairport: "offline",
       uptimeMs: 0,
       cpuTempC: null,
       lastEventAt: null,
@@ -34,13 +20,13 @@ describe("StatusUpdateCoordinator", () => {
     const broadcastSpy = vi.spyOn(broadcaster, "broadcastStatusDelta");
     const coordinator = new StatusUpdateCoordinator({ statusStore: store, broadcaster });
 
-    coordinator.patchAndBroadcast({ usbDevices: "healthy" }, "test");
+    coordinator.patchAndBroadcast({ cpuTempC: 42.1 }, "test");
     expect(broadcastSpy).toHaveBeenCalledTimes(1);
 
-    coordinator.patchAndBroadcast({ usbDevices: "healthy" }, "test");
+    coordinator.patchAndBroadcast({ cpuTempC: 42.1 }, "test");
     expect(broadcastSpy).toHaveBeenCalledTimes(1);
 
-    coordinator.patchAndBroadcast({ usbDevices: "degraded" }, "test");
+    coordinator.patchAndBroadcast({ cpuTempC: 43.0 }, "test");
     expect(broadcastSpy).toHaveBeenCalledTimes(2);
   });
 });

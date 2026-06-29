@@ -1,64 +1,89 @@
 import type { ServiceConfig } from "@homepi/core-config";
-import type {
-  CoreServiceStatusEntry,
-  CoreStatusPayload,
-  SystemStatusSnapshot,
-} from "./types/system-status-types.js";
+import { createHealthReport } from "@homepi/core-health";
+
+import type { ModuleHealth, ServiceHealthEntry, SystemHealthSnapshot } from "./health/health-client.js";
+import type { CoreStatusPayload } from "./types/system-status-types.js";
 
 /**
- * Builds aggregated core platform status from the current system snapshot.
- * @param config - Loaded service configuration.
- * @param system - Current system status snapshot.
- * @returns Core status payload for GET /api/core/status.
+ * Host metrics computed by the backend.
+ */
+export interface HostMetrics {
+  uptimeMs: number;
+  cpuTempC: number | null;
+  lastEventAt: string | null;
+}
+
+/**
+ * Builds a health report for GET /api/health from a system health snapshot.
+ * @param config - Service configuration.
+ * @param snapshot - Health snapshot from homepi-health.
+ * @returns Health report payload.
+ */
+export function buildHealthReportFromSnapshot(
+  config: ServiceConfig,
+  snapshot: SystemHealthSnapshot
+) {
+  const moduleChecks = snapshot.modules.map((module: ModuleHealth) => ({
+    name: module.module,
+    status: module.planned
+      ? ("warn" as const)
+      : module.status === "healthy"
+        ? ("pass" as const)
+        : module.status === "degraded"
+          ? ("warn" as const)
+          : ("fail" as const),
+    message:
+      module.userMessage ??
+      (module.planned
+        ? `${module.displayName} is planned but not installed yet.`
+        : `${module.displayName} is ${module.status}`),
+  }));
+
+  const checks = [
+    {
+      name: "http",
+      status: "pass" as const,
+      message: "Backend listening",
+    },
+    {
+      name: "health-observer",
+      status: snapshot.healthServiceReachable ? ("pass" as const) : ("fail" as const),
+      message: snapshot.healthServiceReachable
+        ? "homepi-health reachable"
+        : "homepi-health unreachable",
+    },
+    ...moduleChecks,
+  ];
+
+  return createHealthReport({
+    service: config.service,
+    checks,
+  });
+}
+
+/**
+ * Builds hierarchical core status for GET /api/core/status.
+ * @param config - Service configuration.
+ * @param snapshot - Health snapshot from homepi-health.
+ * @param host - Host metrics from backend.
+ * @returns Core status payload.
  */
 export function buildCoreStatusPayload(
   config: ServiceConfig,
-  system: SystemStatusSnapshot
+  snapshot: SystemHealthSnapshot,
+  host: HostMetrics
 ): CoreStatusPayload {
-  const services: CoreServiceStatusEntry[] = [
-    { name: "config", status: system.config, message: "Service configuration" },
-    { name: "logging", status: system.logging, message: "Structured logging" },
-    { name: "runtime", status: system.runtime, message: "Process lifecycle" },
-    { name: "transport", status: system.transport, message: "SSE and WebSocket" },
-    { name: "events", status: system.events, message: "Event envelopes" },
-    { name: "state", status: system.state, message: "In-memory status store" },
-    { name: "api", status: system.api, message: "HTTP API envelopes" },
-    {
-      name: "usb-devices",
-      status: system.usbDevices,
-      message: "USB device assignments and hotplug",
-    },
-    {
-      name: "hifi-serial",
-      status: system.hifiSerial,
-      message: "Hi-Fi2 serial controller",
-    },
-    {
-      name: "nqptp",
-      status: system.nqptp,
-      message: "AirPlay 2 PTP timing (nqptp)",
-    },
-    {
-      name: "metadata",
-      status: system.metadata,
-      message: "Shairport Sync metadata reader",
-    },
-    {
-      name: "pcm-router",
-      status: system.pcmRouter,
-      message: "16-zone PCM routing to primary DAC",
-    },
-    {
-      name: "shairport",
-      status: system.shairport,
-      message: "Shairport Sync supervisor and AirPlay zones",
-    },
-  ];
-
   return {
     service: config.service,
-    checkedAt: new Date().toISOString(),
-    services,
-    system,
+    checkedAt: snapshot.checkedAt,
+    healthServiceReachable: snapshot.healthServiceReachable,
+    modules: snapshot.modules,
+    platform: snapshot.platform,
+    services: snapshot.services.map((entry: ServiceHealthEntry) => ({
+      name: entry.service,
+      status: entry.status,
+      message: entry.userMessage,
+    })),
+    host,
   };
 }

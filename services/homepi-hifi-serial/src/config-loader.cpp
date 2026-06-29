@@ -63,9 +63,9 @@ ServiceConfig load_service_config(const std::string& config_path) {
   config.socket_path = json_get_string(json, "socketPath");
   const std::string socket_override = env_or("HOMEPI_SOCKET_DIR", "");
   if (!socket_override.empty() && config.socket_path.empty()) {
-    config.socket_path = socket_override + "/hifi-serial.sock";
+    config.socket_path = socket_override + "/audio/hifi-serial.sock";
   } else if (config.socket_path.empty()) {
-    config.socket_path = config.socket_dir + "/hifi-serial.sock";
+    config.socket_path = config.socket_dir + "/audio/hifi-serial.sock";
   }
 
   config.virtual_port = json_get_string(json, "virtualPort");
@@ -90,7 +90,7 @@ ServiceConfig load_service_config(const std::string& config_path) {
 
   config.events_socket = json_get_string(json, "eventsSocket");
   if (config.events_socket.empty()) {
-    config.events_socket = env_or("HOMEPI_EVENTS_SOCKET", "/run/homepi/events.sock");
+    config.events_socket = env_or("HOMEPI_EVENTS_SOCKET", "/run/homepi/broker/broker.sock");
   }
 
   return config;

@@ -7,11 +7,11 @@ namespace homepi::audio_paging {
 /** Runtime configuration loaded from service-config.json and environment overrides. */
 struct ServiceConfig {
   std::string service = "homepi-audio-paging";
-  std::string events_socket = "/run/homepi/events.sock";
-  std::string socket_path = "/run/homepi/audio-paging.sock";
+  std::string events_socket = "/run/homepi/broker/broker.sock";
+  std::string socket_path = "/run/homepi/audio/paging.sock";
   std::string socket_dir = "/run/homepi";
-  std::string usb_devices_socket = "/run/homepi/usb-devices.sock";
-  std::string hifi_serial_socket = "/run/homepi/hifi-serial.sock";
+  std::string usb_devices_socket = "/run/homepi/usb/usb.sock";
+  std::string hifi_serial_socket = "/run/homepi/audio/hifi-serial.sock";
   std::string database_path = "/opt/homepi/runtime/state/homepi.sqlite";
   std::string state_dir = "/opt/homepi/runtime/state";
   std::string asset_root = "/opt/homepi/services/audio-paging/assets";

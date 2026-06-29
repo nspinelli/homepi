@@ -12,7 +12,7 @@ sudo bash scripts/install-operational.sh
 bash scripts/verify-operational.sh
 ```
 
-`install-operational.sh` runs preflight, SSH hardening (`homepi-ensure-ssh`), prerequisites, `pnpm install`, build, `homepi-events`, eight native services (including paging), NGINX, backend, and Avahi.
+`install-operational.sh` runs preflight, SSH hardening (`homepi-ensure-ssh`), prerequisites, `pnpm install`, build, Node platform services (`homepi-broker`, `homepi-health`, facades), eight native services (including paging), NGINX, backend, and Avahi.
 
 ## Script reference
 
@@ -26,6 +26,7 @@ bash scripts/verify-operational.sh
 | `ensure-ssh-access.sh` | Masks `ssh.socket`, enables `ssh.service`, repairs key perms, backs up keys |
 | `uninstall-ensure-ssh.sh` | Removes `homepi-ensure-ssh` unit and script |
 | `verify-operational.sh` | Service, MQTT, ALSA, HTTP health checks |
+| `verify-v2-signoff.sh` | Phase E: v2 negative checks, API shape, broker/health isolation |
 | `verify-post-reboot.sh` | Run after a controlled reboot test (includes SSH check) |
 | `fresh-pi-runbook.md` | End-to-end fresh Pi install and configuration guide |
 | `verify-nqptp-patch.sh` | Offline check that nqptp patch applies to pinned upstream |
@@ -45,7 +46,7 @@ bash scripts/verify-operational.sh
 | Layer | Units / artifacts |
 |-------|-------------------|
 | SSH hardening | `homepi-ensure-ssh` |
-| Core broker | `homepi-events` |
+| Platform | `homepi-broker`, `homepi-health`, `homepi-audio`, `homepi-sensors` |
 | Native services | `homepi-usb-devices`, `homepi-nqptp`, `homepi-pcm-router`, `homepi-metadata`, `homepi-hifi-serial`, `homepi-shairport-supervisor`, `homepi-audio-orchestrator`, `homepi-audio-paging` |
 | Web | `nginx`, `homepi-backend` |
 | Messaging | `mosquitto` |
@@ -151,7 +152,7 @@ If `ufw` or `firewalld` is enabled, allow UDP **319** and **320** (PTP) for AirP
 7. `homepi-audio-orchestrator`
 8. `homepi-audio-paging`
 
-`install-operational.sh` also installs `homepi-ensure-ssh` (after preflight) and `homepi-events` (via `core/events/scripts/install.sh`) before native services.
+`install-operational.sh` also installs `homepi-ensure-ssh` (after preflight) and Node platform services (`install-node-services.sh`) before native services.
 
 ## Post-reboot verification
 
@@ -165,7 +166,7 @@ Compare ALSA layout with the preflight snapshot under `/var/backups/homepi/`.
 
 ## Uninstall
 
-`uninstall-operational.sh` removes backend, Avahi alias, native services (reverse install order), `homepi-events`, and `homepi-ensure-ssh`. NGINX site is left in place.
+`uninstall-operational.sh` removes backend, Avahi alias, native services (reverse install order), and `homepi-ensure-ssh`. NGINX site is left in place.
 
 `uninstall-services.sh` reverse order:
 

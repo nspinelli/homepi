@@ -5,7 +5,6 @@ import type { LogLevel, LogMessage } from "@homepi/core-logging";
 import type { Logger } from "@homepi/core-logging";
 
 import type { EventBroadcaster } from "../event-broadcaster.js";
-import type { JournalServiceStatusBridge } from "../status/journal-service-status-bridge.js";
 
 const LOG_TOPIC = "system.logging";
 const LOG_EVENT = "log_record";
@@ -89,8 +88,6 @@ export interface JournalLogBridgeOptions {
   logger: Logger;
   /** SSE broadcaster receiving log_record envelopes. */
   broadcaster: EventBroadcaster;
-  /** Optional bridge for lifecycle → service status updates. */
-  serviceStatusBridge?: JournalServiceStatusBridge;
 }
 
 /**
@@ -242,11 +239,5 @@ export class JournalLogBridge {
     });
 
     this.options.broadcaster.broadcast(envelope);
-    this.options.serviceStatusBridge?.handleLogLine({
-      ts: log.ts,
-      service: log.service,
-      module: log.module,
-      event: log.event,
-    });
   }
 }

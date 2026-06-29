@@ -19,7 +19,7 @@
   },
   "usbDevices": {
     "databasePath": "/opt/homepi/runtime/state/homepi.sqlite",
-    "socketPath": "/run/homepi/usb-devices.sock",
+    "socketPath": "/run/homepi/usb/usb.sock",
     "serialSymlink": "vHifi",
     "udevRulesFile": "udev/99-homepi-usb-devices.rules"
   }

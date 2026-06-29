@@ -19,6 +19,8 @@ StartLimitAction=none
 TimeoutStopSec=10
 KillMode=mixed
 NoNewPrivileges=true
+RuntimeDirectory=homepi/audio
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target

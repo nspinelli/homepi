@@ -60,7 +60,7 @@ cd /home/homepi/homepi
 sudo bash scripts/install-operational.sh
 ```
 
-This runs preflight backups, SSH hardening, apt prerequisites, `pnpm install`, build, `homepi-events`, eight native services (see below), NGINX, backend, Avahi, and `verify-operational.sh`.
+This runs preflight backups, SSH hardening, apt prerequisites, `pnpm install`, build, Node platform services (`homepi-broker`, `homepi-health`, facades), eight native services (see below), NGINX, backend, Avahi, and `verify-operational.sh`.
 
 **Native services installed (in order):**
 
@@ -73,7 +73,7 @@ This runs preflight backups, SSH hardening, apt prerequisites, `pnpm install`, b
 7. `homepi-audio-orchestrator`
 8. `homepi-audio-paging`
 
-**Also installed:** `homepi-ensure-ssh`, `homepi-events`, `homepi-backend`, `nginx`, `mosquitto`, `avahi-daemon`, `avahi-homepi-alias`.
+**Also installed:** `homepi-ensure-ssh`, `homepi-broker`, `homepi-health`, `homepi-audio`, `homepi-sensors`, `homepi-backend`, `nginx`, `mosquitto`, `avahi-daemon`, `avahi-homepi-alias`.
 
 **Expected:** install completes with most services `active`. Warnings about missing `HomePiPrimary` or loopback cards before first USB save are normal.
 

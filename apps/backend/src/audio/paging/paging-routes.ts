@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { connect } from "node:net";
+import { createRequest } from "@homepi/core-messaging";
+import { encodeNdjsonLine } from "@homepi/core-transport";
 
 import { createErrorResponse, createSuccessResponse } from "@homepi/core-api";
 import { createEventEnvelope } from "@homepi/core-events";
@@ -513,7 +515,29 @@ export class PagingRoutes {
  * @param envelope - Event envelope to publish.
  */
 async function publishEventEnvelope(socketPath: string, envelope: object): Promise<void> {
-  const frame = JSON.stringify(envelope);
+  const legacyEnvelope = envelope as {
+    topic: string;
+    source: string;
+    event: string;
+    correlationId: string;
+    payload?: Record<string, unknown>;
+  };
+  const request = createRequest({
+    source: "homepi-backend",
+    target: "homepi-broker",
+    command: "publish",
+    correlationId: legacyEnvelope.correlationId,
+    payload: {
+      topic: legacyEnvelope.topic,
+      source: legacyEnvelope.source,
+      severity: "info",
+      eventPayload: {
+        ...(legacyEnvelope.payload ?? {}),
+        event: legacyEnvelope.event,
+      },
+    },
+  });
+
   await new Promise<void>((resolve, reject) => {
     const socket = connect(socketPath);
     let settled = false;
@@ -537,15 +561,7 @@ async function publishEventEnvelope(socketPath: string, envelope: object): Promi
 
     socket.on("error", (error) => finish(error));
     socket.on("connect", () => {
-      socket.write(
-        `${JSON.stringify({
-          method: "register",
-          source: "homepi-backend",
-          subscribes: [],
-          publishes: ["modules.audio.paging.command"],
-        })}\n`
-      );
-      socket.write(`${frame}\n`, (error) => {
+      socket.write(encodeNdjsonLine(request), (error) => {
         if (error) {
           finish(error);
           return;

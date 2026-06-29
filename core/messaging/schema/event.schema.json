@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/messaging/event.schema.json",
+  "title": "HomePi Broker Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "ts", "topic", "source", "correlationId", "severity", "payload"],
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "ts": { "type": "string", "format": "date-time" },
+    "topic": {
+      "type": "string",
+      "pattern": "^homepi\\.[a-z][a-z0-9]*(\\.[a-z][a-z0-9_-]*)*$"
+    },
+    "source": { "type": "string", "minLength": 1 },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "severity": {
+      "type": "string",
+      "enum": ["debug", "info", "warning", "error"]
+    },
+    "payload": { "type": "object", "additionalProperties": true },
+    "uiVisible": { "type": "boolean" }
+  }
+}

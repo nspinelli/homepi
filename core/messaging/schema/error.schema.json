@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/messaging/error.schema.json",
+  "title": "HomePi Structured Error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "severity",
+    "userMessage",
+    "developerMessage",
+    "service",
+    "recoverable",
+    "retryable"
+  ],
+  "properties": {
+    "code": { "type": "string", "minLength": 1 },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "error", "critical"]
+    },
+    "userMessage": { "type": "string", "minLength": 1 },
+    "developerMessage": { "type": "string", "minLength": 1 },
+    "service": { "type": "string", "minLength": 1 },
+    "recoverable": { "type": "boolean" },
+    "retryable": { "type": "boolean" },
+    "details": { "type": "object", "additionalProperties": true },
+    "correlationId": { "type": "string" }
+  }
+}

@@ -131,8 +131,8 @@ verify_install() {
   log "Verifying installation"
   sleep 2
   systemctl is-active "${SERVICE_NAME}.service" >/dev/null
-  if [[ ! -S /run/homepi/audio-paging.sock ]]; then
-    echo "Socket missing: /run/homepi/audio-paging.sock" >&2
+  if [[ ! -S /run/homepi/audio/paging.sock ]]; then
+    echo "Socket missing: /run/homepi/audio/paging.sock" >&2
     journalctl -u "${SERVICE_NAME}.service" -n 30 --no-pager >&2 || true
     exit 1
   fi

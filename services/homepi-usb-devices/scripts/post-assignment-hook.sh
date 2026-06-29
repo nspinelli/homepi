@@ -27,7 +27,7 @@ restart_audio_dependent_services() {
     return 0
   fi
 
-  restart_service "homepi-pcm-router.service" "/run/homepi/pcm-router.sock" || true
+  restart_service "homepi-pcm-router.service" "/run/homepi/audio/pcm-router.sock" || true
   if systemctl is-enabled homepi-shairport-supervisor.service >/dev/null 2>&1; then
     log "Restarting homepi-shairport-supervisor.service"
     systemctl restart homepi-shairport-supervisor.service || true
@@ -107,7 +107,7 @@ if [[ "${SERIAL_CHANGED}" == "1" ]]; then
   if ! bash "${SCRIPT_DIR}/deploy-udev-rules.sh"; then
     log "WARN: serial udev deploy skipped (assign Primary Serial or check /dev/vHifi)"
   fi
-  restart_service "homepi-hifi-serial.service" "/run/homepi/hifi-serial.sock"
+  restart_service "homepi-hifi-serial.service" "/run/homepi/audio/hifi-serial.sock"
 fi
 
 if [[ "${AUDIO_CHANGED}" == "1" ]]; then

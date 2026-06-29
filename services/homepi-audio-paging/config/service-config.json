@@ -16,10 +16,10 @@
     }
   },
   "audioPaging": {
-    "eventsSocket": "/run/homepi/events.sock",
-    "socketPath": "/run/homepi/audio-paging.sock",
-    "usbDevicesSocket": "/run/homepi/usb-devices.sock",
-    "hifiSerialSocket": "/run/homepi/hifi-serial.sock",
+    "eventsSocket": "/run/homepi/broker/broker.sock",
+    "socketPath": "/run/homepi/audio/paging.sock",
+    "usbDevicesSocket": "/run/homepi/usb/usb.sock",
+    "hifiSerialSocket": "/run/homepi/audio/hifi-serial.sock",
     "databasePath": "/opt/homepi/runtime/state/homepi.sqlite",
     "assetRoot": "/opt/homepi/services/audio-paging/assets",
     "voicesRoot": "/var/lib/homepi/paging/voices",

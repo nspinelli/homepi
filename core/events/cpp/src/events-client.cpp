@@ -1,5 +1,6 @@
 #include "homepi/events/events-client.hpp"
 
+#include "homepi/events/broker-protocol.hpp"
 #include "homepi/ndjson.hpp"
 #include "homepi/transport/unix-socket.hpp"
 
@@ -76,6 +77,14 @@ void EventsClient::connect_loop() {
     const auto [lines, remainder] = homepi::transport::split_ndjson_lines(read_buffer_);
     read_buffer_ = remainder;
     for (const std::string& line : lines) {
+      if (is_v2_broker_socket(socket_path_)) {
+        if (const auto legacy = broker_wire_to_legacy_envelope(line)) {
+          if (on_message_) {
+            on_message_(*legacy);
+          }
+        }
+        continue;
+      }
       if (on_message_) {
         on_message_(line);
       }
@@ -90,6 +99,12 @@ bool EventsClient::ensure_connected() {
   fd_ = homepi::transport::connect_unix_stream_socket(socket_path_);
   if (fd_ < 0) {
     return false;
+  }
+  if (is_v2_broker_socket(socket_path_)) {
+    if (!subscribes_.empty()) {
+      return write_line(build_broker_subscribe_line(source_, subscribes_));
+    }
+    return true;
   }
   return write_line(build_register_line(subscribes_, publishes_));
 }
@@ -113,6 +128,9 @@ bool EventsClient::write_line(const std::string& line) {
 bool EventsClient::publish(const std::string& ndjson_line) {
   if (!ensure_connected()) {
     return false;
+  }
+  if (is_v2_broker_socket(socket_path_)) {
+    return write_line(build_broker_publish_line(source_, ndjson_line));
   }
   return write_line(ndjson_line);
 }

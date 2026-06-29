@@ -1,10 +1,10 @@
 /**
- * Encodes a value as a single NDJSON line (no trailing newline in return value).
+ * Encodes a value as a single NDJSON line including the trailing newline.
  * @param value - Object to encode.
- * @returns NDJSON line string.
+ * @returns NDJSON line string with trailing `\n`.
  */
 export function encodeNdjsonLine(value: unknown): string {
-  return JSON.stringify(value);
+  return `${JSON.stringify(value)}\n`;
 }
 
 /**

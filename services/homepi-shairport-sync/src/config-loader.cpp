@@ -87,9 +87,9 @@ ServiceConfig load_service_config(const std::string& config_path) {
   config.zones_config_dir = config.install_root + "/config/zones";
   config.hooks_dir = config.install_root + "/bin/hooks";
   config.shairport_binary = config.install_root + "/bin/shairport-sync";
-  config.hifi_socket_path = config.socket_dir + "/hifi-serial.sock";
-  config.pcm_router_socket_path = config.socket_dir + "/pcm-router.sock";
-  config.usb_devices_socket_path = config.socket_dir + "/usb-devices.sock";
+  config.hifi_socket_path = config.socket_dir + "/audio/hifi-serial.sock";
+  config.pcm_router_socket_path = config.socket_dir + "/audio/pcm-router.sock";
+  config.usb_devices_socket_path = config.socket_dir + "/usb/usb.sock";
   config.supervisor_socket_path = config.socket_dir + "/shairport-supervisor.sock";
 
   const std::string generated_dir = env_or("HOMEPI_GENERATED_DIR", "/opt/homepi/runtime/generated");

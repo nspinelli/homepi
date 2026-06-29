@@ -1,4 +1,4 @@
-import { Activity, HeartPulse, LayoutDashboard, Thermometer, type LucideIcon } from "lucide-react";
+import { Activity, HeartPulse, LayoutDashboard, Thermometer, Wifi, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button.js";
@@ -11,12 +11,13 @@ import {
 import { useSystemDashboard } from "@/hooks/system-dashboard-provider.js";
 import {
   formatCpuTemp,
+  hasDashboardWarnings,
   mapCpuTempStatus,
+  mapHealthToVisual,
   statusDotClass,
   statusIconClass,
   summarizeHeaderIconStatus,
-  summarizeSystemOverall,
-  type ServiceVisualStatus,
+  summarizeOverallHealth,
 } from "@/lib/status-display.js";
 import { cn } from "@/lib/utils.js";
 
@@ -29,7 +30,7 @@ interface StatusDropdownRowProps {
   /** Left-hand label. */
   label: string;
   /** Visual status for the indicator dot. */
-  status: ServiceVisualStatus;
+  status: "online" | "warning" | "offline";
   /** Right-hand value text. */
   value: string;
 }
@@ -52,10 +53,7 @@ function StatusDropdownRow({
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <span className="flex w-2 shrink-0 justify-center">
-          <span
-            className={`size-2 rounded-full ${statusDotClass(status)}`}
-            aria-hidden
-          />
+          <span className={`size-2 rounded-full ${statusDotClass(status)}`} aria-hidden />
         </span>
         <span className="min-w-[4.5rem] truncate text-right text-sm text-foreground">{value}</span>
       </div>
@@ -68,16 +66,14 @@ function StatusDropdownRow({
  */
 export function StatusHeaderButton(): React.JSX.Element {
   const { state } = useSystemDashboard();
-  const overall = summarizeSystemOverall(state.systemStatus, state.health?.status);
-  const tempStatus = mapCpuTempStatus(state.systemStatus?.cpuTempC);
-  const loading = state.loading && !state.systemStatus;
-  const iconStatus = loading
-    ? null
-    : summarizeHeaderIconStatus(
-        state.systemStatus,
-        state.health?.status,
-        state.systemStatus?.cpuTempC
-      );
+  const host = state.coreStatus?.host;
+  const overallLabel = summarizeOverallHealth(state.health, state.coreStatus);
+  const hasWarnings = hasDashboardWarnings(state);
+  const tempStatus = mapCpuTempStatus(host?.cpuTempC ?? state.hostMetrics?.cpuTempC);
+  const loading = state.loading && !state.coreStatus;
+  const iconStatus = loading ? null : summarizeHeaderIconStatus(overallLabel, hasWarnings);
+  const transportStatus =
+    state.sseState === "error" || state.wsState === "error" ? "offline" : "online";
 
   return (
     <DropdownMenu>
@@ -86,7 +82,7 @@ export function StatusHeaderButton(): React.JSX.Element {
           type="button"
           variant="ghost"
           size="icon"
-          className="group shrink-0 px-2"
+          className="group relative shrink-0 px-2"
           aria-label="System status"
         >
           <Activity
@@ -98,21 +94,36 @@ export function StatusHeaderButton(): React.JSX.Element {
             )}
             aria-hidden
           />
+          {hasWarnings ? (
+            <span className="absolute top-1 right-1 size-2 rounded-full bg-amber-500" aria-hidden />
+          ) : null}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-max min-w-[14rem] max-w-none p-2">
+        {state.error ? (
+          <p className="mb-2 px-2 text-xs text-destructive">{state.error}</p>
+        ) : null}
+        {state.transportError ? (
+          <p className="mb-2 px-2 text-xs text-amber-500">{state.transportError}</p>
+        ) : null}
         <div className="space-y-1 px-2 py-1">
           <StatusDropdownRow
             icon={Thermometer}
             label="Temperature"
             status={tempStatus}
-            value={loading ? "…" : formatCpuTemp(state.systemStatus?.cpuTempC)}
+            value={loading ? "…" : formatCpuTemp(host?.cpuTempC ?? state.hostMetrics?.cpuTempC)}
           />
           <StatusDropdownRow
             icon={HeartPulse}
             label="Health"
-            status={overall.status}
-            value={loading ? "…" : overall.label}
+            status={mapHealthToVisual(overallLabel)}
+            value={loading ? "…" : overallLabel}
+          />
+          <StatusDropdownRow
+            icon={Wifi}
+            label="Live updates"
+            status={transportStatus}
+            value={state.sseState === "connected" && state.wsState === "connected" ? "connected" : "degraded"}
           />
         </div>
         <div className="my-1 h-px bg-border" />

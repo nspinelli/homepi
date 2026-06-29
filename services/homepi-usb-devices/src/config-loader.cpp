@@ -84,9 +84,9 @@ ServiceConfig load_service_config(const std::string& config_path) {
 
   config.socket_path = json_get_string(json, "socketPath");
   if (!socket_override.empty()) {
-    config.socket_path = socket_override + "/usb-devices.sock";
+    config.socket_path = socket_override + "/usb/usb.sock";
   } else if (config.socket_path.empty()) {
-    config.socket_path = config.socket_dir + "/usb-devices.sock";
+    config.socket_path = config.socket_dir + "/usb/usb.sock";
   }
 
   config.serial_symlink = json_get_string(json, "serialSymlink");

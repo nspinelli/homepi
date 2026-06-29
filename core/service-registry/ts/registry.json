@@ -1,0 +1,160 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "audio",
+      "displayName": "Home Audio",
+      "facadeService": "homepi-audio",
+      "commandSocket": "/run/homepi/audio/audio.sock",
+      "icon": "/audio-controller.png",
+      "capabilities": ["zone-control", "airplay", "pcm-routing", "paging"]
+    },
+    {
+      "id": "contact-sensors",
+      "displayName": "Contact Sensors",
+      "facadeService": "homepi-sensors",
+      "commandSocket": "/run/homepi/sensors/sensors.sock",
+      "icon": "/contact-sensors.png",
+      "capabilities": ["contact-detection", "tamper-fault", "homekit-bridge"],
+      "planned": true
+    }
+  ],
+  "services": [
+    {
+      "name": "homepi-backend",
+      "module": "platform",
+      "unit": "homepi-backend.service",
+      "role": "api-gateway",
+      "critical": true,
+      "capabilitiesAffected": ["api", "ui-gateway"],
+      "userFacingFailureCategory": "platform"
+    },
+    {
+      "name": "homepi-health",
+      "module": "platform",
+      "unit": "homepi-health.service",
+      "role": "health-observer",
+      "commandSocket": "/run/homepi/health/health.sock",
+      "critical": false,
+      "capabilitiesAffected": ["health-monitoring"],
+      "userFacingFailureCategory": "platform"
+    },
+    {
+      "name": "homepi-broker",
+      "module": "platform",
+      "unit": "homepi-broker.service",
+      "role": "event-fanout",
+      "commandSocket": "/run/homepi/broker/broker.sock",
+      "critical": false,
+      "capabilitiesAffected": ["live-updates"],
+      "userFacingFailureCategory": "platform"
+    },
+    {
+      "name": "homepi-audio",
+      "module": "audio",
+      "unit": "homepi-audio.service",
+      "role": "module-facade",
+      "commandSocket": "/run/homepi/audio/audio.sock",
+      "critical": true,
+      "capabilitiesAffected": ["zone-control", "airplay", "pcm-routing", "paging"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-sensors",
+      "module": "contact-sensors",
+      "unit": "homepi-sensors.service",
+      "role": "module-facade",
+      "commandSocket": "/run/homepi/sensors/sensors.sock",
+      "critical": true,
+      "capabilitiesAffected": ["contact-detection", "tamper-fault", "homekit-bridge"],
+      "userFacingFailureCategory": "sensors",
+      "planned": true
+    },
+    {
+      "name": "homepi-hifi-serial",
+      "module": "audio",
+      "unit": "homepi-hifi-serial.service",
+      "role": "hardware-controller",
+      "commandSocket": "/run/homepi/audio/hifi-serial.sock",
+      "critical": true,
+      "capabilitiesAffected": ["zone-control"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-pcm-router",
+      "module": "audio",
+      "unit": "homepi-pcm-router.service",
+      "role": "data-plane",
+      "commandSocket": "/run/homepi/audio/pcm-router.sock",
+      "critical": false,
+      "capabilitiesAffected": ["pcm-routing"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-metadata",
+      "module": "audio",
+      "unit": "homepi-metadata.service",
+      "role": "data-plane",
+      "commandSocket": "/run/homepi/audio/metadata.sock",
+      "critical": false,
+      "capabilitiesAffected": ["airplay"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-audio-paging",
+      "module": "audio",
+      "unit": "homepi-audio-paging.service",
+      "role": "hardware-controller",
+      "commandSocket": "/run/homepi/audio/paging.sock",
+      "critical": false,
+      "capabilitiesAffected": ["paging"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-nqptp",
+      "module": "audio",
+      "unit": "homepi-nqptp.service",
+      "role": "hardware-controller",
+      "critical": false,
+      "capabilitiesAffected": ["airplay"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-shairport-supervisor",
+      "module": "audio",
+      "unit": "homepi-shairport-supervisor.service",
+      "role": "hardware-controller",
+      "critical": false,
+      "capabilitiesAffected": ["airplay"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-shairport@",
+      "module": "audio",
+      "unit": "homepi-shairport@.service",
+      "role": "hardware-controller",
+      "critical": false,
+      "capabilitiesAffected": ["airplay"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-audio-orchestrator",
+      "module": "audio",
+      "unit": "homepi-audio-orchestrator.service",
+      "role": "hardware-controller",
+      "critical": false,
+      "capabilitiesAffected": ["zone-control", "airplay"],
+      "userFacingFailureCategory": "audio"
+    },
+    {
+      "name": "homepi-usb-devices",
+      "module": "usb",
+      "unit": "homepi-usb-devices.service",
+      "role": "hardware-controller",
+      "commandSocket": "/run/homepi/usb/usb.sock",
+      "critical": false,
+      "capabilitiesAffected": ["pcm-routing", "paging"],
+      "userFacingFailureCategory": "platform"
+    }
+  ]
+}

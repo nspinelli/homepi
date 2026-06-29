@@ -80,7 +80,7 @@ std::string render_hook_script(int airplay_source) {
   out << "#!/usr/bin/env bash\n"
       << "set -euo pipefail\n"
       << "export AIRPLAY_SOURCE=\"" << airplay_source << "\"\n"
-      << "export HOMEPI_EVENTS_SOCKET=\"/run/homepi/events.sock\"\n"
+      << "export HOMEPI_EVENTS_SOCKET=\"/run/homepi/broker/broker.sock\"\n"
       << "exec \"/opt/homepi/services/shairport/bin/homepi-shairport-hook\" \"$@\"\n";
   return out.str();
 }

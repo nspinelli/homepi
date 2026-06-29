@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/messaging/request.schema.json",
+  "title": "HomePi Socket Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "source", "target", "command", "correlationId"],
+  "properties": {
+    "v": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "minLength": 1 },
+    "command": { "type": "string", "minLength": 1 },
+    "correlationId": { "type": "string", "minLength": 1 },
+    "payload": { "type": "object", "additionalProperties": true }
+  }
+}

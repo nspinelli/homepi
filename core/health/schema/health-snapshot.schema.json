@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://homepi.local/schema/core/health/health-snapshot.schema.json",
+  "title": "HomePi System Health Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["checkedAt", "healthServiceReachable", "modules", "platform", "services"],
+  "properties": {
+    "checkedAt": { "type": "string", "format": "date-time" },
+    "correlationId": { "type": "string" },
+    "healthServiceReachable": { "type": "boolean" },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/moduleHealth" }
+    },
+    "platform": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/platformEntry" }
+    },
+    "services": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/serviceHealth" }
+    }
+  },
+  "$defs": {
+    "healthStatus": {
+      "type": "string",
+      "enum": ["healthy", "degraded", "failed", "offline", "starting", "stopping", "unknown"]
+    },
+    "layerStatus": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "failed",
+        "not_ready",
+        "ready",
+        "missing_device",
+        "unknown"
+      ]
+    },
+    "capabilityHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "status"],
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "status": { "$ref": "#/$defs/healthStatus" },
+        "process": { "$ref": "#/$defs/layerStatus" },
+        "readiness": { "$ref": "#/$defs/layerStatus" },
+        "domain": { "$ref": "#/$defs/layerStatus" },
+        "userMessage": { "type": "string" },
+        "developerMessage": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "moduleHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "displayName", "icon", "status", "capabilities", "lastUpdated"],
+      "properties": {
+        "module": { "type": "string" },
+        "displayName": { "type": "string" },
+        "icon": { "type": "string" },
+        "status": { "$ref": "#/$defs/healthStatus" },
+        "userMessage": { "type": "string" },
+        "stillWorks": { "type": "array", "items": { "type": "string" } },
+        "availableActions": { "type": "array", "items": { "type": "string" } },
+        "capabilities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capabilityHealth" }
+        },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "platformEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status"],
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "$ref": "#/$defs/healthStatus" },
+        "userMessage": { "type": "string" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    },
+    "serviceHealth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "module", "status"],
+      "properties": {
+        "service": { "type": "string" },
+        "module": { "type": "string" },
+        "status": { "$ref": "#/$defs/healthStatus" },
+        "process": { "$ref": "#/$defs/layerStatus" },
+        "readiness": { "$ref": "#/$defs/layerStatus" },
+        "domain": { "$ref": "#/$defs/layerStatus" },
+        "userMessage": { "type": "string" },
+        "developerMessage": { "type": "string" },
+        "stillWorks": { "type": "array", "items": { "type": "string" } },
+        "availableActions": { "type": "array", "items": { "type": "string" } },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

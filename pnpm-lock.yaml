@@ -25,6 +25,12 @@ importers:
       '@homepi/core-logging':
         specifier: workspace:*
         version: link:../../core/logging/ts
+      '@homepi/core-messaging':
+        specifier: workspace:*
+        version: link:../../core/messaging/ts
+      '@homepi/core-service-registry':
+        specifier: workspace:*
+        version: link:../../core/service-registry/ts
       '@homepi/core-state':
         specifier: workspace:*
         version: link:../../core/state/ts
@@ -230,6 +236,22 @@ importers:
         specifier: ^3.1.4
         version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
 
+  core/messaging/ts:
+    dependencies:
+      '@homepi/core-transport':
+        specifier: workspace:*
+        version: link:../../transport/ts
+    devDependencies:
+      '@homepi/tooling-schema-validation':
+        specifier: workspace:*
+        version: link:../../../tooling/schema-validation
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
   core/metrics/ts:
     devDependencies:
       '@homepi/tooling-schema-validation':
@@ -267,6 +289,18 @@ importers:
         specifier: ^3.1.4
         version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
 
+  core/service-registry/ts:
+    devDependencies:
+      '@homepi/tooling-schema-validation':
+        specifier: workspace:*
+        version: link:../../../tooling/schema-validation
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
   core/state/ts:
     devDependencies:
       '@homepi/tooling-schema-validation':
@@ -297,6 +331,97 @@ importers:
         specifier: workspace:*
         version: link:../../../tooling/schema-validation
     devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
+  services/audio/homepi-audio:
+    dependencies:
+      '@homepi/core-logging':
+        specifier: workspace:*
+        version: link:../../../core/logging/ts
+      '@homepi/core-messaging':
+        specifier: workspace:*
+        version: link:../../../core/messaging/ts
+      '@homepi/core-service-registry':
+        specifier: workspace:*
+        version: link:../../../core/service-registry/ts
+      '@homepi/core-transport':
+        specifier: workspace:*
+        version: link:../../../core/transport/ts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.19
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
+  services/broker/homepi-broker:
+    dependencies:
+      '@homepi/core-logging':
+        specifier: workspace:*
+        version: link:../../../core/logging/ts
+      '@homepi/core-messaging':
+        specifier: workspace:*
+        version: link:../../../core/messaging/ts
+      '@homepi/core-transport':
+        specifier: workspace:*
+        version: link:../../../core/transport/ts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.19
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
+  services/health/homepi-health:
+    dependencies:
+      '@homepi/core-logging':
+        specifier: workspace:*
+        version: link:../../../core/logging/ts
+      '@homepi/core-messaging':
+        specifier: workspace:*
+        version: link:../../../core/messaging/ts
+      '@homepi/core-service-registry':
+        specifier: workspace:*
+        version: link:../../../core/service-registry/ts
+      '@homepi/core-transport':
+        specifier: workspace:*
+        version: link:../../../core/transport/ts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.19
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.1.4
+        version: 3.2.4(@types/node@22.19.19)(jiti@2.7.0)(jsdom@26.1.0)(lightningcss@1.32.0)
+
+  services/sensors/homepi-sensors:
+    dependencies:
+      '@homepi/core-logging':
+        specifier: workspace:*
+        version: link:../../../core/logging/ts
+      '@homepi/core-messaging':
+        specifier: workspace:*
+        version: link:../../../core/messaging/ts
+    devDependencies:
+      '@types/node':
+        specifier: ^22.15.21
+        version: 22.19.19
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

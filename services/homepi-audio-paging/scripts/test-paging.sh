@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOCKET="${HOMEPI_AUDIO_PAGING_SOCKET:-/run/homepi/audio-paging.sock}"
+SOCKET="${HOMEPI_AUDIO_PAGING_SOCKET:-/run/homepi/audio/paging.sock}"
 BACKEND="${HOMEPI_BACKEND_URL:-http://127.0.0.1:3000}"
 
 request_socket() {

@@ -8,15 +8,8 @@
   "timestamp": "2026-05-27T16:00:00.000Z",
   "payload": {
     "snapshot": {
-      "backend": "healthy",
-      "config": "loaded",
-      "logging": "active",
-      "runtime": "running",
-      "transport": "ready",
-      "events": "ready",
-      "state": "ready",
-      "api": "ready",
       "uptimeMs": 120000,
+      "cpuTempC": 48.2,
       "lastEventAt": "2026-05-27T16:00:00.000Z"
     }
   }

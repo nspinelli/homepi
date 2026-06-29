@@ -32,8 +32,8 @@ else
   npx pnpm run build
 fi
 
-echo "==> Installing core/events broker"
-sudo bash "${REPO_ROOT}/core/events/scripts/install.sh"
+echo "==> Installing Node platform services (broker, health, facades)"
+sudo bash "${REPO_ROOT}/scripts/install-node-services.sh"
 
 echo "==> Installing HomePi native services"
 sudo env HOMEPI_INSTALL_MODE=1 HOMEPI_ALLOW_REBOOT=0 HOMEPI_SKIP_PREREQS=1 \
@@ -45,6 +45,7 @@ HOMEPI_ROOT="${REPO_ROOT}" bash "${REPO_ROOT}/infra/nginx/install/install-nginx-
 echo "==> Installing backend systemd unit"
 sudo cp "${REPO_ROOT}/infra/nginx/install/homepi-backend.service" /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl reset-failed homepi-backend.service 2>/dev/null || true
 sudo systemctl enable homepi-backend
 sudo systemctl restart homepi-backend
 

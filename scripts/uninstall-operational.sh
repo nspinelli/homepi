@@ -42,11 +42,6 @@ main() {
   log "Uninstalling native services"
   bash "${REPO_ROOT}/scripts/uninstall-services.sh"
 
-  if [[ -f "${REPO_ROOT}/core/events/scripts/uninstall.sh" ]]; then
-    log "Uninstalling core/events broker"
-    bash "${REPO_ROOT}/core/events/scripts/uninstall.sh"
-  fi
-
   if [[ -f "${REPO_ROOT}/scripts/uninstall-ensure-ssh.sh" ]]; then
     log "Uninstalling SSH boot hardening"
     bash "${REPO_ROOT}/scripts/uninstall-ensure-ssh.sh"

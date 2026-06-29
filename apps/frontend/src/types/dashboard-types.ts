@@ -25,29 +25,48 @@ export interface HealthReport {
     message?: string;
     durationMs?: number;
   }>;
+  healthServiceReachable?: boolean;
 }
 
 /**
- * System status snapshot from core/status stream.
+ * Capability health from hierarchical status API.
  */
-export interface SystemStatusSnapshot {
-  backend: "healthy" | "degraded" | "failed";
-  config: "loaded" | "invalid";
-  logging: "active" | "inactive";
-  runtime: "starting" | "running" | "stopping" | "stopped" | "failed";
-  transport: "ready" | "degraded" | "failed";
-  events: "ready" | "degraded" | "failed";
-  state: "ready" | "degraded" | "failed";
-  api: "ready" | "degraded" | "failed";
-  usbDevices: "healthy" | "degraded" | "offline";
-  hifiSerial: "healthy" | "degraded" | "offline";
-  nqptp: "healthy" | "degraded" | "offline";
-  metadata: "healthy" | "degraded" | "offline";
-  pcmRouter: "healthy" | "degraded" | "offline";
-  shairport: "healthy" | "degraded" | "offline";
-  uptimeMs: number;
-  cpuTempC: number | null;
-  lastEventAt: string | null;
+export interface CapabilityHealth {
+  id: string;
+  displayName: string;
+  status: string;
+  userMessage?: string;
+  process?: string;
+  readiness?: string;
+  domain?: string;
+  lastUpdated: string;
+}
+
+/**
+ * Module health rollup from hierarchical status API.
+ */
+export interface ModuleHealth {
+  module: string;
+  displayName: string;
+  icon: string;
+  status: string;
+  /** True when the module facade is not yet installed. */
+  planned?: boolean;
+  userMessage?: string;
+  stillWorks?: string[];
+  availableActions?: string[];
+  capabilities: CapabilityHealth[];
+  lastUpdated: string;
+}
+
+/**
+ * Platform infrastructure health entry.
+ */
+export interface PlatformHealthEntry {
+  name: string;
+  status: string;
+  userMessage?: string;
+  lastUpdated: string;
 }
 
 /**
@@ -90,6 +109,18 @@ export interface AudioCapabilities {
 }
 
 /**
+ * Host metrics streamed from the backend status store.
+ */
+export interface HostMetricsSnapshot {
+  uptimeMs: number;
+  cpuTempC: number | null;
+  lastEventAt: string | null;
+}
+
+/** @deprecated Use HostMetricsSnapshot. */
+export type SystemStatusSnapshot = HostMetricsSnapshot;
+
+/**
  * HomePi event envelope received over SSE.
  */
 export interface EventEnvelope {
@@ -109,15 +140,23 @@ export interface EventEnvelope {
 export interface CoreStatusPayload {
   service: string;
   checkedAt: string;
+  healthServiceReachable: boolean;
+  modules: ModuleHealth[];
+  platform: PlatformHealthEntry[];
   services: Array<{
     name: string;
     status: string;
     message?: string;
   }>;
-  system: SystemStatusSnapshot;
+  host: HostMetricsSnapshot;
 }
 
 /**
  * Connection state for live transports.
  */
 export type ConnectionState = "connecting" | "connected" | "disconnected" | "error";
+
+/**
+ * Dashboard fetch/load state for UI messaging.
+ */
+export type DashboardLoadState = "loading" | "ready" | "error" | "stale";

@@ -33,10 +33,8 @@ async function handleCommand(request: SocketRequest): Promise<Record<string, unk
     case "ping":
       return { pong: true, service: "homepi-health" };
     case "health.snapshot":
-      await refreshSnapshot(request.correlationId);
       return { snapshot: cachedSnapshot };
     case "health.module.get": {
-      await refreshSnapshot(request.correlationId);
       const moduleId = String(request.payload?.module ?? "");
       const module = cachedSnapshot.modules.find((entry) => entry.module === moduleId);
       if (!module) {
@@ -45,7 +43,6 @@ async function handleCommand(request: SocketRequest): Promise<Record<string, unk
       return { module };
     }
     case "health.service.get": {
-      await refreshSnapshot(request.correlationId);
       const serviceName = String(request.payload?.service ?? "");
       const service = cachedSnapshot.services.find((entry) => entry.service === serviceName);
       if (!service) {

@@ -33,6 +33,8 @@ import type {
 export interface AudioModuleState {
   snapshot: AudioSnapshot | null;
   loading: boolean;
+  /** True after the first successful REST audio snapshot load. */
+  snapshotHydrated: boolean;
   error: string | null;
   savingZone: number | null;
   savingSource: number | null;
@@ -1027,6 +1029,7 @@ function useAudioModuleState(): {
   const [state, setState] = useState<AudioModuleState>({
     snapshot: null,
     loading: true,
+    snapshotHydrated: false,
     error: null,
     savingZone: null,
     savingSource: null,
@@ -1227,6 +1230,7 @@ function useAudioModuleState(): {
         ...current,
         snapshot: normalizeAudioSnapshot(data, current.snapshot),
         loading: false,
+        snapshotHydrated: true,
         error: null,
       }));
       const snapshotUpdatedAt =

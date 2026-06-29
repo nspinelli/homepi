@@ -9,16 +9,20 @@ import { deriveAudioConnectionLevelFromSnapshot } from "@/lib/derive-audio-conne
 export function HomePage(): React.JSX.Element {
   const { state } = useAudioModule();
   const snapshot = state.snapshot;
-  const connectionLevel = deriveAudioConnectionLevelFromSnapshot(snapshot);
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-semibold text-foreground">Dashboard</h1>
       <div className="grid gap-4 md:grid-cols-2">
-        {state.loading && snapshot === null ? (
+        {state.loading ? (
           <AudioCardSkeleton />
         ) : (
-          <AudioCard name="Home Audio" connectionLevel={connectionLevel} />
+          <AudioCard
+            name="Home Audio"
+            connectionLevel={deriveAudioConnectionLevelFromSnapshot(snapshot, {
+              servicesHydrated: state.snapshotHydrated,
+            })}
+          />
         )}
       </div>
     </main>

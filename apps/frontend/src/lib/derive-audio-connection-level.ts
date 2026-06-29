@@ -4,6 +4,14 @@ import type { AudioServiceStatus, AudioSnapshot } from "@/types/audio-types.js";
 export type AudioConnectionLevel = "healthy" | "degraded" | "offline";
 
 /**
+ * Options for deriving dashboard connection health.
+ */
+export interface DeriveAudioConnectionOptions {
+  /** When false, service rows from REST are not trusted yet (SSE bootstrap). */
+  servicesHydrated?: boolean;
+}
+
+/**
  * Returns true when live snapshot data shows the Hi-Fi serial link is up.
  * @param snapshot - Current audio snapshot, if any.
  * @returns True when the controller serial path is present or hifiConnected is set.
@@ -28,22 +36,44 @@ function hasActivePcmRoute(snapshot?: AudioSnapshot | null): boolean {
 }
 
 /**
+ * Returns true when service rows are still the pre-REST placeholder (all offline).
+ * @param services - Service rollup from the snapshot.
+ * @returns True when every tracked service is offline.
+ */
+function isPlaceholderServiceRollup(services: AudioServiceStatus): boolean {
+  const values = [
+    services.hifiSerial,
+    services.shairport,
+    services.pcmRouter,
+    services.nqptp,
+    services.metadata,
+  ];
+  return values.every((value) => value === "offline");
+}
+
+/**
  * Derives a green / yellow / red connection level from Hi-Fi link and service health.
  * @param hifiConnected - Whether the serial link to the controller is up.
  * @param services - Optional service health rollup from the snapshot.
  * @param pcmActive - Whether live PCM routing indicates playback is active.
+ * @param servicesHydrated - Whether REST service rows have been loaded.
  * @returns Connection level for status pill styling.
  */
 export function deriveAudioConnectionLevel(
   hifiConnected: boolean,
   services?: AudioServiceStatus,
-  pcmActive = false
+  pcmActive = false,
+  servicesHydrated = true
 ): AudioConnectionLevel {
   if (!hifiConnected) {
     return "offline";
   }
 
-  if (!services) {
+  if (!services || !servicesHydrated) {
+    return "healthy";
+  }
+
+  if (isPlaceholderServiceRollup(services) && (pcmActive || hifiConnected)) {
     return "healthy";
   }
 
@@ -54,11 +84,6 @@ export function deriveAudioConnectionLevel(
     services.nqptp,
     services.metadata,
   ];
-
-  // SSE updates can refresh zones/PCM before the REST snapshot replaces placeholder service rows.
-  if (pcmActive && values.every((value) => value === "offline")) {
-    return "healthy";
-  }
 
   if (values.some((value) => value === "offline" || value === "failed")) {
     return "offline";
@@ -74,15 +99,18 @@ export function deriveAudioConnectionLevel(
 /**
  * Derives dashboard connection health from the live audio snapshot.
  * @param snapshot - Current audio snapshot from REST or SSE.
+ * @param options - Hydration and bootstrap options.
  * @returns Connection level for status pill styling.
  */
 export function deriveAudioConnectionLevelFromSnapshot(
-  snapshot?: AudioSnapshot | null
+  snapshot?: AudioSnapshot | null,
+  options: DeriveAudioConnectionOptions = {}
 ): AudioConnectionLevel {
   return deriveAudioConnectionLevel(
     isHifiLinkUp(snapshot),
     snapshot?.services,
-    hasActivePcmRoute(snapshot)
+    hasActivePcmRoute(snapshot),
+    options.servicesHydrated ?? true
   );
 }
 

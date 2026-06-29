@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildHealthEvidenceMessage,
   buildModuleCapabilities,
+  resolveServiceRollupStatus,
   type ServiceHealthEntry,
 } from "./health-snapshot-builder.js";
-import type { ServiceRegistry } from "@homepi/core-service-registry";
+import type { ServiceRegistry, ServiceRegistryEntry } from "@homepi/core-service-registry";
 
 const testRegistry: ServiceRegistry = {
   version: 1,
@@ -68,6 +69,42 @@ describe("buildHealthEvidenceMessage", () => {
     });
 
     expect(message).toBe("Process active · Command socket ready · Domain checks passing");
+  });
+});
+
+describe("resolveServiceRollupStatus", () => {
+  const socketlessEntry: ServiceRegistryEntry = {
+    name: "homepi-nqptp",
+    module: "audio",
+    unit: "homepi-nqptp.service",
+    role: "hardware-controller",
+    critical: false,
+    capabilitiesAffected: ["airplay"],
+    userFacingFailureCategory: "audio",
+  };
+
+  it("marks active socketless services healthy", () => {
+    expect(
+      resolveServiceRollupStatus(socketlessEntry, "active", "unknown", "unknown")
+    ).toBe("healthy");
+  });
+
+  it("keeps inactive socketless services offline", () => {
+    expect(
+      resolveServiceRollupStatus(socketlessEntry, "inactive", "unknown", "unknown")
+    ).toBe("offline");
+  });
+
+  it("does not override socket-probed degraded services", () => {
+    const probedEntry: ServiceRegistryEntry = {
+      ...socketlessEntry,
+      name: "homepi-hifi-serial",
+      commandSocket: "/run/homepi/audio/hifi-serial.sock",
+    };
+
+    expect(
+      resolveServiceRollupStatus(probedEntry, "active", "not_ready", "unknown")
+    ).toBe("degraded");
   });
 });
 

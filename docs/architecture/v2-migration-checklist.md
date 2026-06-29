@@ -12,7 +12,7 @@ Execute this checklist to **remove Architecture v1 (legacy)** and run **Architec
 |------|---------|
 | **Architecture v1 (legacy)** | C++ `homepi-events` broker on `/run/homepi/events.sock`, flat command sockets (`/run/homepi/hifi-serial.sock`, etc.), backend per-service event bridges, legacy `register`/`subscribe` broker protocol |
 | **Architecture v2 (target)** | Node `homepi-broker` on `/run/homepi/broker/broker.sock`, `homepi-health` observer, module facades (`homepi-audio`, `homepi-sensors`), canonical socket layout under `/run/homepi/{broker,health,audio,sensors,usb}/`, `@homepi/core-messaging` NDJSON command protocol |
-| **Hybrid (current state)** | v2 platform services installed **and** v1 paths still on the critical path for live events and native commands |
+| **Hybrid (historical)** | v2 platform services installed **and** v1 paths still on the critical path — **resolved** |
 
 **Do not run Phase 10 cleanup until every step in Phases A–D passes** on hardware.
 

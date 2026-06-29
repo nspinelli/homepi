@@ -1,6 +1,6 @@
 # HomePi Legacy Decommission Inventory
 
-**Status:** Execute in Phase 10 — only after user confirms Phases 1–9 testing passed.
+**Status:** v1 runtime decommissioned (2026-06-29). Remaining items are optional code/doc cleanup only.
 
 **Step-by-step checklist:** [`v2-migration-checklist.md`](v2-migration-checklist.md) (v1 → v2 migration with functional parity matrix).
 
@@ -8,7 +8,7 @@
 
 | Legacy unit | Replaced by | Phase 10 action |
 |-------------|-------------|-----------------|
-| `homepi-events.service` | `homepi-broker.service` | stop, disable, remove unit file |
+| `homepi-events.service` | `homepi-broker.service` | **Done** — unit removed, orphan install deleted |
 | `homepi-audio-orchestrator.service` | `homepi-audio.service` | stop, disable, remove if fully absorbed |
 
 ## Flat socket paths
@@ -42,8 +42,8 @@
 
 | Path | Phase 10 action |
 |------|-----------------|
-| `core/events/` runtime (`homepi-events` binary, systemd unit) | remove from install |
-| Install hooks referencing `homepi-events` | remove |
+| `core/events/` runtime (`homepi-events` binary, systemd unit) | **Done** — daemon removed; client library + schemas retained |
+| Install hooks referencing `homepi-events` | **Done** — `install.sh` removed; `uninstall.sh` orphan cleanup only |
 
 ## API fields
 

@@ -65,7 +65,7 @@ ServiceConfig load_service_config(const std::string& config_path) {
   if (!socket_override.empty() && config.socket_path.empty()) {
     config.socket_path = socket_override + "/audio/hifi-serial.sock";
   } else if (config.socket_path.empty()) {
-    config.socket_path = config.socket_dir + "/audio/hifi-serial.sock";
+    config.socket_path = config.socket_dir + "/hifi-serial.sock";
   }
 
   config.virtual_port = json_get_string(json, "virtualPort");

@@ -11,7 +11,6 @@ add_library(homepi_core_events STATIC
   src/broker-protocol.cpp
   src/event-envelope.cpp
   src/event-emitter.cpp
-  src/broker.cpp
   src/events-client.cpp
 )
 
@@ -19,16 +18,8 @@ target_include_directories(homepi_core_events PUBLIC include)
 target_link_libraries(homepi_core_events PUBLIC homepi_core_transport)
 target_compile_options(homepi_core_events PRIVATE -Wall -Wextra -Wpedantic)
 
-add_executable(homepi-events
-  ../daemon/main.cpp
-)
-target_link_libraries(homepi-events PRIVATE homepi_core_events)
-target_compile_options(homepi-events PRIVATE -Wall -Wextra -Wpedantic)
-
 enable_testing()
 
 add_executable(test_event_emitter tests/test-event-emitter.cpp)
 target_link_libraries(test_event_emitter PRIVATE homepi_core_events)
 add_test(NAME test_event_emitter COMMAND test_event_emitter)
-
-install(TARGETS homepi-events RUNTIME DESTINATION bin)

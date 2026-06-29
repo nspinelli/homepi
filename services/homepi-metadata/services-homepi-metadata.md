@@ -51,9 +51,9 @@ Pipe items are parsed in C++ (`metadata-parser.cpp`) for `core/*` and `ssnc/*` c
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `HOMEPI_EVENT_SOCKET` | `/run/homepi/metadata.sock` | Metadata Unix API socket |
-| `HOMEPI_EVENTS_SOCKET` | `/run/homepi/events.sock` | Core events broker |
-| `HOMEPI_PCM_ROUTER_SOCKET` | `/run/homepi/pcm-router.sock` | PCM router bootstrap subscription |
-| `HOMEPI_AUDIO_REALTIME_SOCKET` | `/run/homepi/audio-realtime.sock` | Progress realtime endpoint |
+| `HOMEPI_EVENTS_SOCKET` | `/run/homepi/broker/broker.sock` | v2 event broker publish/subscribe |
+| `HOMEPI_PCM_ROUTER_SOCKET` | `/run/homepi/audio/pcm-router.sock` | PCM router bootstrap subscription |
+| `HOMEPI_AUDIO_REALTIME_SOCKET` | `/run/homepi/audio/audio-realtime.sock` | Progress realtime endpoint |
 | `HOMEPI_DATABASE_PATH` | `/opt/homepi/runtime/state/homepi.sqlite` | Shared SQLite database |
 | `HOMEPI_CACHE_DIR` | `/opt/homepi/runtime/cache` | Cover art cache directory |
 | `HOMEPI_METADATA_PIPE_PREFIX` | `/tmp/homepi-metadata-zone-` | Shairport FIFO prefix |

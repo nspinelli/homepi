@@ -7,7 +7,7 @@
     "paths": {
       "stateDir": "/opt/homepi/runtime/state",
       "generatedDir": "/opt/homepi/runtime/generated",
-      "socketDir": "/run/homepi",
+      "socketDir": "/run/homepi/audio",
       "databasePath": "/opt/homepi/runtime/state/homepi.sqlite"
     }
   },

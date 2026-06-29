@@ -59,7 +59,7 @@ const hifiSocketPath = socketPaths.hifiSerial;
 const pcmRouterSocketPath = socketPaths.pcmRouter;
 const metadataSocketPath = socketPaths.metadata;
 const audioRealtimeSocketPath = socketPaths.audioRealtime;
-const eventsBrokerSocketPath = socketPaths.broker;
+const brokerSocketPath = socketPaths.broker;
 const pagingSocketPath = socketPaths.paging;
 const hifiSerialClient = new HifiSerialClient({ socketPath: hifiSocketPath });
 const hifiRoutes = new HifiSerialRoutes({ client: hifiSerialClient, logger });
@@ -71,7 +71,7 @@ const pagingClient = new PagingClient({ socketPath: pagingSocketPath });
 const pagingRoutes = new PagingRoutes({
   client: pagingClient,
   logger,
-  eventsSocketPath: eventsBrokerSocketPath,
+  eventsSocketPath: brokerSocketPath,
 });
 const pagingApiKeyRoutes = new PagingApiKeyRoutes({
   client: pagingClient,
@@ -116,7 +116,6 @@ const server = createHttpServer({
   pcmRouterSocketPath,
   metadataSocketPath,
   audioRealtimeSocketPath,
-  eventsBrokerSocketPath: socketPaths.broker,
   brokerSocketPath: socketPaths.broker,
   healthSocketPath: socketPaths.health,
   usbDevicesSocketPath: usbSocketPath,

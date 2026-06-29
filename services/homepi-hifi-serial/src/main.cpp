@@ -35,6 +35,7 @@
 namespace {
 
 std::atomic<bool> g_running{true};
+int g_instance_lock_fd = -1;
 std::mutex g_health_mutex;
 homepi::hifi_serial::ServiceHealth g_health;
 homepi::hifi_serial::StateRepository* g_repository = nullptr;
@@ -73,12 +74,13 @@ std::string read_migration(const std::string& path) {
  * @returns True when this process acquired the lock.
  */
 bool acquire_instance_lock(const std::string& lock_path) {
-  const int fd = ::open(lock_path.c_str(), O_RDWR | O_CREAT, 0644);
-  if (fd < 0) {
+  g_instance_lock_fd = ::open(lock_path.c_str(), O_RDWR | O_CREAT, 0644);
+  if (g_instance_lock_fd < 0) {
     return false;
   }
-  if (::flock(fd, LOCK_EX | LOCK_NB) != 0) {
-    ::close(fd);
+  if (::flock(g_instance_lock_fd, LOCK_EX | LOCK_NB) != 0) {
+    ::close(g_instance_lock_fd);
+    g_instance_lock_fd = -1;
     return false;
   }
   return true;
@@ -116,21 +118,35 @@ int main(int argc, char* argv[]) {
   logger.log(log_level, "core.runtime", "lifecycle_starting", "startup",
              "homepi-hifi-serial starting");
 
-  const std::string instance_lock_path = config.socket_dir + "/hifi-serial.lock";
-  if (!acquire_instance_lock(instance_lock_path)) {
-    logger.log(homepi::logging::LogLevel::ERROR, "core.runtime", "instance_already_running",
-               "startup", "Another homepi-hifi-serial instance is already running",
-               std::string("{\"lockPath\":\"") + instance_lock_path + "\"}");
-    return 1;
-  }
-
-  const std::string migration_path = "storage/migrations/002-hifi-serial.sql";
   {
     std::error_code ec;
     std::filesystem::create_directories(
         std::filesystem::path(config.database_path).parent_path(), ec);
     std::filesystem::create_directories(config.socket_dir, ec);
+    if (ec) {
+      logger.log(homepi::logging::LogLevel::ERROR, "core.runtime", "runtime_dir_failed",
+                 "startup", "Failed to create runtime directories",
+                 std::string("{\"path\":\"") + config.socket_dir + "\",\"error\":\"" +
+                     ec.message() + "\"}");
+      return 1;
+    }
   }
+
+  const std::string instance_lock_path = config.socket_dir + "/hifi-serial.lock";
+  if (!acquire_instance_lock(instance_lock_path)) {
+    const int err = errno;
+    const bool already_running = err == EWOULDBLOCK;
+    logger.log(
+        homepi::logging::LogLevel::ERROR, "core.runtime",
+        already_running ? "instance_already_running" : "instance_lock_failed", "startup",
+        already_running ? "Another homepi-hifi-serial instance is already running"
+                        : "Failed to acquire instance lock",
+        std::string("{\"lockPath\":\"") + instance_lock_path + "\",\"errno\":" +
+            std::to_string(err) + ",\"error\":\"" + std::string(std::strerror(err)) + "\"}");
+    return 1;
+  }
+
+  const std::string migration_path = "storage/migrations/002-hifi-serial.sql";
 
   homepi::hifi_serial::StateRepository repository(config.database_path,
                                                   read_migration(migration_path));

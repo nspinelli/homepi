@@ -263,6 +263,29 @@ export function rollupStatus(
 }
 
 /**
+ * Resolves rollup status for a registry service, including socketless units.
+ * Active services without a command socket rely on systemd as the only probe
+ * (for example nqptp and the shairport supervisor).
+ * @param entry - Registry service entry.
+ * @param process - Process layer from systemd.
+ * @param readiness - Readiness layer from domain probe.
+ * @param domain - Domain layer from domain probe.
+ * @returns Rollup health status.
+ */
+export function resolveServiceRollupStatus(
+  entry: ServiceRegistryEntry,
+  process: LayerStatus,
+  readiness: LayerStatus,
+  domain: LayerStatus
+): HealthStatus {
+  const status = rollupStatus(process, readiness, domain);
+  if (!entry.planned && !entry.commandSocket && process === "active") {
+    return "healthy";
+  }
+  return status;
+}
+
+/**
  * Resolves a service command socket path from the registry.
  * @param entry - Registry service entry.
  * @returns Socket path when reachable, otherwise null.
@@ -370,14 +393,12 @@ export async function buildServiceHealth(entry: ServiceRegistryEntry): Promise<S
   const activeState = entry.planned ? "inactive" : await getSystemdActiveState(entry.unit);
   const process = mapProcessLayer(activeState);
   const domainProbe = await probeServiceDomain(entry);
-  let status = rollupStatus(process, domainProbe.readiness, domainProbe.domain);
-  if (
-    entry.role === "api-gateway" &&
-    process === "active" &&
-    !entry.commandSocket
-  ) {
-    status = "healthy";
-  }
+  const status = resolveServiceRollupStatus(
+    entry,
+    process,
+    domainProbe.readiness,
+    domainProbe.domain
+  );
 
   return {
     service: entry.name,

@@ -14,7 +14,7 @@ Native paging service for HomePi voice announcements and chimes.
 ## Runtime Paths
 
 - Service socket: `/run/homepi/audio-paging.sock`
-- Events broker socket: `/run/homepi/events.sock`
+- Events broker socket: `/run/homepi/broker/broker.sock`
 - USB devices socket: `/run/homepi/usb-devices.sock`
 - SQLite DB: `/opt/homepi/runtime/state/homepi.sqlite`
 - Bundled voice target: `/var/lib/homepi/paging/voices/en_US-lessac-medium.onnx`

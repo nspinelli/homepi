@@ -153,7 +153,7 @@ After serial assignment and `/dev/vHifi`:
 
 ```bash
 ls -la /dev/vHifi
-timeout 3 bash -c 'printf "%s\n" "{\"method\":\"getHealth\",\"correlationId\":\"runbook\"}" | nc -U /run/homepi/hifi-serial.sock | head -1'
+timeout 3 bash -c 'printf "%s\n" "{\"method\":\"getHealth\",\"correlationId\":\"runbook\"}" | nc -U /run/homepi/audio/hifi-serial.sock | head -1'
 sqlite3 /opt/homepi/runtime/state/homepi.sqlite "SELECT COUNT(*) FROM hifi_zones;"
 ```
 
@@ -192,7 +192,7 @@ sqlite3 /opt/homepi/runtime/state/homepi.sqlite "SELECT id, name, is_airplay FRO
 | pcm-router healthy | `systemctl is-active homepi-pcm-router` |
 | HiFi zones | `sqlite3 ... "SELECT COUNT(*) FROM hifi_zones;"` |
 | AirPlay source | UI Sources + `hifi_sources.is_airplay=1` |
-| Events broker | `test -S /run/homepi/events.sock` |
+| Events broker | `test -S /run/homepi/broker/broker.sock` |
 | Paging (if installed) | `systemctl is-active homepi-audio-paging` |
 | Operational stack | `bash scripts/verify-operational.sh` |
 

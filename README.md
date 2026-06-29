@@ -26,7 +26,7 @@ bash scripts/build-native-services.sh   # subset: USB, HiFi serial, PCM router, 
 
 ## Operational install (Pi)
 
-Installs the web stack, backend, mDNS, Mosquitto, NGINX, SSH hardening, core events broker, and native services (including audio paging):
+Installs the web stack, backend, mDNS, Mosquitto, NGINX, SSH hardening, v2 platform services (`homepi-broker`, `homepi-health`), and native services (including audio paging):
 
 ```bash
 sudo bash scripts/install-operational.sh
@@ -40,7 +40,7 @@ Full fresh-Pi path: [scripts/fresh-pi-runbook.md](scripts/fresh-pi-runbook.md). 
 | Layer | systemd units |
 |-------|---------------|
 | SSH hardening | `homepi-ensure-ssh` |
-| Core | `homepi-events` |
+| Platform | `homepi-broker`, `homepi-health`, `homepi-audio`, `homepi-sensors` |
 | Native | `homepi-usb-devices`, `homepi-nqptp`, `homepi-pcm-router`, `homepi-metadata`, `homepi-hifi-serial`, `homepi-shairport-supervisor`, `homepi-audio-orchestrator`, `homepi-audio-paging` |
 | Web | `nginx`, `homepi-backend` |
 | Supporting | `mosquitto`, `avahi-daemon`, `avahi-homepi-alias` |
@@ -60,12 +60,11 @@ Contracts and schemas under `core/` are source of truth. See `.cursorrules` for 
 Dashboard service health is **event-driven**, not poll-driven:
 
 ```text
-Native daemon → Unix socket / journald / core/events → Backend bridge → SystemStatusStore → SSE / WebSocket → UI
+Native daemon → v2 broker / Unix socket / journald → Backend bridge → homepi-health + SSE / WebSocket → UI
 ```
 
-- One-time **startup snapshots** on backend boot (`getHealth` / `systemctl`)
-- Live updates from native `system.service` events and broker topics
-- **Fallback reconciliation** every 120s only for fault recovery (nqptp, metadata, shairport)
-- **Uptime** computed at read time from process `startedAt`
+- **Health** from `homepi-health` observer (`GET /api/core/status`)
+- Live updates from `homepi-broker` topics and direct service bridges
+- **Host metrics** (uptime, CPU temp) via `SystemStatusStore`
 
 See [docs/architecture/event-flow.md](docs/architecture/event-flow.md), [docs/architecture/service-status.md](docs/architecture/service-status.md), and [docs/architecture/sockets-and-ports.md](docs/architecture/sockets-and-ports.md).

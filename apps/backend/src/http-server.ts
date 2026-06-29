@@ -79,10 +79,8 @@ export interface HttpServerOptions {
   usbDevicesSocketPath?: string;
   /** Unix socket path for homepi-health; omit to use default. */
   healthSocketPath?: string;
-  /** Unix socket path for homepi-broker; preferred over legacy events broker. */
+  /** Unix socket path for homepi-broker. */
   brokerSocketPath?: string;
-  /** @deprecated Legacy events.sock path — use brokerSocketPath. */
-  eventsBrokerSocketPath?: string;
   /** Metadata socket client for SSE subscribe bootstrap. */
   metadataClient: MetadataClient;
   /** Shared broker snapshot cache for audio REST hydration. */
@@ -112,7 +110,6 @@ export function createHttpServer(options: HttpServerOptions): Server {
     metadataSocketPath,
     audioRealtimeSocketPath,
     usbDevicesSocketPath,
-    eventsBrokerSocketPath,
     healthSocketPath,
     brokerSocketPath,
     metadataClient,
@@ -124,9 +121,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     healthSocketPath ?? "/run/homepi/health/health.sock"
   );
   const brokerSocket =
-    brokerSocketPath ??
-    eventsBrokerSocketPath ??
-    `${config.runtime.paths.socketDir}/broker/broker.sock`;
+    brokerSocketPath ?? `${config.runtime.paths.socketDir}/broker/broker.sock`;
 
   const getStatus = () => statusStore.getStatus();
   let audioRealtimeBridge: AudioRealtimeBridge | undefined;

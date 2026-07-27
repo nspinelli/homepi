@@ -1,18 +1,22 @@
 [Unit]
 Description=HomePi Contact Sensors Module Facade
-After=network-online.target
+After=network-online.target homepi-broker.service homepi-health.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=homepi
 Group=homepi
+SupplementaryGroups=gpio i2c
 RuntimeDirectory=homepi/sensors
 RuntimeDirectoryMode=0750
 ExecStart=/usr/bin/node /opt/homepi/services/sensors/homepi-sensors/dist/main.js
 Restart=on-failure
 RestartSec=2
 Environment=NODE_ENV=production
+Environment=HOMEPI_STATE_DB=/opt/homepi/runtime/state/homepi.sqlite
+Environment=HOMEPI_BROKER_SOCKET=/run/homepi/broker/broker.sock
+Environment=HOMEPI_GPIO_CHIP=gpiochip4
 
 [Install]
 WantedBy=multi-user.target

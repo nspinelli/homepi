@@ -13,6 +13,10 @@ import {
   BROKER_AUDIO_TOPICS,
   shouldDropBrokerEnvelope,
 } from "../audio/audio-ui-bridge.js";
+import {
+  adaptSensorsBrokerEnvelopeForUi,
+  BROKER_SENSORS_TOPICS,
+} from "../sensors/sensors-ui-bridge.js";
 import { EventBridgeReconnect } from "../status/event-bridge-reconnect.js";
 import type { StatusUpdateCoordinator } from "../status/status-update-coordinator.js";
 
@@ -40,7 +44,7 @@ export interface EventsBrokerBridgeOptions {
   onConnectionChange?: (connected: boolean) => void;
 }
 
-const DEFAULT_TOPICS = [...BROKER_AUDIO_TOPICS];
+const DEFAULT_TOPICS = [...BROKER_AUDIO_TOPICS, ...BROKER_SENSORS_TOPICS];
 
 /**
  * Subscribes to homepi-broker and forwards envelopes to SSE clients.
@@ -221,6 +225,6 @@ export class EventsBrokerBridge {
    * @returns Adapted envelope for UI consumers.
    */
   private adaptEnvelope(envelope: EventEnvelope): EventEnvelope {
-    return adaptBrokerEnvelopeForUi(envelope);
+    return adaptSensorsBrokerEnvelopeForUi(adaptBrokerEnvelopeForUi(envelope));
   }
 }

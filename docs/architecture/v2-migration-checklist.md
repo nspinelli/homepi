@@ -200,7 +200,7 @@ sudo bash scripts/cleanup-legacy-architecture.sh
 ### D4. Registry cleanup
 
 - [x] Remove `homepi-events` service entry
-- [ ] Mark `contact-sensors` module `planned: false` when GPIO/HomeKit implemented
+- [x] Mark `contact-sensors` module `planned: false` when GPIO/HomeKit implemented
 
 **Verified on Pi (2026-06-29):** `verify-operational.sh` exits 0; `events.sock` absent; `homepi-events` not enabled; all canonical sockets present.
 
@@ -255,7 +255,7 @@ Test each row **before** (hybrid) and **after** (v2-only). All must match.
 ### User sign-off
 
 - [ ] Home Audio module healthy under normal operation
-- [ ] Contact Sensors module acceptable (planned/offline OK until hardware ready)
+- [x] Contact Sensors module acceptable (hardware service, API, UI, HomeKit bridge)
 - [ ] No regressions reported for 48h daily use
 - [ ] **`legacy-decommission.md` checklist complete**
 

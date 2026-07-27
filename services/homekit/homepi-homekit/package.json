@@ -1,10 +1,10 @@
 {
-  "name": "@homepi/service-sensors",
+  "name": "@homepi/service-homekit",
   "version": "0.1.0",
   "type": "module",
-  "description": "HomePi Contact Sensors module facade",
+  "description": "HomePi platform HomeKit bridge",
   "bin": {
-    "homepi-sensors": "./dist/main.js"
+    "homepi-homekit": "./dist/main.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -15,11 +15,9 @@
   "dependencies": {
     "@homepi/core-logging": "workspace:*",
     "@homepi/core-messaging": "workspace:*",
-    "better-sqlite3": "^11.10.0",
-    "i2c-bus": "^5.2.3"
+    "hap-nodejs": "^1.2.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.21",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"

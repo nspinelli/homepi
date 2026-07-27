@@ -14,15 +14,21 @@ Public command socket:
 /run/homepi/sensors/sensors.sock
 ```
 
-> **Architecture update (2026):** Contact Sensors is a client-facing module facade. Commands go direct to `sensors.sock`. HomeKit bridge runs inside this module. Events publish to `homepi-broker` (`homepi.sensors.*` topics).
+> **Architecture v2 (2026):** Contact Sensors is the `homepi-sensors` module facade at `sensors.sock`. Commands: `UI → homepi-backend REST → sensors.sock`. Events publish to `homepi-broker` (`homepi.sensors.*`). HomeKit exposure uses the shared platform bridge `homepi-homekit` (see [homekit-bridge.md](./architecture/homekit-bridge.md)).
 
 Feature path:
 
 ```txt
-/features/contact-sensors
+/contact-sensors
 ```
 
-This feature manages the HomePi custom contact-sensor Expansion HAT and exposes selected sensors to Apple Home through a built-in HomeKit bridge.
+Service package:
+
+```txt
+services/sensors/homepi-sensors/
+```
+
+This module manages the HomePi custom contact-sensor Expansion HAT and exposes selected sensors to Apple Home through the **platform HomeKit bridge** (`homepi-homekit`).
 
 This is a feature module, not a core service.
 
@@ -37,9 +43,7 @@ The module is responsible for:
 - Supporting sensor classification as `door`, `window`, or `other`.
 - Emitting normalized contact sensor events through `homepi-broker` (`homepi.sensors.*`).
 - Handling direct command/response requests on `sensors.sock`.
-- Running a built-in HomeKit bridge using HAP-NodeJS (internal to this module).
-- Allowing the user to enable or disable which sensors are exposed to HomeKit.
-- Keeping disabled-for-HomeKit sensors visible in the HomePi UI when the user enables “show disabled.”
+- Syncing HomeKit-enabled sensors with the platform `homepi-homekit` bridge.
 
 This module must be event-driven only.
 
@@ -49,60 +53,41 @@ This module must not expose additional public sockets beyond the module facade a
 
 ---
 
-## 2. Core Integration Model
+## 2. Core Integration Model (v2)
 
-The feature integrates with HomePi core services.
+The module integrates with HomePi v2 platform services.
 
-Required core services:
+| Service | Responsibility |
+|---------|----------------|
+| `@homepi/core-logging` | Structured service logging |
+| SQLite (`/opt/homepi/runtime/state/homepi.sqlite`) | Sensor config and state persistence |
+| `homepi-broker` | Event fanout (`homepi.sensors.*` topics) |
+| `homepi-backend` | REST API (`/api/contact-sensors`) and SSE to UI |
+| `homepi-health` | Module/capability health rollups |
+| `homepi-homekit` | Platform HomeKit bridge (accessory register/update/remove) |
 
-```txt
-/core/logging
-/core/database
-/core/events
-/core/broker
-```
-
-### 2.1 Core Responsibilities
-
-| Core Module | Responsibility |
-|---|---|
-| `core/logging` | Structured service logging |
-| `core/database` | Persistence for sensor config and state |
-| `core/events` | Publish/subscribe event stream for state changes |
-| `core/broker` | Request/response command routing between API and feature |
-| `core/api` | External API layer used by UI or clients |
-
-### 2.2 No Feature-Owned Socket
-
-The contact sensor feature must not create:
+### 2.1 Command flow
 
 ```txt
-/run/homepi/contact-sensors.sock
+UI
+  -> homepi-backend (REST)
+  -> /run/homepi/sensors/sensors.sock (homepi-sensors)
+  -> response
 ```
 
-The contact sensor feature must not expose a standalone socket API.
-
-All external commands must flow through the broker.
-
-Correct request/response flow:
+### 2.2 Event flow
 
 ```txt
-UI/API
-  -> core/api
-  -> core/broker
-  -> homepi-contact-sensors
-  -> core/broker response
-  -> core/api
-  -> UI/API
+homepi-sensors
+  -> homepi-broker publish (homepi.sensors.contact.changed, etc.)
+  -> homepi-backend EventsBrokerBridge
+  -> SSE /events
+  -> UI
 ```
 
-Correct event flow:
+### 2.3 No extra public sockets
 
-```txt
-homepi-contact-sensors
-  -> core/events
-  -> subscribed services/UI clients
-```
+Do not create `/run/homepi/contact-sensors.sock`. The only public module socket is `/run/homepi/sensors/sensors.sock`.
 
 ---
 
@@ -694,17 +679,11 @@ Do not show tamper warnings unless `tamper_supported = true`.
 
 ---
 
-## 15. HomeKit Bridge
+## 15. HomeKit Bridge (platform)
 
-HomeKit support is built directly into this feature.
+HomeKit support is provided by the shared platform service **`homepi-homekit`** ([homekit-bridge.md](./architecture/homekit-bridge.md)). This module does not embed HAP-NodeJS.
 
-Use:
-
-```txt
-HAP-NodeJS
-```
-
-The module should expose one HomeKit bridge with multiple bridged contact sensor accessories.
+When `homekit_enabled` is true, `homepi-sensors` registers a `ContactSensor` accessory via `homekit.accessory.register` / `update` / `remove`.
 
 ### 15.1 Bridge
 
@@ -804,7 +783,7 @@ When a user enables HomeKit for a sensor through the API:
 UI/API
   -> core/api
   -> core/broker
-  -> homepi-contact-sensors
+  -> homepi-sensors
 ```
 
 The feature must:
@@ -824,7 +803,7 @@ When a user disables HomeKit for a sensor through the API:
 UI/API
   -> core/api
   -> core/broker
-  -> homepi-contact-sensors
+  -> homepi-sensors
 ```
 
 The feature must:
@@ -1253,7 +1232,7 @@ Events are not used for request/response API calls.
 ```json
 {
   "type": "contact.sensor.changed",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "sensor_id": "contact_001",
   "sensor_number": 1,
   "name": "Front Door",
@@ -1291,7 +1270,7 @@ Events are not used for request/response API calls.
 ```json
 {
   "type": "contact.sensor.config.updated",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "sensor_id": "contact_001",
   "sensor_number": 1,
   "changes": {
@@ -1314,7 +1293,7 @@ Events are not used for request/response API calls.
 ```json
 {
   "type": "contact.sensor.homekit.enabled",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "sensor_id": "contact_001",
   "sensor_number": 1,
   "sensor_type": "door",
@@ -1329,7 +1308,7 @@ Events are not used for request/response API calls.
 ```json
 {
   "type": "contact.sensor.homekit.disabled",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "sensor_id": "contact_001",
   "sensor_number": 1,
   "sensor_type": "door",
@@ -1344,7 +1323,7 @@ Events are not used for request/response API calls.
 ```json
 {
   "type": "contact.sensor.faulted",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "sensor_id": "contact_001",
   "sensor_number": 1,
   "sensor_type": "door",
@@ -1374,14 +1353,14 @@ The broker routes messages to the feature.
 
 ### 20.1 Service Registration
 
-On startup, `homepi-contact-sensors` must register itself with the broker.
+On startup, `homepi-sensors` must register itself with the broker.
 
 Service registration example:
 
 ```json
 {
   "type": "broker.service.register",
-  "service_id": "homepi-contact-sensors",
+  "service_id": "homepi-sensors",
   "feature": "contact-sensors",
   "version": "1.0.0",
   "routes": [
@@ -1398,7 +1377,7 @@ Service registration example:
 The broker should know that these message types route to:
 
 ```txt
-homepi-contact-sensors
+homepi-sensors
 ```
 
 ### 20.2 Request Envelope
@@ -1423,7 +1402,7 @@ Example:
   "type": "contact.sensor.update",
   "requestId": "req_01JZ000000000000000001",
   "source": "homepi-api",
-  "target": "homepi-contact-sensors",
+  "target": "homepi-sensors",
   "payload": {
     "sensor_id": "contact_001",
     "patch": {
@@ -1465,7 +1444,7 @@ Successful response:
 {
   "type": "contact.sensor.update.result",
   "requestId": "req_01JZ000000000000000001",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "target": "homepi-api",
   "ok": true,
   "payload": {
@@ -1482,7 +1461,7 @@ Error response:
 {
   "type": "contact.sensor.update.result",
   "requestId": "req_01JZ000000000000000001",
-  "source": "homepi-contact-sensors",
+  "source": "homepi-sensors",
   "target": "homepi-api",
   "ok": false,
   "error": {
@@ -1774,7 +1753,7 @@ Response payload:
 
 ## 22. API Interaction
 
-The public API must not call `homepi-contact-sensors` directly.
+The public API must not call `homepi-sensors` directly.
 
 The API must send broker requests.
 
@@ -1789,8 +1768,8 @@ Internal behavior:
 ```txt
 core/api receives HTTP request
 core/api creates broker request: contact.sensors.list
-core/broker routes to homepi-contact-sensors
-homepi-contact-sensors returns broker response
+core/broker routes to homepi-sensors
+homepi-sensors returns broker response
 core/api returns HTTP response
 ```
 
@@ -1806,12 +1785,12 @@ Internal behavior:
 core/api receives HTTP patch
 core/api validates basic API shape
 core/api creates broker request: contact.sensor.update
-core/broker routes to homepi-contact-sensors
-homepi-contact-sensors validates domain schema
-homepi-contact-sensors updates database
-homepi-contact-sensors updates HomeKit if needed
-homepi-contact-sensors publishes events
-homepi-contact-sensors returns broker response
+core/broker routes to homepi-sensors
+homepi-sensors validates domain schema
+homepi-sensors updates database
+homepi-sensors updates HomeKit if needed
+homepi-sensors publishes events
+homepi-sensors returns broker response
 core/api returns HTTP response
 ```
 
@@ -1824,7 +1803,7 @@ Broker messages must be schema validated.
 Validation should happen at two layers:
 
 1. `core/broker` validates the broker envelope.
-2. `homepi-contact-sensors` validates the domain payload.
+2. `homepi-sensors` validates the domain payload.
 
 Allowed sensor types:
 
@@ -1966,7 +1945,7 @@ Startup:
 ```json
 {
   "level": "info",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.service",
   "message": "Contact sensor service starting"
 }
@@ -1977,7 +1956,7 @@ Broker registration:
 ```json
 {
   "level": "info",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.broker",
   "message": "Registered broker routes",
   "routes": [
@@ -1996,7 +1975,7 @@ MCP initialized:
 ```json
 {
   "level": "info",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.mcp23017",
   "message": "MCP23017 initialized",
   "controller_id": "mcp1",
@@ -2010,7 +1989,7 @@ Sensor changed:
 ```json
 {
   "level": "info",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.hardware",
   "message": "Contact sensor state changed",
   "sensor_id": "contact_001",
@@ -2026,7 +2005,7 @@ Broker request handled:
 ```json
 {
   "level": "debug",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.broker",
   "message": "Handled broker request",
   "request_id": "req_01JZ000000000000000001",
@@ -2040,7 +2019,7 @@ HomeKit update:
 ```json
 {
   "level": "debug",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.homekit",
   "message": "HomeKit contact sensor updated",
   "sensor_id": "contact_001",
@@ -2053,7 +2032,7 @@ MCP read error:
 ```json
 {
   "level": "error",
-  "service": "homepi-contact-sensors",
+  "service": "homepi-sensors",
   "category": "contact.mcp23017",
   "message": "Failed to read MCP23017 bank state",
   "address": "0x20",
@@ -2069,7 +2048,7 @@ MCP read error:
 Service name:
 
 ```txt
-homepi-contact-sensors.service
+homepi-sensors.service
 ```
 
 Example:

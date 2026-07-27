@@ -18,6 +18,8 @@ import { PagingRoutes } from "./audio/paging/paging-routes.js";
 import { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
 import { resolveRuntimeSocketPaths } from "./runtime-socket-paths.js";
 import { HealthClient } from "./health/health-client.js";
+import { SensorsClient } from "./sensors/sensors-client.js";
+import { SensorsRoutes } from "./sensors/sensors-routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const configPath = join(__dirname, "..", "config", "service-config.json");
@@ -78,6 +80,12 @@ const pagingApiKeyRoutes = new PagingApiKeyRoutes({
   logger,
 });
 const healthClient = new HealthClient(socketPaths.health);
+const sensorsClient = new SensorsClient(socketPaths.sensors);
+const sensorsRoutes = new SensorsRoutes({
+  client: sensorsClient,
+  healthClient,
+  logger,
+});
 const audioRoutes = new AudioRoutes({
   client: hifiSerialClient,
   pcmClient: pcmRouterClient,
@@ -110,6 +118,7 @@ const server = createHttpServer({
   usbRoutes,
   hifiRoutes,
   audioRoutes,
+  sensorsRoutes,
   pagingRoutes,
   pagingApiKeyRoutes,
   hifiSerialSocketPath: hifiSocketPath,

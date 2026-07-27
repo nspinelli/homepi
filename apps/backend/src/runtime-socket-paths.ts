@@ -18,6 +18,8 @@ export interface RuntimeSocketPaths {
   broker: string;
   /** Health observer socket. */
   health: string;
+  /** Contact sensors facade socket. */
+  sensors: string;
 }
 
 /**
@@ -35,5 +37,6 @@ export function resolveRuntimeSocketPaths(socketDir: string): RuntimeSocketPaths
     usbDevices: `${socketDir}/usb/usb.sock`,
     broker: `${socketDir}/broker/broker.sock`,
     health: `${socketDir}/health/health.sock`,
+    sensors: `${socketDir}/sensors/sensors.sock`,
   };
 }

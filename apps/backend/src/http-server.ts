@@ -26,6 +26,7 @@ import type { SystemStatusStore } from "./system-status-store.js";
 import type { UsbDevicesRoutes } from "./usb-devices/usb-devices-routes.js";
 import type { HifiSerialRoutes } from "./hifi-serial/hifi-serial-routes.js";
 import type { AudioRoutes } from "./audio/audio-routes.js";
+import type { SensorsRoutes } from "./sensors/sensors-routes.js";
 import type { PagingRoutes } from "./audio/paging/paging-routes.js";
 import type { PagingApiKeyRoutes } from "./audio/paging/paging-api-key-routes.js";
 import { HifiSerialEventBridge } from "./hifi-serial/hifi-serial-event-bridge.js";
@@ -63,6 +64,8 @@ export interface HttpServerOptions {
   hifiRoutes?: HifiSerialRoutes;
   /** Optional audio configuration REST routes. */
   audioRoutes?: AudioRoutes;
+  /** Optional contact sensors REST routes. */
+  sensorsRoutes?: SensorsRoutes;
   /** Optional paging REST routes. */
   pagingRoutes?: PagingRoutes;
   /** Optional paging API key settings routes. */
@@ -103,6 +106,7 @@ export function createHttpServer(options: HttpServerOptions): Server {
     usbRoutes,
     hifiRoutes,
     audioRoutes,
+    sensorsRoutes,
     pagingRoutes,
     pagingApiKeyRoutes,
     hifiSerialSocketPath,
@@ -305,6 +309,11 @@ export function createHttpServer(options: HttpServerOptions): Server {
 
     if (audioRoutes?.matches(url.pathname)) {
       void audioRoutes.handle(req, res, url.pathname, correlationId);
+      return;
+    }
+
+    if (sensorsRoutes?.matches(url.pathname)) {
+      void sensorsRoutes.handle(req, res, url.pathname, correlationId);
       return;
     }
 

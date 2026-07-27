@@ -14,9 +14,8 @@
       "displayName": "Contact Sensors",
       "facadeService": "homepi-sensors",
       "commandSocket": "/run/homepi/sensors/sensors.sock",
-      "icon": "/contact-sensors.png",
-      "capabilities": ["contact-detection", "tamper-fault", "homekit-bridge"],
-      "planned": true
+      "icon": "/sensors-module.png?v=3",
+      "capabilities": ["contact-detection", "tamper-fault", "homekit-bridge"]
     }
   ],
   "services": [
@@ -67,8 +66,17 @@
       "commandSocket": "/run/homepi/sensors/sensors.sock",
       "critical": true,
       "capabilitiesAffected": ["contact-detection", "tamper-fault", "homekit-bridge"],
-      "userFacingFailureCategory": "sensors",
-      "planned": true
+      "userFacingFailureCategory": "sensors"
+    },
+    {
+      "name": "homepi-homekit",
+      "module": "platform",
+      "unit": "homepi-homekit.service",
+      "role": "platform-bridge",
+      "commandSocket": "/run/homepi/homekit/homekit.sock",
+      "critical": false,
+      "capabilitiesAffected": ["homekit-bridge"],
+      "userFacingFailureCategory": "platform"
     },
     {
       "name": "homepi-hifi-serial",

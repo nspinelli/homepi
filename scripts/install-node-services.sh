@@ -48,6 +48,9 @@ install_unit "@homepi/service-audio" \
 install_unit "@homepi/service-sensors" \
   "sensors/homepi-sensors" \
   "${REPO_ROOT}/services/sensors/homepi-sensors/systemd/homepi-sensors.service"
+install_unit "@homepi/service-homekit" \
+  "homekit/homepi-homekit" \
+  "${REPO_ROOT}/services/homekit/homepi-homekit/systemd/homepi-homekit.service"
 
 echo "==> Restarting native services that bind under /run/homepi/audio (avoid stale sockets after RuntimeDirectory recreation)"
 for unit in homepi-usb-devices homepi-pcm-router homepi-hifi-serial homepi-metadata homepi-audio-paging homepi-audio-orchestrator; do

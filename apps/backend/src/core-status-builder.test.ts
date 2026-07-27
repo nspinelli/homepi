@@ -20,7 +20,7 @@ describe("buildHealthReportFromSnapshot", () => {
         {
           module: "contact-sensors",
           displayName: "Contact Sensors",
-          icon: "/contact-sensors.png",
+          icon: "/sensors-module.png?v=3",
           status: "offline",
           planned: true,
           userMessage: "homepi-sensors is planned but not installed yet.",

@@ -9,7 +9,7 @@ describe("loadServiceRegistry", () => {
     expect(registry.version).toBe(1);
     expect(registry.modules).toHaveLength(2);
     expect(findModule(registry, "audio")?.icon).toBe("/audio-controller.png");
-    expect(findModule(registry, "contact-sensors")?.icon).toBe("/contact-sensors.png");
+    expect(findModule(registry, "contact-sensors")?.icon).toBe("/sensors-module.png?v=3");
   });
 
   it("lists audio internal services", () => {

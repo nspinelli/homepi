@@ -1,0 +1,20 @@
+[Unit]
+Description=HomePi Platform HomeKit Bridge
+After=network-online.target homepi-broker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=homepi
+Group=homepi
+RuntimeDirectory=homepi/homekit
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/node /opt/homepi/services/homekit/homepi-homekit/dist/main.js
+Restart=on-failure
+RestartSec=2
+Environment=NODE_ENV=production
+Environment=HOMEPI_HOMEKIT_STATE_DIR=/opt/homepi/runtime/state/homekit
+Environment=HOMEPI_BROKER_SOCKET=/run/homepi/broker/broker.sock
+
+[Install]
+WantedBy=multi-user.target

@@ -76,6 +76,16 @@ install_files() {
   fi
 }
 
+install_usb_audio_nosuspend() {
+  # USB DACs that autosuspend cause silent playback after long idle: sessions
+  # connect and appear to play, but the suspended device outputs nothing.
+  log "Installing USB audio nosuspend udev rule"
+  install -m 0644 "${REPO_ROOT}/infra/udev/99-homepi-usb-audio-nosuspend.rules" \
+    /etc/udev/rules.d/99-homepi-usb-audio-nosuspend.rules
+  udevadm control --reload-rules
+  udevadm trigger --subsystem-match=usb --action=change || true
+}
+
 install_systemd() {
   log "Installing systemd unit"
   install -m 0644 "${UNIT_SRC}" "${UNIT_DEST}"
@@ -99,6 +109,7 @@ main() {
   require_root
   ensure_build_deps
   install_alsa_loopback
+  install_usb_audio_nosuspend
   build_binary
   install_files
   install_systemd

@@ -1,0 +1,12 @@
+[Unit]
+Description=HomePi CPU performance governor (AirPlay latency)
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g"; done'
+ExecStop=/bin/bash -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo ondemand > "$g" 2>/dev/null || true; done'
+
+[Install]
+WantedBy=multi-user.target

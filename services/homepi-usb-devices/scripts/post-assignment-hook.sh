@@ -141,6 +141,12 @@ if [[ "${AUDIO_CHANGED}" == "1" ]]; then
 fi
 
 if [[ "${AUDIO_CHANGED}" == "1" ]]; then
+  # Keep ~/.asoundrc in sync with generated pcm.AudioPaging / pcm.AudioOut aliases.
+  # Stale card numbers (e.g. hw:3,0 after USB renumber) cause aplay Device busy on the primary DAC.
+  if [[ -x /opt/homepi/services/audio-paging/scripts/sync-alsa-user-config.sh ]]; then
+    log "Syncing ALSA user config for AudioPaging/AudioOut"
+    sudo -u homepi bash /opt/homepi/services/audio-paging/scripts/sync-alsa-user-config.sh || true
+  fi
   restart_audio_dependent_services
   AUDIO_SERVICES_FINALIZED=1
 fi

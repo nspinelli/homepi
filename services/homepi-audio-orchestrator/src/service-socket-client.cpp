@@ -81,6 +81,12 @@ int ServiceSocketClient::pcm_owner_from_response(const std::string& response) co
     return 0;
   }
   const std::string payload = parse_payload_json(response);
+  // Prefer the zone that will continue playback after a handoff. During route_end the
+  // snapshot owner can still be the leaving zone while pendingOwnerZoneId is the next.
+  const int pending = parse_int_field(payload, "pendingOwnerZoneId");
+  if (pending > 0) {
+    return pending;
+  }
   return parse_int_field(payload, "ownerZoneId");
 }
 

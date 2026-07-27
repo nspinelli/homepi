@@ -1,0 +1,5 @@
+# Keep USB audio DACs awake so AirPlay reconnects stay fast and clean.
+ACTION=="add|change", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:0101*:*", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:0102*:*", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="05ac", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="0021", ATTR{power/control}="on", ATTR{power/autosuspend}="-1"

@@ -15,10 +15,19 @@ constexpr int64_t kOwnerPromotionWaitMs = 0;
 constexpr int64_t kLivePcmActiveMs = 500;
 
 /** Fresh frames for handoff promotion. */
-constexpr int64_t kHandoffFreshBufferMs = 250;
+constexpr int64_t kHandoffFreshBufferMs = 500;
 
 /** Discard buffered PCM not refreshed within this window (stream ended). */
 constexpr int64_t kCaptureStaleMs = 80;
+
+/**
+ * How long to keep draining a leaving zone's ring during handoff before treating
+ * it as fully exhausted. Must be long enough to play out residual buffered PCM.
+ */
+constexpr int64_t kHandoffDrainMs = 1500;
+
+/** Minimum buffered periods on the target zone before a seamless owner promote. */
+constexpr int kHandoffMinPeriods = 2;
 
 /** Zone capture behavior. */
 enum class ZoneCaptureMode { Off, Drain, Buffer, Disabled };

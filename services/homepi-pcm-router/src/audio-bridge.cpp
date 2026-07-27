@@ -79,6 +79,7 @@ ActiveAudioConfig AudioBridge::active_config() const { return active_config_; }
 void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones + 1>& modes) {
   const int playback_zone = playback_owner_.load();
   const int handoff_zone = handoff_source_zone_.load();
+  bool playback_path_changed = false;
   for (int i = 1; i <= kMaxZones; ++i) {
     const ZoneCaptureMode previous = zone_modes_[i].load();
     if (previous == ZoneCaptureMode::Buffer &&
@@ -86,6 +87,9 @@ void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones +
          modes[i] == ZoneCaptureMode::Off) &&
         i <= config_.zone_count && i != playback_zone && i != handoff_zone) {
       rings_[static_cast<size_t>(i - 1)]->clear();
+    }
+    if (previous != modes[i] && (i == playback_zone || i == handoff_zone)) {
+      playback_path_changed = true;
     }
     zone_modes_[i].store(modes[i]);
     if (i > config_.zone_count) {
@@ -97,7 +101,10 @@ void AudioBridge::apply_zone_modes(const std::array<ZoneCaptureMode, kMaxZones +
       disable_zone_capture(i);
     }
   }
-  routing_revision_.fetch_add(1, std::memory_order_relaxed);
+  // Opening capture for a joining zone must not abort the active DAC wait loop.
+  if (playback_path_changed) {
+    routing_revision_.fetch_add(1, std::memory_order_relaxed);
+  }
 }
 
 void AudioBridge::prewarm_zone_capture(int zone_id) {
@@ -128,13 +135,14 @@ CaptureLifecycleTick AudioBridge::tick_capture_lifecycle() {
   CaptureLifecycleTick tick;
   const int64_t now_ms = steady_now_ms();
   const int owner = playback_owner_.load();
+  const int handoff_zone = handoff_source_zone_.load();
   for (int zone_id = 1; zone_id <= config_.zone_count; ++zone_id) {
     ZoneCaptureSlot& slot = capture_slots_[zone_id];
     const int64_t close_at = slot.idle_close_at_ms.load();
     if (close_at <= 0 || now_ms < close_at) {
       continue;
     }
-    if (zone_id == owner) {
+    if (zone_id == owner || zone_id == handoff_zone) {
       continue;
     }
     if (zone_modes_[zone_id].load() == ZoneCaptureMode::Buffer) {
@@ -297,6 +305,12 @@ void AudioBridge::set_playback_owner(int zone_id) {
   }
   dac_idle_requested_.store(false);
   const int previous_owner = playback_owner_.load();
+  if (previous_owner == zone_id) {
+    // Same owner — keep feeding without bumping revision (avoids an audible gap).
+    std::lock_guard lock(dac_mutex_);
+    (void)ensure_dac_open_locked();
+    return;
+  }
   {
     std::lock_guard lock(dac_mutex_);
     if (!ensure_dac_open_locked()) {
@@ -306,10 +320,10 @@ void AudioBridge::set_playback_owner(int zone_id) {
       return;
     }
   }
-  if (previous_owner > 0 && previous_owner != zone_id) {
+  if (previous_owner > 0) {
     handoff_source_zone_.store(previous_owner);
     owner_handoff_at_ms_.store(steady_now_ms());
-  } else if (previous_owner != zone_id) {
+  } else {
     owner_handoff_at_ms_.store(steady_now_ms());
   }
   playback_owner_.store(zone_id);
@@ -335,6 +349,11 @@ size_t AudioBridge::zone_available_frames(int zone_id) const {
 }
 
 void AudioBridge::discard_stale_owner_frames(int owner, FrameRing& ring, uint8_t* buffer) {
+  // During seamless handoff, keep draining residual PCM from the leaving zone so
+  // the DAC does not underrun while the target zone accumulates packets.
+  if (handoff_source_zone_.load() > 0) {
+    return;
+  }
   const int64_t last_buffered_at = last_buffered_at_ms_[owner].load();
   if (last_buffered_at <= 0 || steady_now_ms() - last_buffered_at <= kCaptureStaleMs) {
     return;
@@ -424,6 +443,13 @@ void AudioBridge::stop() {
   stop_requested_.store(true);
   running_.store(false);
   close_all_captures();
+  {
+    // Unblock any in-flight snd_pcm_writei so the playback thread can exit promptly.
+    std::lock_guard lock(dac_mutex_);
+    if (dac_handle_ != nullptr) {
+      snd_pcm_drop(dac_handle_);
+    }
+  }
   if (playback_thread_.joinable()) {
     playback_thread_.join();
   }
@@ -476,6 +502,7 @@ void AudioBridge::capture_loop(int zone_index) {
 
 void AudioBridge::playback_loop() {
   std::vector<uint8_t> buffer(config_.period_frames * bytes_per_frame_);
+  std::vector<uint8_t> silence(config_.period_frames * bytes_per_frame_, 0);
   while (!stop_requested_.load()) {
     if (dac_idle_requested_.exchange(false)) {
       std::lock_guard lock(dac_mutex_);
@@ -499,7 +526,7 @@ void AudioBridge::playback_loop() {
     const int handoff_zone = handoff_source_zone_.load();
     if (handoff_zone > 0 && handoff_zone <= config_.zone_count) {
       const bool target_ready =
-          zone_available_frames(owner) >= config_.period_frames &&
+          zone_available_frames(owner) >= config_.period_frames * kHandoffMinPeriods &&
           zone_recently_buffered(owner, kHandoffFreshBufferMs);
       if (!target_ready) {
         read_zone = handoff_zone;
@@ -510,19 +537,35 @@ void AudioBridge::playback_loop() {
 
     FrameRing& ring = *rings_[read_zone - 1];
     discard_stale_owner_frames(read_zone, ring, buffer.data());
+
+    // If the preferred read zone is exhausted during handoff, fall back to the
+    // other zone instead of starving the DAC (underruns = drop / white noise).
+    if (ring.available_frames() < config_.period_frames && handoff_zone > 0) {
+      const int alt_zone = (read_zone == owner) ? handoff_zone : owner;
+      if (alt_zone >= 1 && alt_zone <= config_.zone_count &&
+          zone_available_frames(alt_zone) >= config_.period_frames) {
+        read_zone = alt_zone;
+      }
+    }
+
+    FrameRing& play_ring = *rings_[read_zone - 1];
     const int64_t last_buffered_at = last_buffered_at_ms_[read_zone].load();
+    const int64_t now_ms = steady_now_ms();
     const bool capture_stale =
-        last_buffered_at > 0 && steady_now_ms() - last_buffered_at > kCaptureStaleMs;
-    if (capture_stale) {
+        last_buffered_at > 0 && now_ms - last_buffered_at > kCaptureStaleMs;
+    const bool handoff_active = handoff_source_zone_.load() > 0;
+    // Only force-drop stale rings when not bridging a handoff; otherwise drain.
+    if (capture_stale && !handoff_active &&
+        play_ring.available_frames() < config_.period_frames) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
       continue;
     }
+
     const int64_t handoff_at = owner_handoff_at_ms_.load();
-    const int64_t now_ms = steady_now_ms();
     const bool recent_handoff = handoff_at > 0 && now_ms - handoff_at <= 2000;
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(recent_handoff ? 50 : 250);
-    while (ring.available_frames() < config_.period_frames && !stop_requested_.load()) {
+    while (play_ring.available_frames() < config_.period_frames && !stop_requested_.load()) {
       if (playback_owner_.load() != owner ||
           routing_revision_.load(std::memory_order_relaxed) != revision) {
         break;
@@ -538,8 +581,8 @@ void AudioBridge::playback_loop() {
     if (!playback_owner_unchanged(owner, revision)) {
       continue;
     }
-    if (ring.available_frames() >= config_.period_frames &&
-        ring.read(buffer.data(), config_.period_frames) >= config_.period_frames) {
+    if (play_ring.available_frames() >= config_.period_frames &&
+        play_ring.read(buffer.data(), config_.period_frames) >= config_.period_frames) {
       if (!playback_owner_unchanged(owner, revision)) {
         continue;
       }
@@ -555,6 +598,18 @@ void AudioBridge::playback_loop() {
       } else {
         stats_.frames_copied += config_.period_frames;
         dac_state_.store(DacLifecycleState::Open);
+      }
+    } else if (handoff_active && handoff_at > 0 && now_ms - handoff_at <= kHandoffDrainMs) {
+      // Hold the DAC clock with silence for a short bridge window so underruns
+      // do not click while the target zone finishes buffering.
+      std::lock_guard lock(dac_mutex_);
+      if (dac_handle_ != nullptr) {
+        const snd_pcm_sframes_t written =
+            snd_pcm_writei(dac_handle_, silence.data(), config_.period_frames);
+        if (written < 0) {
+          snd_pcm_recover(dac_handle_, static_cast<int>(written), 1);
+          stats_.playback_xruns++;
+        }
       }
     } else {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));

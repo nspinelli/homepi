@@ -249,14 +249,24 @@ void RoutingState::on_route_start(int zone_id, const ZoneActivityFn& is_zone_act
 }
 
 bool RoutingState::try_promote_pending_owner(const ZoneActivityFn& is_ready) {
-  std::lock_guard lock(mutex_);
-  if (pending_owner_zone_id_ <= 0 || pending_owner_zone_id_ > kMaxZones ||
-      !zone_enabled_[pending_owner_zone_id_]) {
+  int pending_zone = 0;
+  {
+    std::lock_guard lock(mutex_);
+    if (pending_owner_zone_id_ <= 0 || pending_owner_zone_id_ > kMaxZones ||
+        !zone_enabled_[pending_owner_zone_id_]) {
+      return false;
+    }
+    pending_zone = pending_owner_zone_id_;
+  }
+
+  // Evaluate readiness outside the lock. Callers may query routing/bridge state and
+  // must not re-enter mutex_ (std::mutex is not recursive).
+  if (!is_ready || !is_ready(pending_zone)) {
     return false;
   }
-  const int pending_zone = pending_owner_zone_id_;
-  const bool ready = is_ready && is_ready(pending_zone);
-  if (!ready) {
+
+  std::lock_guard lock(mutex_);
+  if (pending_owner_zone_id_ != pending_zone || !zone_enabled_[pending_zone]) {
     return false;
   }
   push_stack_locked(pending_zone);

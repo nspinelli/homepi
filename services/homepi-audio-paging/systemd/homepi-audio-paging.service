@@ -11,6 +11,7 @@ User=homepi
 Group=homepi
 SupplementaryGroups=audio
 WorkingDirectory=/opt/homepi/services/audio-paging
+ExecStartPre=-/bin/bash /opt/homepi/services/audio-paging/scripts/sync-alsa-user-config.sh
 ExecStart=/opt/homepi/services/audio-paging/bin/homepi-audio-paging /opt/homepi/services/audio-paging/config/service-config.json
 Restart=on-failure
 RestartSec=10

@@ -146,7 +146,11 @@ void Orchestrator::on_active_begin(int zone_id) {
 
 void Orchestrator::on_play_begin(int zone_id) {
   client_.pcm_route("route_start", zone_id);
-  client_.nqptp_play_begin();
+  // Resetting NQPTP while another zone is already streaming glitches the DAC
+  // feed. Only announce play-begin to NQPTP for the first active session.
+  if (active_airplay_zones_.size() <= 1) {
+    client_.nqptp_play_begin();
+  }
   publish_hifi_command("set_zone_power_source",
                        zone_power_source_payload(zone_id, airplay_source()),
                        "play-begin-z" + std::to_string(zone_id));

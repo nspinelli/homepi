@@ -4,6 +4,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <thread>
@@ -31,11 +32,52 @@ void on_signal(int) { g_stop = true; }
 
 void apply_routing(AudioBridge& bridge, RoutingState& routing) {
   bridge.apply_zone_modes(routing.zone_modes());
-  const int playback_zone = routing.handoff_owner_zone_id() > 0 ? routing.handoff_owner_zone_id()
-                                                              : routing.owner_zone_id();
+  const int handoff_zone = routing.handoff_owner_zone_id();
+  const int pending_zone = routing.pending_owner_zone_id();
+  // Routing keeps owner on the leaving zone during handoff, but AudioBridge
+  // expects playback_owner=next and handoff_source=leaving so it can drain
+  // residual PCM from the closed zone while the continuing zone buffers.
+  const int playback_zone = (handoff_zone > 0 && pending_zone > 0) ? pending_zone
+                            : (handoff_zone > 0)                   ? handoff_zone
+                                                                  : routing.owner_zone_id();
   if (playback_zone > 0) {
     bridge.set_playback_owner(playback_zone);
   }
+}
+
+/**
+ * Builds the pending-owner readiness check used by promote attempts.
+ * @param bridge Audio bridge used for buffer and liveness checks.
+ * @param routing Routing state used to resolve the current owner.
+ * @param config Service configuration (period size).
+ * @param in_owner_handoff True when the previous DAC owner is leaving.
+ * @return Callback that returns true when the candidate may become DAC owner.
+ */
+std::function<bool(int)> make_pending_ready_fn(AudioBridge& bridge, RoutingState& routing,
+                                               const ServiceConfig& config,
+                                               bool in_owner_handoff) {
+  return [&bridge, &routing, &config, in_owner_handoff](int candidate) {
+    const size_t min_periods =
+        static_cast<size_t>(in_owner_handoff ? 1 : kHandoffMinPeriods);
+    const size_t min_frames =
+        static_cast<size_t>(config.period_frames) * min_periods;
+    if (bridge.zone_available_frames(candidate) < min_frames) {
+      return false;
+    }
+    if (in_owner_handoff) {
+      return true;
+    }
+    // Keep DAC on a healthy owner while another zone joins. Promoting mid-stream
+    // switches which AirPlay decode feeds the DAC and causes an audible gap.
+    const int playback = bridge.playback_owner();
+    const int owner = routing.owner_zone_id();
+    const int live_owner = playback > 0 ? playback : owner;
+    if (live_owner > 0 && live_owner != candidate &&
+        bridge.zone_recently_buffered(live_owner, kLivePcmActiveMs)) {
+      return false;
+    }
+    return bridge.zone_recently_buffered(candidate, kHandoffFreshBufferMs);
+  };
 }
 
 std::string stack_json(const std::vector<int>& stack) {
@@ -210,7 +252,24 @@ int Service::run() {
         } else if (method == "route_end") {
           impl_->routing.on_route_end(zone_id);
           apply_routing(impl_->bridge, impl_->routing);
-          impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          // Keep the leaving zone's capture open while it bridges audio to the
+          // next owner; closing it early causes underruns / stream drops.
+          if (impl_->routing.handoff_owner_zone_id() != zone_id) {
+            impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          }
+          // Promote immediately when the next zone already has enough audio so
+          // closing the original stream does not leave playback on a dead owner.
+          {
+            const int handoff_zone = impl_->routing.handoff_owner_zone_id();
+            const auto is_zone_ready = make_pending_ready_fn(
+                impl_->bridge, impl_->routing, config_, handoff_zone > 0);
+            if (impl_->routing.try_promote_pending_owner(is_zone_ready)) {
+              apply_routing(impl_->bridge, impl_->routing);
+              if (handoff_zone > 0) {
+                impl_->bridge.schedule_zone_capture_idle_close(handoff_zone);
+              }
+            }
+          }
           emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
                                     previous_pending);
           const std::string snapshot = build_snapshot_json();
@@ -301,7 +360,20 @@ int Service::run() {
           const int previous_pending = impl_->routing.pending_owner_zone_id();
           impl_->routing.on_route_end(zone_id);
           apply_routing(impl_->bridge, impl_->routing);
-          impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          if (impl_->routing.handoff_owner_zone_id() != zone_id) {
+            impl_->bridge.schedule_zone_capture_idle_close(zone_id);
+          }
+          {
+            const int handoff_zone = impl_->routing.handoff_owner_zone_id();
+            const auto is_zone_ready = make_pending_ready_fn(
+                impl_->bridge, impl_->routing, config_, handoff_zone > 0);
+            if (impl_->routing.try_promote_pending_owner(is_zone_ready)) {
+              apply_routing(impl_->bridge, impl_->routing);
+              if (handoff_zone > 0) {
+                impl_->bridge.schedule_zone_capture_idle_close(handoff_zone);
+              }
+            }
+          }
           emit_owner_routing_events(events, impl_->routing, correlation_id, previous_owner,
                                     previous_pending);
           const std::string snapshot = build_snapshot_json();
@@ -350,19 +422,16 @@ int Service::run() {
 
   int64_t last_lifecycle_tick_ms = 0;
   while (!g_stop.load()) {
-    const auto is_zone_ready = [this](int zone_id) {
-      if (impl_->bridge.zone_available_frames(zone_id) < config_.period_frames) {
-        return false;
-      }
-      if (impl_->routing.handoff_owner_zone_id() > 0) {
-        return true;
-      }
-      return impl_->bridge.zone_recently_buffered(zone_id, kHandoffFreshBufferMs);
-    };
+    const int previous_handoff = impl_->routing.handoff_owner_zone_id();
+    const auto is_zone_ready = make_pending_ready_fn(impl_->bridge, impl_->routing, config_,
+                                                     previous_handoff > 0);
     const int previous_owner = impl_->routing.owner_zone_id();
     const int previous_pending = impl_->routing.pending_owner_zone_id();
     if (impl_->routing.try_promote_pending_owner(is_zone_ready)) {
       apply_routing(impl_->bridge, impl_->routing);
+      if (previous_handoff > 0) {
+        impl_->bridge.schedule_zone_capture_idle_close(previous_handoff);
+      }
       emit_owner_routing_events(events, impl_->routing, "owner_promoted", previous_owner,
                                 previous_pending);
       emit_snapshot("owner_promoted");

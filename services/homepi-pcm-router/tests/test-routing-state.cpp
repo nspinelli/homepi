@@ -27,7 +27,14 @@ int main() {
   assert(modes[5] == homepi::pcm_router::ZoneCaptureMode::Buffer);
 
   routing.on_route_end(2);
+  // Leaving owner stays as handoff bridge until the next zone is promoted with audio.
+  assert(routing.handoff_owner_zone_id() == 2);
+  assert(routing.pending_owner_zone_id() == 5);
+  assert(routing.owner_zone_id() == 2);
+  assert(routing.try_promote_pending_owner([](int /*zone_id*/) { return true; }));
   assert(routing.owner_zone_id() == 5);
+  assert(routing.pending_owner_zone_id() == 0);
+  assert(routing.handoff_owner_zone_id() == 0);
   const auto fallback_stack = routing.active_stack();
   assert(fallback_stack.size() == 1);
   assert(fallback_stack[0] == 5);
@@ -41,6 +48,9 @@ int main() {
     multi_zone.on_route_start(1);
     multi_zone.on_route_join(2);
     multi_zone.on_route_end(1);
+    assert(multi_zone.handoff_owner_zone_id() == 1);
+    assert(multi_zone.pending_owner_zone_id() == 2);
+    assert(multi_zone.try_promote_pending_owner([](int /*zone_id*/) { return true; }));
     assert(multi_zone.owner_zone_id() == 2);
     multi_zone.on_route_end(2);
     assert(multi_zone.owner_zone_id() == 0);
@@ -57,13 +67,44 @@ int main() {
   assert(deferred_stack[1] == 3);
   assert(!routing.try_promote_pending_owner([](int /*zone_id*/) { return false; }));
   assert(routing.owner_zone_id() == 8);
+  // Close original owner before pending was promoted — must hand off to zone 3.
+  routing.on_route_end(8);
+  assert(routing.handoff_owner_zone_id() == 8);
+  assert(routing.pending_owner_zone_id() == 3);
+  assert(routing.owner_zone_id() == 8);
   assert(routing.try_promote_pending_owner([](int /*zone_id*/) { return true; }));
   assert(routing.owner_zone_id() == 3);
   assert(routing.pending_owner_zone_id() == 0);
+  assert(routing.handoff_owner_zone_id() == 0);
   const auto promoted_stack = routing.active_stack();
-  assert(promoted_stack.size() == 2);
+  assert(promoted_stack.size() == 1);
   assert(promoted_stack[0] == 3);
-  assert(promoted_stack[1] == 8);
+
+  routing.on_route_start(8);
+  routing.on_route_start(3, [](int zone_id) { return zone_id == 8; }, 8);
+  assert(routing.try_promote_pending_owner([](int /*zone_id*/) { return true; }));
+  assert(routing.owner_zone_id() == 3);
+  assert(routing.pending_owner_zone_id() == 0);
+  const auto both_live_stack = routing.active_stack();
+  assert(both_live_stack.size() == 2);
+  assert(both_live_stack[0] == 3);
+  assert(both_live_stack[1] == 8);
+
+  // Readiness callbacks must be able to query routing without deadlocking.
+  {
+    homepi::pcm_router::RoutingState nested;
+    enable_all_zones(nested);
+    nested.on_route_start(8);
+    nested.on_route_start(3, [](int zone_id) { return zone_id == 8; }, 8);
+    assert(nested.pending_owner_zone_id() == 3);
+    assert(nested.try_promote_pending_owner([&](int zone_id) {
+      (void)zone_id;
+      (void)nested.handoff_owner_zone_id();
+      (void)nested.owner_zone_id();
+      return true;
+    }));
+    assert(nested.owner_zone_id() == 3);
+  }
 
   {
     homepi::pcm_router::RoutingState disabled_routing;
